@@ -90,4 +90,3 @@ class JuryProblemSubmission(ProblemSubmission):
 
     def __str__(self):
         return f"S({self.problem_unique_name}@{','.join(map(str, self.expected_results))})"
-

@@ -7,9 +7,9 @@ from typing import Dict, Collection, Optional, List, Tuple
 
 from mysql.connector.cursor import MySQLCursor
 
-from .model import DbTestCase, test_case_compare_key
+from .data import DbTestCase, test_case_compare_key
 from .util import list_param
-from judge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
+from ..model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
     JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, JudgeUser, Affiliation
 
 category_to_database = {
@@ -40,6 +40,8 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
     if lazy and category_ids_by_name.keys() == expected_category_names:
         assert category_ids.keys() == set(TeamCategory)
         return category_ids
+
+    logging.info("Updating judge categories")
 
     category_ids_to_delete: Collection[int] = {category_id for name, category_id in category_ids_by_name.items()
                                                if name not in expected_category_names}
@@ -81,6 +83,10 @@ def find_all_categories(cursor) -> Dict[TeamCategory, int]:
 def create_or_update_teams(cursor: MySQLCursor, teams: Collection[Team],
                            affiliation_ids: Dict[Affiliation, int],
                            user_ids: Dict[JudgeUser, int]) -> Dict[Team, int]:
+    logging.info("Updating %d teams", len(teams))
+    if not teams:
+        return {}
+
     category_ids = find_all_categories(cursor)
 
     teams_by_name: Dict[str, Team] = {team.name: team for team in teams}
@@ -115,6 +121,7 @@ def create_or_update_teams(cursor: MySQLCursor, teams: Collection[Team],
 
 
 def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
+    logging.debug("Updating executable %s", executable)
     data, md5 = executable.make_zip()
     cursor.execute("REPLACE INTO executable (execid, type, description, zipfile, md5sum) "
                    "VALUES (?, ?, ?, ?, ?)",
@@ -123,6 +130,7 @@ def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
 
 def create_or_update_language(cursor: MySQLCursor, language: Language):
     create_or_update_executable(cursor, language.compile_script)
+    logging.debug("Updating language %s", language)
     cursor.execute("INSERT INTO language (langid, "
                    "externalid, compile_script, name, extensions, "
                    "time_factor, entry_point_description, require_entry_point, "
@@ -143,6 +151,7 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
 
 
 def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
+    logging.debug("Updating problem %s", problem)
     problem_testcases = problem.load_testcases()
 
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.unique_name,))
@@ -153,7 +162,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
         cursor.execute("UPDATE problem SET externalid = ?, name = ? WHERE probid = ?",
                        (problem.unique_name, problem.name, problem_id))
     else:
-        logging.info("Creating problem %s in database", problem)
+        logging.debug("Creating problem %s in database", problem)
         cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.unique_name, problem.name))
         problem_id = cursor.lastrowid
 
@@ -339,6 +348,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
 
 
 def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
+    logging.info("Updating judge settings")
     verdict_names = {
         Verdict.COMPILER_ERROR: "compiler-error",
         Verdict.PRESENTATION_ERROR: "presentation-error",
@@ -378,6 +388,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 
 def set_languages(cursor: MySQLCursor, languages: List[Language]):
+    logging.debug("Setting the list of languages")
     cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
         create_or_update_language(cursor, language)
@@ -680,6 +691,7 @@ def fetch_user_roles(cursor: MySQLCursor) -> Dict[str, int]:
 
 
 def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[Affiliation]) -> Dict[Affiliation, int]:
+    logging.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
         return {}
     affiliations_by_id = {affiliation.short_name: affiliation for affiliation in affiliations}
@@ -706,6 +718,7 @@ def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[
 
 
 def create_or_update_users(cursor: MySQLCursor, users: Collection[JudgeUser]) -> Dict[JudgeUser, int]:
+    logging.info("Updating %d users", len(users))
     if not users:
         return {}
     for user in users:

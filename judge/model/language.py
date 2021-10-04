@@ -46,6 +46,9 @@ class Executable(abc.ABC):
         byte_value = zip_file.getvalue()
         return byte_value, hashlib.md5(byte_value).hexdigest()
 
+    def __str__(self):
+        return f"{self.key}({self.executable_type})"
+
 
 @dataclasses.dataclass
 class Language(object):
