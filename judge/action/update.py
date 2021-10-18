@@ -8,9 +8,9 @@ from typing import Dict, Collection, Optional, List, Tuple
 from mysql.connector.cursor import MySQLCursor
 
 from .data import DbTestCase, test_case_compare_key
-from .util import list_param
-from ..model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
-    JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, JudgeUser, Affiliation
+from judge.db import list_param
+from judge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
+    JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, User, Affiliation
 
 category_to_database = {
     TeamCategory.Participants: "Participants",
@@ -46,6 +46,7 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
     category_ids_to_delete: Collection[int] = {category_id for name, category_id in category_ids_by_name.items()
                                                if name not in expected_category_names}
 
+    # TODO Maybe not hardcode?
     for category, color, visible, order in [(TeamCategory.Participants, 'white', True, 0),
                                             (TeamCategory.Hidden, 'lightgray', False, 0),
                                             (TeamCategory.Jury, 'lightgreen', False, 9)]:
@@ -82,7 +83,7 @@ def find_all_categories(cursor) -> Dict[TeamCategory, int]:
 
 def create_or_update_teams(cursor: MySQLCursor, teams: Collection[Team],
                            affiliation_ids: Dict[Affiliation, int],
-                           user_ids: Dict[JudgeUser, int]) -> Dict[Team, int]:
+                           user_ids: Dict[User, int]) -> Dict[Team, int]:
     logging.info("Updating %d teams", len(teams))
     if not teams:
         return {}
@@ -154,16 +155,16 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
     problem_testcases = problem.load_testcases()
 
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.unique_name,))
+    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
     if id_query:
         problem_id = id_query[0]
         logging.debug("Problem present in database with id %d", problem_id)
         cursor.execute("UPDATE problem SET externalid = ?, name = ? WHERE probid = ?",
-                       (problem.unique_name, problem.name, problem_id))
+                       (problem.key, problem.name, problem_id))
     else:
         logging.debug("Creating problem %s in database", problem)
-        cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.unique_name, problem.name))
+        cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.key, problem.name))
         problem_id = cursor.lastrowid
 
     text_data, text_type = problem.load_problem_text()
@@ -433,10 +434,10 @@ def clear_invalid_submissions(cursor):
 def create_problem_submissions(cursor, problem: Problem,
                                existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
                                team_ids: Dict[Team, int], contest_ids: Optional[List[int]] = None):
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.unique_name,))
+    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
     if not id_query:
-        raise KeyError(f"No problem found for key {problem.unique_name}")
+        raise KeyError(f"No problem found for key {problem.key}")
     problem_id = id_query[0]
 
     contest_start = {}
@@ -637,13 +638,13 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                        "WHERE cid = ?",
                        (contest.key, contest.name, contest.key,
                         contest.activation_time.timestamp(),
-                        contest.activation_time.astimezone().strftime(date_format),
+                        contest.activation_time.strftime(date_format),
                         contest.start_time.timestamp(),
-                        contest.start_time.astimezone().strftime(date_format),
+                        contest.start_time.strftime(date_format),
                         contest.end_time.timestamp(),
-                        contest.end_time.astimezone().strftime(date_format),
+                        contest.end_time.strftime(date_format),
                         contest.freeze_time.timestamp() if contest.freeze_time else None,
-                        contest.freeze_time.astimezone().strftime(date_format) if contest.freeze_time else None,
+                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
                         contest_id))
     else:
         cursor.execute("INSERT INTO contest (externalid, name, shortname, "
@@ -717,7 +718,7 @@ def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[
     return affiliation_ids
 
 
-def create_or_update_users(cursor: MySQLCursor, users: Collection[JudgeUser]) -> Dict[JudgeUser, int]:
+def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict[User, int]:
     logging.info("Updating %d users", len(users))
     if not users:
         return {}
@@ -727,21 +728,21 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[JudgeUser]) ->
 
     role_ids_by_name = fetch_user_roles(cursor)
 
-    users_by_name = {user.name: user for user in users}
+    users_by_login = {user.login_name: user for user in users}
     cursor.execute(f"SELECT userid, username FROM user WHERE username IN {list_param(users)}",
-                   tuple(user.name for user in users))
-    user_ids = {users_by_name[name]: user_id for user_id, name in cursor}
+                   tuple(user.login_name for user in users))
+    user_ids = {users_by_login[name]: user_id for user_id, name in cursor}
 
     for user in users:
         if user in user_ids:
             user_id = user_ids[user]
             cursor.execute("UPDATE user SET username = ?, name = ?, email = ?, password = NULL, enabled = TRUE "
                            "WHERE userid = ?",
-                           (user.name, user.display_name, user.email, user_id))
+                           (user.login_name, user.display_name, user.email, user_id))
         else:
             cursor.execute("INSERT INTO user (username, name, email, password, enabled) "
                            "VALUES (?, ?, ?, NULL, TRUE)",
-                           (user.name, user.display_name, user.email))
+                           (user.login_name, user.display_name, user.email))
             user_id = cursor.lastrowid
             user_ids[user] = user_id
         user_roles = set(role_ids_by_name[role] for role in user_role_to_database[user.role])

@@ -59,12 +59,12 @@ class Contest(object):
             allowed_team_categories = [TeamCategory.parse(name) for name in data.get("allowed_categories", [])]
         problems = [ContestProblem.parse(problem, problem_loader) for problem in data["problems"]]
 
-        activate = datetime.utcfromtimestamp(data["activate"])
-        start = datetime.utcfromtimestamp(data["start"])
-        end = datetime.utcfromtimestamp(data["end"])
+        activate = datetime.fromisoformat(data["activate"])
+        start = datetime.fromisoformat(data["start"])
+        end = datetime.fromisoformat(data["end"])
         freeze = data.get("freeze", None)
         if freeze is not None:
-            freeze = datetime.utcfromtimestamp(freeze)
+            freeze = datetime.fromisoformat(freeze)
 
         return Contest(key=data["key"], name=data["name"],
                        activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
@@ -76,10 +76,10 @@ class Contest(object):
         return {
             "key": self.key,
             "name": self.name,
-            "activate": self.activation_time.timestamp(),
-            "start": self.start_time.timestamp(),
-            "end": self.end_time.timestamp(),
-            "freeze": self.freeze_time.timestamp() if self.freeze_time else None,
+            "activate": self.activation_time.isoformat(),
+            "start": self.start_time.isoformat(),
+            "end": self.end_time.isoformat(),
+            "freeze": self.freeze_time.isoformat() if self.freeze_time else None,
             "problems": [problem.serialize(problem_loader) for problem in self.problems],
             "public": self.public,
             "allowed_team_names": self.allowed_team_names,

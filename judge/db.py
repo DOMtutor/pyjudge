@@ -129,3 +129,16 @@ class DatabaseTransaction(object):
             self.transaction.rollback()
         else:
             self.transaction.commit()
+
+
+def list_param(data):
+    return f"({','.join(['?'] * len(data))})"
+
+
+def get_unique(cursor: MySQLCursor):
+    result = cursor.fetchall()
+    if not result:
+        raise ValueError("No result found")
+    if len(result) > 1:
+        raise ValueError("Multiple results found")
+    return result[0]

@@ -91,7 +91,7 @@ class Problem(object):
 
     @property
     @abc.abstractmethod
-    def unique_name(self) -> str:
+    def key(self) -> str:
         pass
 
     @property

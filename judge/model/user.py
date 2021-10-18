@@ -21,23 +21,23 @@ class UserRole(enum.Enum):
 
 
 @dataclasses.dataclass
-class JudgeUser(object):
-    name: str
+class User(object):
+    login_name: str
     display_name: str
     email: Optional[str]
     role: UserRole
 
     @staticmethod
     def parse(data):
-        return JudgeUser(data["name"], data["display_name"], data["email"], UserRole.parse(data["role"]))
+        return User(data["login"], data["display_name"], data["email"], UserRole.parse(data["role"]))
 
     def serialize(self):
-        return {"name": self.name, "display_name": self.display_name, "email": self.email,
+        return {"login": self.login_name, "display_name": self.display_name, "email": self.email,
                 "role": self.role.serialize()}
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.login_name)
 
     def __eq__(self, other):
-        return isinstance(other, JudgeUser) and self.name == other.name
+        return isinstance(other, User) and self.login_name == other.login_name
 

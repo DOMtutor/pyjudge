@@ -3,23 +3,6 @@ from typing import Optional
 
 
 @dataclasses.dataclass
-class DbTeam(object):
-    team_id: int
-    name: str
-    display_name: str
-    category_id: int
-
-    def __str__(self):
-        return f"{self.name}({self.team_id})"
-
-    def __hash__(self):
-        return hash(self.team_id)
-
-    def __eq__(self, other):
-        return isinstance(other, DbTeam) and self.team_id == other.team_id
-
-
-@dataclasses.dataclass
 class DbTestCase(object):
     case_id: int
     name: str

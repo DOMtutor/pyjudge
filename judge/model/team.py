@@ -1,13 +1,12 @@
-
-# TODO This currently is hardcoded - but should be sufficient for any kind of course?
 import dataclasses
 import enum
 from typing import List, Optional, Dict
 
-from .user import JudgeUser
+from .user import User
 
 
 class TeamCategory(enum.Enum):
+    # TODO This currently is hardcoded - but should be sufficient for any kind of course?
     Jury = "jury"
     Participants = "participants"
     Hidden = "hidden"
@@ -47,18 +46,18 @@ class Affiliation(object):
 class Team(object):
     name: str
     display_name: str
-    members: List[JudgeUser]
+    members: List[User]
     category: Optional[TeamCategory]
     affiliation: Optional[Affiliation]
 
     @staticmethod
-    def parse(data, user_by_name: Dict[str, JudgeUser], affiliation_by_name: Dict[str, Affiliation]):
+    def parse(data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation]):
         category = TeamCategory.parse(data["category"]) if "category" in data else None
         affiliation = affiliation_by_name[data["affiliation"]] if "affiliation" in data else None
 
         if not data.get("members", []):
             raise ValueError("Invalid team")
-        members: List[JudgeUser] = []
+        members: List[User] = []
         for member_name in data["members"]:
             if member_name not in user_by_name:
                 raise ValueError(f"Non-existing user {member_name}")
@@ -71,7 +70,7 @@ class Team(object):
         return {"name": self.name,
                 "display_name": self.display_name,
                 "category": self.category.serialize(),
-                "members": [user.name for user in self.members],
+                "members": [user.login_name for user in self.members],
                 "affiliation": self.affiliation.short_name if self.affiliation else None}
 
     @property
