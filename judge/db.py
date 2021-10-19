@@ -37,7 +37,7 @@ class DatabaseTransactionCursor(object):
             self.connection.rollback()
 
 
-class Database(object):
+class DatabaseConfig(object):
     DEFAULT = {
         "user": "domjudge",
         "password": "domjudge",
@@ -52,21 +52,40 @@ class Database(object):
         if not isinstance(config, dict):
             raise TypeError("Malformed DB config")
         for key, value in config.items():
-            if key not in Database.KEYS:
+            if key not in DatabaseConfig.KEYS:
                 raise KeyError(f"Malformed DB config, key {key} unknown")
-            if not isinstance(value, type(Database.DEFAULT[key])):
+            if not isinstance(value, type(DatabaseConfig.DEFAULT[key])):
                 raise TypeError(f"Malformed DB config, key {key} has unexpected type")
 
     def __init__(self, config: Union[pathlib.Path, dict] = None):
-        base_config = dict(Database.DEFAULT)
+        base_config = dict(DatabaseConfig.DEFAULT)
         if isinstance(config, pathlib.Path):
             with config.open(mode="rt") as f:
                 config = yaml.safe_load(f)
-            Database.check_config(config)
+            DatabaseConfig.check_config(config)
         if isinstance(config, dict):
             base_config.update(config)
         self.config = base_config
-        self.connection = None
+        self.database: Optional[Database] = None
+
+    def __enter__(self):
+        self.database = Database(mysql.connector.connect(
+            host=self.config["host"],
+            port=self.config["port"],
+            user=self.config["user"],
+            passwd=self.config["password"],
+            database=self.config["database"]
+        ))
+        return self.database
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.database.connection.close()
+        return False
+
+
+class Database(object):
+    def __init__(self, connection: mysql.connector.MySQLConnection):
+        self.connection = connection
 
     def transaction(self, **kwargs):
         return DatabaseTransaction(self.connection, **kwargs)
@@ -77,20 +96,6 @@ class Database(object):
                            buffered_cursor: bool = False,
                            prepared_cursor: bool = True) -> DatabaseTransactionCursor:
         return DatabaseTransactionCursor(self.connection, readonly, isolation_level, buffered_cursor, prepared_cursor)
-
-    def __enter__(self):
-        self.connection = mysql.connector.connect(
-            host=self.config["host"],
-            port=self.config["port"],
-            user=self.config["user"],
-            passwd=self.config["password"],
-            database=self.config["database"]
-        )
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.connection.close()
-        return False
 
 
 class DatabaseCursor(object):

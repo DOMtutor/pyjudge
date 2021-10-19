@@ -31,6 +31,14 @@ class SubmissionWithFilesDto(ParticipantSubmissionDto):
 
 
 @dataclasses.dataclass
+class ContestProblemDto(object):
+    problem_key: str
+    contest_problem_key: str
+    points: int
+    color: Optional[str]
+
+
+@dataclasses.dataclass
 class ClarificationDto(object):
     team_key: str
     contest_key: str
