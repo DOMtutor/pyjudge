@@ -1,4 +1,3 @@
-import json
 from typing import List, Collection, Optional, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
@@ -6,20 +5,22 @@ from mysql.connector.cursor import MySQLCursor
 from judge.action.update import category_to_database
 from judge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, ClarificationDto, \
     ContestProblemDto
-from judge.model import Contest, Verdict, TeamCategory
-from judge.db import Database, list_param, get_unique
 from judge.data.teams import UserDto, TeamDto
+from judge.db import Database, list_param, get_unique
+from judge.model import Verdict, TeamCategory
 
 
 def parse_judging_verdict(key):
+    # noinspection SpellCheckingInspection
     return {
         "correct": Verdict.CORRECT,
         "wrong-answer": Verdict.WRONG_ANSWER,
-        "time-limit": Verdict.TIME_LIMIT,
+        "timelimit": Verdict.TIME_LIMIT,
         "run-error": Verdict.RUN_ERROR,
         "memory-limit": Verdict.MEMORY_LIMIT,
         "output-limit": Verdict.OUTPUT_LIMIT,
-        "no-output": Verdict.NO_OUTPUT
+        "no-output": Verdict.NO_OUTPUT,
+        "compiler-error": Verdict.COMPILER_ERROR
     }[key]
 
 
