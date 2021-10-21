@@ -150,6 +150,7 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
                     json.dumps(list(language.extensions)), language.time_factor,
                     language.entry_point_description, language.entry_point_required))
 
+
 def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
@@ -165,6 +166,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
                    "WHERE probid = ?",
                    (text_data, text_type, problem_id))
     return problem_id
+
 
 def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
@@ -182,7 +184,6 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
         problem_id = cursor.lastrowid
 
     text_data, text_type = problem.load_problem_text()
-
 
     time_limit = problem.limits.time_s if problem.limits.time_s else 1.0
     cursor.execute("UPDATE problem "
@@ -772,7 +773,8 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
         for role_id in missing_roles:
             cursor.execute(f"INSERT INTO userrole (userid, roleid) VALUES (?, ?)", (user_id, role_id))
 
-    valid_users = {"admin", "judgehost"}
+    # TODO This belongs to the config
+    valid_users = {"admin", "judgehost", "python_bot"}
     cursor.execute(f"UPDATE user SET enabled = FALSE "
                    f"WHERE userid NOT IN {list_param(user_ids)} "
                    f"AND username NOT IN {list_param(valid_users)}",
