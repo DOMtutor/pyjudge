@@ -150,6 +150,21 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
                     json.dumps(list(language.extensions)), language.time_factor,
                     language.entry_point_description, language.entry_point_required))
 
+def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
+    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+    id_query = cursor.fetchone()
+    if not id_query:
+        raise KeyError(f"Problem {problem.key} does not exist in database")
+
+    problem_id = id_query[0]
+    cursor.execute("UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id))
+
+    text_data, text_type = problem.load_problem_text()
+    cursor.execute("UPDATE problem "
+                   "SET problemtext = ?, problemtext_type = ? "
+                   "WHERE probid = ?",
+                   (text_data, text_type, problem_id))
+    return problem_id
 
 def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
@@ -160,14 +175,15 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     if id_query:
         problem_id = id_query[0]
         logging.debug("Problem present in database with id %d", problem_id)
-        cursor.execute("UPDATE problem SET externalid = ?, name = ? WHERE probid = ?",
-                       (problem.key, problem.name, problem_id))
+        cursor.execute("UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id))
     else:
         logging.debug("Creating problem %s in database", problem)
         cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.key, problem.name))
         problem_id = cursor.lastrowid
 
     text_data, text_type = problem.load_problem_text()
+
+
     time_limit = problem.limits.time_s if problem.limits.time_s else 1.0
     cursor.execute("UPDATE problem "
                    "SET problemtext = ?, problemtext_type = ?, special_compare_args = ?, "
