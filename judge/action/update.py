@@ -1,21 +1,21 @@
-import itertools
 import json
 import logging
 import time
 from collections import defaultdict
-from typing import Dict, Collection, Optional, List, Tuple
+from typing import Dict, Collection, Optional, List, Tuple, Set
 
 from mysql.connector.cursor import MySQLCursor
 
-from .data import DbTestCase, test_case_compare_key
 from judge.db import list_param
 from judge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
     JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, User, Affiliation
+from .data import DbTestCase, test_case_compare_key
 
 category_to_database = {
     TeamCategory.Participants: "Participants",
     TeamCategory.Hidden: "Participants (hidden)",
-    TeamCategory.Jury: "Jury"
+    TeamCategory.Jury: "Jury",
+    TeamCategory.Solution: "Solutions"
 }
 database_to_category = {value: key for key, value in category_to_database.items()}
 
@@ -49,7 +49,8 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
     # TODO Maybe not hardcode?
     for category, color, visible, order in [(TeamCategory.Participants, 'white', True, 0),
                                             (TeamCategory.Hidden, 'lightgray', False, 0),
-                                            (TeamCategory.Jury, 'lightgreen', False, 9)]:
+                                            (TeamCategory.Jury, 'lightgreen', False, 8),
+                                            (TeamCategory.Solution, 'green', False, 9)]:
         name = category_to_database[category]
         cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
         result = cursor.fetchall()
@@ -673,13 +674,13 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, FALSE, TRUE)",
                        (contest.key, contest.name, contest.key,
                         contest.activation_time.timestamp(),
-                        contest.activation_time.astimezone().strftime(date_format),
+                        contest.activation_time.strftime(date_format),
                         contest.start_time.timestamp(),
-                        contest.start_time.astimezone().strftime(date_format),
+                        contest.start_time.strftime(date_format),
                         contest.end_time.timestamp(),
-                        contest.end_time.astimezone().strftime(date_format),
+                        contest.end_time.strftime(date_format),
                         contest.freeze_time.timestamp() if contest.freeze_time else None,
-                        contest.freeze_time.astimezone().strftime(date_format) if contest.freeze_time else None
+                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None
                         ))
         contest_id = cursor.lastrowid
 
@@ -773,13 +774,14 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
         for role_id in missing_roles:
             cursor.execute(f"INSERT INTO userrole (userid, roleid) VALUES (?, ?)", (user_id, role_id))
 
-    # TODO This belongs to the config
-    valid_users = {"admin", "judgehost", "python_bot"}
+    return user_ids
+
+
+def disable_unknown_users(cursor: MySQLCursor, user_login_names: Set[str]):
+    valid_users = {"admin", "judgehost"}
+    valid_users.update(user_login_names)
     cursor.execute(f"UPDATE user SET enabled = FALSE "
-                   f"WHERE userid NOT IN {list_param(user_ids)} "
-                   f"AND username NOT IN {list_param(valid_users)}",
-                   tuple(itertools.chain(user_ids.values(), valid_users)))
+                   f"WHERE username NOT IN {list_param(valid_users)}",
+                   tuple(valid_users))
     if cursor.rowcount:
         logging.warning("Disabled %d users", cursor.rowcount)
-
-    return user_ids

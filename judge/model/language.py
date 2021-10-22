@@ -10,6 +10,9 @@ class ExecutableType(enum.Enum):
     Runscript = "run"
     Compare = "compare"
 
+    def __str__(self):
+        return self.value
+
 
 @dataclasses.dataclass
 class Executable(abc.ABC):

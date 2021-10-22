@@ -2,6 +2,8 @@ import dataclasses
 from datetime import datetime
 from typing import Optional, List
 
+import dateutil.parser
+
 from .problem import Problem, ProblemLoader
 from .team import TeamCategory
 
@@ -31,6 +33,8 @@ class ContestProblem(object):
 
 @dataclasses.dataclass
 class Contest(object):
+    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S %Z"
+
     key: str
     name: str
 
@@ -59,12 +63,12 @@ class Contest(object):
             allowed_team_categories = [TeamCategory.parse(name) for name in data.get("allowed_categories", [])]
         problems = [ContestProblem.parse(problem, problem_loader) for problem in data["problems"]]
 
-        activate = datetime.fromisoformat(data["activate"])
-        start = datetime.fromisoformat(data["start"])
-        end = datetime.fromisoformat(data["end"])
+        activate = dateutil.parser.parse(data["activate"])
+        start = dateutil.parser.parse(data["start"])
+        end = dateutil.parser.parse(data["end"])
         freeze = data.get("freeze", None)
         if freeze is not None:
-            freeze = datetime.fromisoformat(freeze)
+            freeze = dateutil.parser.parse(freeze)
 
         return Contest(key=data["key"], name=data["name"],
                        activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
@@ -76,10 +80,10 @@ class Contest(object):
         return {
             "key": self.key,
             "name": self.name,
-            "activate": self.activation_time.isoformat(),
-            "start": self.start_time.isoformat(),
-            "end": self.end_time.isoformat(),
-            "freeze": self.freeze_time.isoformat() if self.freeze_time else None,
+            "activate": self.activation_time.strftime(Contest.DATE_FORMAT),
+            "start": self.start_time.strftime(Contest.DATE_FORMAT),
+            "end": self.end_time.strftime(Contest.DATE_FORMAT),
+            "freeze": self.freeze_time.strftime(Contest.DATE_FORMAT) if self.freeze_time else None,
             "problems": [problem.serialize(problem_loader) for problem in self.problems],
             "public": self.public,
             "allowed_team_names": self.allowed_team_names,

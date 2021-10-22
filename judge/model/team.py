@@ -8,6 +8,7 @@ from .user import User
 class TeamCategory(enum.Enum):
     # TODO This currently is hardcoded - but should be sufficient for any kind of course?
     Jury = "jury"
+    Solution = "solution"
     Participants = "participants"
     Hidden = "hidden"
 
