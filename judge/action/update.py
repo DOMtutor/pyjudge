@@ -401,6 +401,15 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
     write("output_display_limit", judging.output_display_limit)
     write("lazy_eval_results", judging.lazy_eval)
 
+    display = settings.display
+    write("show_pending", display.show_pending)
+    write("show_flags", display.show_flags)
+    write("show_affiliations", display.show_affiliations)
+    write("show_affiliation_logos", display.show_affiliation_logos)
+    write("show_teams_submissions", display.show_teams_submissions)
+    write("show_sample_output", display.show_sample_output)
+    write("show_compile", display.show_compile)
+
     write("clar_answers", json.dumps(["No comment",
                                       "Read the problem statement carefully",
                                       "Half points granted"]))

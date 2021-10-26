@@ -26,6 +26,18 @@ class JudgingSettings(object):
 
 
 @dataclasses.dataclass
+class DisplaySettings(object):
+    show_pending: bool
+    show_flags: bool
+    show_affiliations: bool
+    show_affiliation_logos: bool
+    show_teams_submissions: bool
+    show_sample_output: bool
+    show_compile: int
+
+
+@dataclasses.dataclass
 class JudgeSettings(object):
     judging: JudgingSettings
     scoring: ScoringSettings
+    display: DisplaySettings
