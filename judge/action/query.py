@@ -1,3 +1,4 @@
+import datetime
 from typing import List, Collection, Optional, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
@@ -46,6 +47,12 @@ def _find_contest_with_problems_by_key(cursor: MySQLCursor, contest_key: str) \
     return contest_id, problems
 
 
+def _find_contest_end(cursor: MySQLCursor, contest_key: str) -> Tuple[str, float]:
+    cursor.execute("SELECT cid, endtime FROM contest WHERE shortname = ?", (contest_key,))
+    contest_id, contest_end = get_unique(cursor)
+    return contest_id, contest_end
+
+
 def find_contest_problems(database: Database, contest_key: str) -> List[ContestProblemDto]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
@@ -55,6 +62,7 @@ def find_contest_problems(database: Database, contest_key: str) -> List[ContestP
 def find_valid_submissions(database: Database, contest_key: str) -> List[SubmissionWithVerdictDto]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
+        _, contest_end = _find_contest_end(cursor, contest_key)
 
         cursor.execute(
             f"SELECT s.submitid, p.probid, j.result, s.submittime, s.langid, t.name, SUM(LENGTH(sf.sourcecode)) "
@@ -84,7 +92,8 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
                 language_key=language_key,
                 verdict=parse_judging_verdict(result),
                 submission_time=submission_time,
-                size=size
+                size=size,
+                too_late=contest_end < submission_time
             )
             submissions.append(submission)
     return submissions

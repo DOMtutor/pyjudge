@@ -410,9 +410,10 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
     write("show_sample_output", display.show_sample_output)
     write("show_compile", display.show_compile)
 
-    write("clar_answers", json.dumps(["No comment",
-                                      "Read the problem statement carefully",
-                                      "Half points granted"]))
+    clarification = settings.clarification
+    if not isinstance(clarification.answers, list):
+        raise ValueError
+    write("clar_answers", json.dumps(clarification.answers))
 
 
 def set_languages(cursor: MySQLCursor, languages: List[Language]):
@@ -661,7 +662,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                        "endtime = ?, endtime_string = ?, "
                        "freezetime = ?, freezetime_string = ?, "
                        "b = 0, enabled = TRUE, starttime_enabled = TRUE, process_balloons = FALSE, "
-                       "public = FALSE, open_to_all_teams = TRUE "
+                       "public = ?, open_to_all_teams = ? "
                        "WHERE cid = ?",
                        (contest.key, contest.name, contest.key,
                         contest.activation_time.timestamp(),
@@ -672,6 +673,8 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                         contest.end_time.strftime(date_format),
                         contest.freeze_time.timestamp() if contest.freeze_time else None,
                         contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                        contest.public_scoreboard,
+                        contest.access is None,
                         contest_id))
     else:
         cursor.execute("INSERT INTO contest (externalid, name, shortname, "
@@ -680,7 +683,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                        "endtime, endtime_string, "
                        "freezetime, freezetime_string, "
                        "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams) "
-                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, FALSE, TRUE)",
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, ?, ?)",
                        (contest.key, contest.name, contest.key,
                         contest.activation_time.timestamp(),
                         contest.activation_time.strftime(date_format),
@@ -689,7 +692,9 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                         contest.end_time.timestamp(),
                         contest.end_time.strftime(date_format),
                         contest.freeze_time.timestamp() if contest.freeze_time else None,
-                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None
+                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                        contest.public_scoreboard,
+                        contest.access is None
                         ))
         contest_id = cursor.lastrowid
 
@@ -710,6 +715,30 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                            "allow_judge, color, lazy_eval_results) VALUES (?, ?, ?, ?, TRUE, TRUE, ?, NULL)",
                            (contest_id, problem_id, contest_problem.name,
                             contest_problem.points, contest_problem.color))
+
+    cursor.execute("DELETE FROM contestteam WHERE cid = ?", (contest_id,))
+    cursor.execute("DELETE FROM contestteamcategory WHERE cid = ?", (contest_id,))
+
+    if contest.access is not None:
+        team_names = contest.access.team_names
+        if team_names:
+            cursor.execute(f"SELECT teamid FROM team WHERE name IN {list_param(team_names)}", tuple(team_names))
+            team_ids = cursor.fetchall()
+            if len(team_ids) != len(team_names):
+                raise ValueError("Non-existing teams specified")
+            for team_id, in team_ids:
+                cursor.execute("INSERT INTO contestteam (cid, teamid) VALUES (?, ?)", (contest_id, team_id))
+        team_categories = contest.access.team_categories
+        if team_categories:
+            cursor.execute(f"SELECT categoryid FROM team_category WHERE name IN {list_param(team_categories)}",
+                           tuple(team_categories))
+            category_ids = cursor.fetchall()
+            if len(category_ids) != len(team_categories):
+                raise ValueError("Non-existing teams specified")
+            for category_id, in category_ids:
+                cursor.execute("INSERT INTO contestteamcategory (cid, categoryid) VALUES (?, ?)",
+                               (contest_id, category_id))
+
     return contest_id
 
 

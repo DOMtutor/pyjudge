@@ -1,6 +1,6 @@
 import dataclasses
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Set
 
 import dateutil.parser
 
@@ -32,6 +32,24 @@ class ContestProblem(object):
 
 
 @dataclasses.dataclass
+class ContestAccess(object):
+    team_names: Set[str]
+    team_categories: Set[TeamCategory]
+
+    @staticmethod
+    def parse(data):
+        team_names = set(data.get("teams", []))
+        team_categories = set(TeamCategory.parse(name) for name in data.get("categories", []))
+        return ContestAccess(team_names=team_names, team_categories=team_categories)
+
+    def serialize(self):
+        return {
+            "teams": list(self.team_names),
+            "categories": [category.configuration_key for category in self.team_categories]
+        }
+
+
+@dataclasses.dataclass
 class Contest(object):
     DATE_FORMAT = "%Y-%m-%dT%H:%M:%S %Z"
 
@@ -44,23 +62,16 @@ class Contest(object):
     freeze_time: Optional[datetime]
 
     problems: List[ContestProblem]
+    access: Optional[ContestAccess]
 
-    allowed_team_names: List[str]
-    allowed_team_categories: List[TeamCategory]
-    public: bool
+    public_scoreboard: bool
 
     def is_running(self, at: datetime):
         return self.start_time <= at <= self.end_time
 
     @staticmethod
     def parse(data, problem_loader: ProblemLoader):
-        public = data.get("is_public", False)
-        if public:
-            allowed_team_names = []
-            allowed_team_categories = []
-        else:
-            allowed_team_names = [data.get("allowed_team_names", [])]
-            allowed_team_categories = [TeamCategory.parse(name) for name in data.get("allowed_categories", [])]
+        public_scoreboard = data.get("public_scoreboard", False)
         problems = [ContestProblem.parse(problem, problem_loader) for problem in data["problems"]]
 
         activate = dateutil.parser.parse(data["activate"])
@@ -69,12 +80,11 @@ class Contest(object):
         freeze = data.get("freeze", None)
         if freeze is not None:
             freeze = dateutil.parser.parse(freeze)
+        access = ContestAccess.parse(data["access"]) if "access" in data else None
 
         return Contest(key=data["key"], name=data["name"],
                        activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
-                       allowed_team_names=allowed_team_names,
-                       allowed_team_categories=allowed_team_categories,
-                       public=public, problems=problems)
+                       access=access, public_scoreboard=public_scoreboard, problems=problems)
 
     def serialize(self, problem_loader: ProblemLoader):
         return {
@@ -85,9 +95,7 @@ class Contest(object):
             "end": self.end_time.strftime(Contest.DATE_FORMAT),
             "freeze": self.freeze_time.strftime(Contest.DATE_FORMAT) if self.freeze_time else None,
             "problems": [problem.serialize(problem_loader) for problem in self.problems],
-            "public": self.public,
-            "allowed_team_names": self.allowed_team_names,
-            "allowed_categories": [category.configuration_key for category in self.allowed_team_categories]
+            "access": self.access.serialize() if self.access is not None else None
         }
 
     def is_active(self, point: datetime):

@@ -23,6 +23,7 @@ class ParticipantSubmissionDto(object):
 class SubmissionWithVerdictDto(ParticipantSubmissionDto):
     size: int
     verdict: Optional[Verdict]
+    too_late: bool
 
 
 @dataclasses.dataclass

@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Dict
+from typing import Dict, List
 
 from .submission import Verdict
 
@@ -37,7 +37,14 @@ class DisplaySettings(object):
 
 
 @dataclasses.dataclass
+class ClarificationSettings(object):
+    answers: List[str]
+
+
+@dataclasses.dataclass
 class JudgeSettings(object):
     judging: JudgingSettings
     scoring: ScoringSettings
     display: DisplaySettings
+    clarification: ClarificationSettings
+
