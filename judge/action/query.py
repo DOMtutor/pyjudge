@@ -65,10 +65,13 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
         _, contest_end = _find_contest_end(cursor, contest_key)
 
         cursor.execute(
-            f"SELECT s.submitid, p.probid, j.result, s.submittime, s.langid, t.name, SUM(LENGTH(sf.sourcecode)) "
+            f"SELECT "
+            f"  s.submitid, p.probid, j.result, s.submittime, s.langid, "
+            f"  t.name, SUM(LENGTH(sf.sourcecode)), jr.runtime "
             f"FROM team t "
             f"  JOIN submission s on t.teamid = s.teamid "
             f"  JOIN judging j ON j.submitid = s.submitid "
+            f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
             f"  JOIN submission_file sf on s.submitid = sf.submitid "
             f"  JOIN problem p on s.probid = p.probid "
             f"WHERE "
@@ -81,7 +84,7 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
 
         submission_ids = set()
         submissions = []
-        for submission_id, problem_id, result, submission_time, language_key, team_key, size in cursor:
+        for submission_id, problem_id, result, submission_time, language_key, team_key, size, runtime in cursor:
             if submission_id in submission_ids:
                 raise ValueError(f"Submission {submission_id} has multiple valid judgings?")
             submission_ids.add(submission_id)
@@ -91,9 +94,10 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
                 contest_problem_key=contest_problems_by_id[problem_id].contest_problem_key,
                 language_key=language_key,
                 verdict=parse_judging_verdict(result),
-                submission_time=submission_time,
-                size=size,
-                too_late=contest_end < submission_time
+                submission_time=float(submission_time),
+                size=int(size),
+                too_late=contest_end < submission_time,
+                runtime=float(runtime)
             )
             submissions.append(submission)
     return submissions
@@ -220,3 +224,9 @@ def find_teams(database: Database, categories: List[TeamCategory]) -> List[TeamD
             team_users[team_id].append(UserDto(login_name=username, display_name=name, email=email))
         return [TeamDto(team_key, team_name, category, team_users[team_id])
                 for team_id, (team_key, team_name, category) in team_data.items()]
+
+
+def find_languages(database: Database) -> Dict[str, str]:
+    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+        cursor.execute(f"SELECT langid, name FROM language")
+        return {language_key: name for language_key, name in cursor}
