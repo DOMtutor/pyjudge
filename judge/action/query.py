@@ -67,7 +67,7 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
         cursor.execute(
             f"SELECT "
             f"  s.submitid, p.probid, j.result, s.submittime, s.langid, "
-            f"  t.name, SUM(LENGTH(sf.sourcecode)), jr.runtime "
+            f"  t.name, SUM(LENGTH(sf.sourcecode)), MAX(jr.runtime) "
             f"FROM team t "
             f"  JOIN submission s on t.teamid = s.teamid "
             f"  JOIN judging j ON j.submitid = s.submitid "
@@ -78,7 +78,7 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
             f"  j.valid = 1 AND "
             f"  s.cid = ? AND "
             f"  p.probid IN {list_param(contest_problems_by_id)} "
-            f"GROUP BY s.submitid",
+            f"GROUP BY s.submitid ",
             (contest_id, *contest_problems_by_id.keys())
         )
 
