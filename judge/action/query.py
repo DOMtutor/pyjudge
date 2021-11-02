@@ -1,11 +1,11 @@
-import datetime
+import logging
 from typing import List, Collection, Optional, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
 
 from judge.action.update import category_to_database
-from judge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, ClarificationDto, \
-    ContestProblemDto
+from judge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, \
+    ClarificationDto, ContestProblemDto, SubmissionSize
 from judge.data.teams import UserDto, TeamDto
 from judge.db import Database, list_param, get_unique
 from judge.model import Verdict, TeamCategory
@@ -50,7 +50,7 @@ def _find_contest_with_problems_by_key(cursor: MySQLCursor, contest_key: str) \
 def _find_contest_end(cursor: MySQLCursor, contest_key: str) -> Tuple[str, float]:
     cursor.execute("SELECT cid, endtime FROM contest WHERE shortname = ?", (contest_key,))
     contest_id, contest_end = get_unique(cursor)
-    return contest_id, contest_end
+    return contest_id, float(contest_end)
 
 
 def find_contest_problems(database: Database, contest_key: str) -> List[ContestProblemDto]:
@@ -66,40 +66,93 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
 
         cursor.execute(
             f"SELECT "
-            f"  s.submitid, p.probid, j.result, s.submittime, s.langid, "
-            f"  t.name, SUM(LENGTH(sf.sourcecode)), MAX(jr.runtime) "
+            f"  s.submitid, p.probid, s.submittime, s.langid, t.name "
             f"FROM team t "
             f"  JOIN submission s on t.teamid = s.teamid "
-            f"  JOIN judging j ON j.submitid = s.submitid "
-            f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
-            f"  JOIN submission_file sf on s.submitid = sf.submitid "
             f"  JOIN problem p on s.probid = p.probid "
             f"WHERE "
-            f"  j.valid = 1 AND "
             f"  s.cid = ? AND "
-            f"  p.probid IN {list_param(contest_problems_by_id)} "
-            f"GROUP BY s.submitid ",
+            f"  p.probid IN {list_param(contest_problems_by_id)} ",
             (contest_id, *contest_problems_by_id.keys())
         )
+        submission_data = {}
+        for submission_id, problem_id, submission_time, language_key, team_key in cursor:
+            if submission_id in submission_data:
+                logging.warning("Multiple results for submission %s", submission_id)
+                continue
+            contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
+            submission_data[submission_id] = (float(submission_time), contest_problem_key, language_key, team_key)
 
-        submission_ids = set()
-        submissions = []
-        for submission_id, problem_id, result, submission_time, language_key, team_key, size, runtime in cursor:
-            if submission_id in submission_ids:
-                raise ValueError(f"Submission {submission_id} has multiple valid judgings?")
-            submission_ids.add(submission_id)
-            submission = SubmissionWithVerdictDto(
-                team_key=team_key,
-                contest_key=contest_key,
-                contest_problem_key=contest_problems_by_id[problem_id].contest_problem_key,
-                language_key=language_key,
-                verdict=parse_judging_verdict(result),
-                submission_time=float(submission_time),
-                size=int(size),
-                too_late=contest_end < submission_time,
-                runtime=float(runtime)
-            )
-            submissions.append(submission)
+        cursor.execute(
+            f"SELECT "
+            f"  s.submitid, j.judgingid, j.result "
+            f"FROM submission s "
+            f"  JOIN judging j on s.submitid = j.submitid "
+            f"WHERE "
+            f"  j.valid = 1 AND "
+            f"  s.submitid IN {list_param(submission_data)}",
+            tuple(submission_data.keys())
+        )
+        judging_ids = set()
+        judging_data = {}
+        for submission_id, judging_id, judging_result in cursor:
+            if submission_id in judging_data:
+                logging.warning("Multiple runs for submission %s", submission_id)
+                continue
+            if judging_id in judging_ids:
+                logging.warning("Multiple judging ids for submission %s", submission_id)
+                continue
+            judging_ids.add(judging_id)
+            judging_data[submission_id] = (judging_id, parse_judging_verdict(judging_result))
+
+        cursor.execute(
+            f"SELECT "
+            f"  s.submitid, COUNT(sf.submitid), SUM(LENGTH(sf.sourcecode)), "
+            f"  LENGTH(sourcecode) - LENGTH(REPLACE(sourcecode, '\n', '')) "
+            f"FROM submission s "
+            f"  JOIN submission_file sf on s.submitid = sf.submitid "
+            f"WHERE "
+            f"  s.submitid IN {list_param(submission_data)} "
+            f"GROUP BY s.submitid",
+            tuple(submission_data.keys())
+        )
+        source_data = {submission_id: (int(file_count), int(source_size), int(source_lines))
+                       for submission_id, file_count, source_size, source_lines in cursor}
+
+        cursor.execute(
+            f"SELECT "
+            f"  j.judgingid, MAX(jr.runtime) "
+            f"FROM judging j "
+            f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
+            f"WHERE "
+            f"  j.judgingid IN {list_param(judging_ids)} "
+            f"GROUP BY j.judgingid",
+            tuple(judging_ids)
+        )
+        judging_runtime = {judging_id: float(runtime) for judging_id, runtime in cursor}
+
+    submissions = []
+
+    for submission_id, (submission_time, contest_problem_key, language_key, team_key) in submission_data.items():
+        judging_id, judging_result = judging_data[submission_id]
+        source_files, source_size, source_lines = source_data[submission_id]
+        runtime = judging_runtime.get(judging_id, None)
+        if runtime is None and judging_result != Verdict.COMPILER_ERROR:
+            logging.warning("No runtime found for submission %s/judging %s with result %s",
+                            submission_id, judging_id, judging_result)
+
+        submission = SubmissionWithVerdictDto(
+            team_key=team_key,
+            contest_key=contest_key,
+            contest_problem_key=contest_problem_key,
+            language_key=language_key,
+            verdict=judging_result,
+            submission_time=submission_time,
+            size=SubmissionSize(file_count=source_files, line_count=source_lines, byte_size=source_size),
+            too_late=contest_end < submission_time,
+            maximum_runtime=runtime
+        )
+        submissions.append(submission)
     return submissions
 
 

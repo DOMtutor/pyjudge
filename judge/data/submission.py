@@ -20,9 +20,16 @@ class ParticipantSubmissionDto(object):
 
 
 @dataclasses.dataclass
+class SubmissionSize(object):
+    file_count: int
+    line_count: int
+    byte_size: int
+
+
+@dataclasses.dataclass
 class SubmissionWithVerdictDto(ParticipantSubmissionDto):
-    size: int
-    runtime: float
+    size: SubmissionSize
+    maximum_runtime: float
     verdict: Optional[Verdict]
     too_late: bool
 
