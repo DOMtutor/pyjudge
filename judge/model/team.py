@@ -7,6 +7,7 @@ from .user import User
 
 class TeamCategory(enum.Enum):
     # TODO This currently is hardcoded - but should be sufficient for any kind of course?
+    # TODO However this could be used to manage access permissions on a multi-course instance
     Jury = "jury"
     Solution = "solution"
     Participants = "participants"

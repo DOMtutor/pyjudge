@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from typing import Optional
 
 
@@ -22,8 +23,10 @@ class DbTestCase(object):
 
 
 def test_case_compare_key(case: DbTestCase):
-    order = ["sample", "tiny", "small", "medium", "large", "huge", "special"]
+    order = ["sample", "secret/tiny", "secret/small", "secret/medium", "secret/large", "secret/huge", "secret/special",
+             "secret/sparse"]
     for i, prefix in enumerate(order):
         if case.name.startswith(prefix):
             return i, case.name[len(prefix):]
+    logging.debug("Case %s name does not start with regular key", case)
     return len(order), case.name

@@ -80,23 +80,25 @@ class Contest(object):
         freeze = data.get("freeze", None)
         if freeze is not None:
             freeze = dateutil.parser.parse(freeze)
-        access = ContestAccess.parse(data["access"]) if "access" in data else None
+        access = ContestAccess.parse(data["access"]) if data.get("access", None) is not None else None
 
         return Contest(key=data["key"], name=data["name"],
                        activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
                        access=access, public_scoreboard=public_scoreboard, problems=problems)
 
     def serialize(self, problem_loader: ProblemLoader):
-        return {
+        data = {
             "key": self.key,
             "name": self.name,
             "activate": self.activation_time.strftime(Contest.DATE_FORMAT),
             "start": self.start_time.strftime(Contest.DATE_FORMAT),
             "end": self.end_time.strftime(Contest.DATE_FORMAT),
             "freeze": self.freeze_time.strftime(Contest.DATE_FORMAT) if self.freeze_time else None,
-            "problems": [problem.serialize(problem_loader) for problem in self.problems],
-            "access": self.access.serialize() if self.access is not None else None
+            "problems": [problem.serialize(problem_loader) for problem in self.problems]
         }
+        if self.access is not None:
+            data["access"] = self.access.serialize()
+        return data
 
     def is_active(self, point: datetime):
         return self.activation_time <= point <= self.end_time
