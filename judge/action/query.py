@@ -215,13 +215,12 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
         cursor.execute(
-            f"SELECT c.clarid, p.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
+            f"SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
             f"FROM problem p, clarification c, team t "
             f"WHERE "
-            f"  c.probid = p.probid AND "
             f"  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
-            f"  p.probid IN {list_param(contest_problems_by_id)} ",
-            tuple(contest_problems_by_id.keys())
+            f"  c.cid = ? ",
+            (contest_id,)
         )
 
         clarification_data = {
@@ -234,24 +233,26 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
                 clarification_data.items():
             if response_id is not None:
                 if response_id not in clarification_data:
-                    raise ValueError(f"Inconsistent clarification {clarification_id} (missing response)")
-                response_problem_id, response_team_key, response_from_jury, _, _, _ = clarification_data[response_id]
-                if (problem_id, team_key, not from_jury) != \
-                        (response_problem_id, response_team_key, response_from_jury):
+                    raise ValueError(f"Inconsistent clarification {clarification_id} (response not in list)")
+                _, response_team_key, response_from_jury, _, _, _ = clarification_data[response_id]
+                if (team_key, not from_jury) != (response_team_key, response_from_jury):
                     raise ValueError(f"Inconsistent clarification {clarification_id} (invalid response)")
+            if problem_id is None:
+                contest_problem_key = None
+            else:
+                contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
+
             clarification = ClarificationDto(
+                key=str(clarification_id),
                 team_key=team_key,
                 request_time=submit_time,
-                response=response_id,  # Hack
+                response_key=str(response_id),  # Hack
                 from_jury=from_jury,
                 contest_key=contest_key,
-                contest_problem_key=contest_problems_by_id[problem_id].contest_problem_key,
+                contest_problem_key=contest_problem_key,
                 body=body
             )
             clarifications_by_id[clarification_id] = clarification
-        for clarification in clarifications_by_id.values():
-            if clarification.response is not None:
-                clarification.response = clarifications_by_id[clarification.response]
 
         return clarifications_by_id.values()
 

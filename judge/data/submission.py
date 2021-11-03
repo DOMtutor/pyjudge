@@ -1,6 +1,7 @@
 import dataclasses
-from typing import Optional, List
+from typing import Optional, List, Dict, Collection
 
+from judge.data.teams import TeamDto
 from judge.model import Verdict
 
 
@@ -36,6 +37,7 @@ class ParticipantSubmissionDto(object):
             language_key=data["language"],
             submission_time=data["time"]
         )
+
 
 @dataclasses.dataclass
 class SubmissionSize(object):
@@ -80,6 +82,7 @@ class SubmissionWithVerdictDto(ParticipantSubmissionDto):
             **ParticipantSubmissionDto.parse(data).__dict__
         )
 
+
 @dataclasses.dataclass
 class SubmissionWithFilesDto(ParticipantSubmissionDto):
     files: List[SubmissionFileDto]
@@ -95,11 +98,68 @@ class ContestProblemDto(object):
 
 @dataclasses.dataclass
 class ClarificationDto(object):
+    key: str
     team_key: str
     contest_key: str
-    contest_problem_key: str
+    contest_problem_key: Optional[str]
 
     request_time: float
-    response: Optional["ClarificationDto"]
+    response_key: Optional[str]
     from_jury: bool
     body: str
+
+    def serialize(self):
+        data = {
+            "key": self.key,
+            "team": self.team_key,
+            "contest": self.contest_key,
+            "time": self.request_time,
+            "jury": self.from_jury,
+            "body": self.body
+        }
+        if self.contest_problem_key is not None:
+            data["contest_problem"] = self.contest_problem_key
+        if self.response_key is not None:
+            data["response"] = self.response_key
+        return data
+
+    @staticmethod
+    def parse(data):
+        return ClarificationDto(
+            key=data["key"],
+            team_key=data["team"],
+            contest_key=data["contest"],
+            contest_problem_key=data.get("contest_problem", None),
+            request_time=data["time"],
+            response_key=data.get("response", None),
+            from_jury=data["jury"],
+            body=data["body"]
+        )
+
+
+@dataclasses.dataclass
+class ContestDataDto(object):
+    teams: Dict[str, TeamDto]
+    languages: Dict[str, str]
+    problems: Dict[str, str]
+    submissions: List[SubmissionWithVerdictDto]
+    clarifications: List[ClarificationDto]
+
+    def serialize(self):
+        return {
+            "teams": [team.serialize() for team in self.teams.values()],
+            "languages": self.languages,
+            "problems": self.problems,
+            "submissions": [submission.serialize() for submission in self.submissions],
+            "clarifications": [clarification.serialize() for clarification in self.clarifications]
+        }
+
+    @staticmethod
+    def parse(data):
+        return ContestDataDto(
+            teams={team.key: team for team in map(TeamDto.parse, data["teams"])},
+            languages=data["languages"],
+            problems=data["problems"],
+            submissions=[SubmissionWithVerdictDto.parse(submission) for submission in data["submissions"]],
+            clarifications=[ClarificationDto.parse(clarification) for clarification in data["clarifications"]]
+        )

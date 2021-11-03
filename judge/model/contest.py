@@ -1,5 +1,4 @@
 import dataclasses
-import sys
 from datetime import datetime
 from typing import Optional, List, Set
 
