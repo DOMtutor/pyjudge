@@ -1,4 +1,5 @@
 import dataclasses
+import sys
 from datetime import datetime
 from typing import Optional, List, Set
 
@@ -60,11 +61,27 @@ class Contest(object):
     start_time: datetime
     end_time: datetime
     freeze_time: Optional[datetime]
+    deactivation_time: Optional[datetime]
 
     problems: List[ContestProblem]
     access: Optional[ContestAccess]
 
     public_scoreboard: bool
+
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self):
+        if self.start_time < self.activation_time:
+            raise ValueError("Start before activate")
+        if self.end_time < self.start_time:
+            raise ValueError("End before start")
+        if self.deactivation_time is not None:
+            if self.deactivation_time < self.end_time:
+                raise ValueError("Deactivated before end")
+        if self.freeze_time is not None:
+            if self.freeze_time < self.start_time or self.end_time < self.freeze_time:
+                raise ValueError("Freeze not during contest")
 
     def is_running(self, at: datetime):
         return self.start_time <= at <= self.end_time
@@ -80,24 +97,32 @@ class Contest(object):
         freeze = data.get("freeze", None)
         if freeze is not None:
             freeze = dateutil.parser.parse(freeze)
+        deactivation = data.get("deactivate", None)
+        if deactivation is not None:
+            deactivation = dateutil.parser.parse(deactivation)
         access = ContestAccess.parse(data["access"]) if data.get("access", None) is not None else None
 
         return Contest(key=data["key"], name=data["name"],
                        activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
-                       access=access, public_scoreboard=public_scoreboard, problems=problems)
+                       deactivation_time=deactivation, access=access, public_scoreboard=public_scoreboard,
+                       problems=problems)
 
     def serialize(self, problem_loader: ProblemLoader):
+        self.validate()
         data = {
             "key": self.key,
             "name": self.name,
             "activate": self.activation_time.strftime(Contest.DATE_FORMAT),
             "start": self.start_time.strftime(Contest.DATE_FORMAT),
             "end": self.end_time.strftime(Contest.DATE_FORMAT),
-            "freeze": self.freeze_time.strftime(Contest.DATE_FORMAT) if self.freeze_time else None,
             "problems": [problem.serialize(problem_loader) for problem in self.problems]
         }
         if self.access is not None:
             data["access"] = self.access.serialize()
+        if self.freeze_time is not None:
+            data["freeze"] = self.freeze_time.strftime(Contest.DATE_FORMAT)
+        if self.deactivation_time is not None:
+            data["deactivate"] = self.deactivation_time.strftime(Contest.DATE_FORMAT)
         return data
 
     def is_active(self, point: datetime):

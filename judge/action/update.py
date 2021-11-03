@@ -641,63 +641,8 @@ def create_problem_submissions(cursor, problem: Problem,
         logging.info("Updated submissions, no changes required")
 
 
-def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids: Dict[Problem, int],
-                             force=False) -> int:
-    date_format = "%Y-%m-%d %H:%M:%S %Z"
-    cursor.execute("SELECT cid, starttime, endtime FROM contest WHERE externalid = ?", (contest.key,))
-    id_query = cursor.fetchone()
-    if id_query:
-        contest_id, current_start, current_end = id_query
-
-        if float(current_start) <= time.time() <= float(current_end):
-            if force:
-                logging.warning("Modified contest is currently running")
-            else:
-                raise ValueError("Modified contest is currently running")
-
-        cursor.execute("UPDATE contest SET "
-                       "externalid = ?, name = ?, shortname = ?, "
-                       "activatetime = ?, activatetime_string = ?, "
-                       "starttime = ?, starttime_string = ?, "
-                       "endtime = ?, endtime_string = ?, "
-                       "freezetime = ?, freezetime_string = ?, "
-                       "b = 0, enabled = TRUE, starttime_enabled = TRUE, process_balloons = FALSE, "
-                       "public = ?, open_to_all_teams = ? "
-                       "WHERE cid = ?",
-                       (contest.key, contest.name, contest.key,
-                        contest.activation_time.timestamp(),
-                        contest.activation_time.strftime(date_format),
-                        contest.start_time.timestamp(),
-                        contest.start_time.strftime(date_format),
-                        contest.end_time.timestamp(),
-                        contest.end_time.strftime(date_format),
-                        contest.freeze_time.timestamp() if contest.freeze_time else None,
-                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
-                        contest.public_scoreboard,
-                        contest.access is None,
-                        contest_id))
-    else:
-        cursor.execute("INSERT INTO contest (externalid, name, shortname, "
-                       "activatetime, activatetime_string, "
-                       "starttime, starttime_string, "
-                       "endtime, endtime_string, "
-                       "freezetime, freezetime_string, "
-                       "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams) "
-                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, ?, ?)",
-                       (contest.key, contest.name, contest.key,
-                        contest.activation_time.timestamp(),
-                        contest.activation_time.strftime(date_format),
-                        contest.start_time.timestamp(),
-                        contest.start_time.strftime(date_format),
-                        contest.end_time.timestamp(),
-                        contest.end_time.strftime(date_format),
-                        contest.freeze_time.timestamp() if contest.freeze_time else None,
-                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
-                        contest.public_scoreboard,
-                        contest.access is None
-                        ))
-        contest_id = cursor.lastrowid
-
+def create_or_update_contest_problems(cursor: MySQLCursor, contest: Contest, contest_id: int,
+                                      problem_ids: Dict[Problem, int]):
     for contest_problem in contest.problems:
         # Cannot REPLACE INTO because of database triggers
         problem_id = problem_ids[contest_problem.problem]
@@ -715,6 +660,70 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, problem_ids:
                            "allow_judge, color, lazy_eval_results) VALUES (?, ?, ?, ?, TRUE, TRUE, ?, NULL)",
                            (contest_id, problem_id, contest_problem.name,
                             contest_problem.points, contest_problem.color))
+
+
+def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False) -> int:
+    date_format = "%Y-%m-%d %H:%M:%S %Z"
+
+    cursor.execute("SELECT cid, starttime, endtime FROM contest WHERE externalid = ?", (contest.key,))
+    id_query = cursor.fetchone()
+    if id_query:
+        contest_id, current_start, current_end = id_query
+
+        if float(current_start) <= time.time() <= float(current_end):
+            if force:
+                logging.warning("Modified contest is currently running")
+            else:
+                raise ValueError("Modified contest is currently running")
+
+        cursor.execute("UPDATE contest SET "
+                       "externalid = ?, name = ?, shortname = ?, "
+                       "activatetime = ?, activatetime_string = ?, "
+                       "deactivatetime = ?, deactivatetime_string = ?, "
+                       "starttime = ?, starttime_string = ?, "
+                       "endtime = ?, endtime_string = ?, "
+                       "freezetime = ?, freezetime_string = ?, "
+                       "b = 0, enabled = TRUE, starttime_enabled = TRUE, process_balloons = FALSE, "
+                       "public = ?, open_to_all_teams = ? "
+                       "WHERE cid = ?",
+                       (contest.key, contest.name, contest.key,
+                        str(contest.activation_time.timestamp()),
+                        contest.activation_time.strftime(date_format),
+                        str(contest.deactivation_time.timestamp()) if contest.deactivation_time else None,
+                        contest.deactivation_time.strftime(date_format) if contest.deactivation_time else None,
+                        str(contest.start_time.timestamp()),
+                        contest.start_time.strftime(date_format),
+                        str(contest.end_time.timestamp()),
+                        contest.end_time.strftime(date_format),
+                        str(contest.freeze_time.timestamp()) if contest.freeze_time else None,
+                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                        contest.public_scoreboard,
+                        contest.access is None,
+                        contest_id))
+    else:
+        cursor.execute("INSERT INTO contest (externalid, name, shortname, "
+                       "activatetime, activatetime_string, "
+                       "deactivatetime, deactivatetime_string, "
+                       "starttime, starttime_string, "
+                       "endtime, endtime_string, "
+                       "freezetime, freezetime_string, "
+                       "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams) "
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, ?, ?)",
+                       (contest.key, contest.name, contest.key,
+                        str(contest.activation_time.timestamp()),
+                        contest.activation_time.strftime(date_format),
+                        str(contest.deactivation_time.timestamp()) if contest.deactivation_time else None,
+                        contest.deactivation_time.strftime(date_format) if contest.deactivation_time else None,
+                        str(contest.start_time.timestamp()),
+                        contest.start_time.strftime(date_format),
+                        str(contest.end_time.timestamp()),
+                        contest.end_time.strftime(date_format),
+                        str(contest.freeze_time.timestamp()) if contest.freeze_time else None,
+                        contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                        contest.public_scoreboard,
+                        contest.access is None
+                        ))
+        contest_id = cursor.lastrowid
 
     cursor.execute("DELETE FROM contestteam WHERE cid = ?", (contest_id,))
     cursor.execute("DELETE FROM contestteamcategory WHERE cid = ?", (contest_id,))
