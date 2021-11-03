@@ -18,6 +18,24 @@ class ParticipantSubmissionDto(object):
     language_key: str
     submission_time: float
 
+    def serialize(self):
+        return {
+            "team": self.team_key,
+            "contest": self.contest_key,
+            "problem": self.contest_problem_key,
+            "language": self.language_key,
+            "time": self.submission_time
+        }
+
+    @staticmethod
+    def parse(data):
+        return ParticipantSubmissionDto(
+            team_key=data["team"],
+            contest_key=data["contest"],
+            contest_problem_key=data["problem"],
+            language_key=data["language"],
+            submission_time=data["time"]
+        )
 
 @dataclasses.dataclass
 class SubmissionSize(object):
@@ -25,14 +43,42 @@ class SubmissionSize(object):
     line_count: int
     byte_size: int
 
+    def serialize(self):
+        return {"files": self.file_count, "lines": self.line_count, "size": self.byte_size}
+
+    @staticmethod
+    def parse(data):
+        return SubmissionSize(file_count=data["files"], line_count=data["lines"], byte_size=data["size"])
+
 
 @dataclasses.dataclass
 class SubmissionWithVerdictDto(ParticipantSubmissionDto):
     size: SubmissionSize
-    maximum_runtime: float
+    maximum_runtime: Optional[float]
     verdict: Optional[Verdict]
     too_late: bool
 
+    def serialize(self):
+        data = super(SubmissionWithVerdictDto, self).serialize()
+        data.update({
+            "size": self.size.serialize(),
+            "too_late": self.too_late
+        })
+        if self.maximum_runtime is not None:
+            data["runtime"] = self.maximum_runtime
+        if self.verdict is not None:
+            data["verdict"] = self.verdict.name
+        return data
+
+    @staticmethod
+    def parse(data):
+        return SubmissionWithVerdictDto(
+            size=SubmissionSize.parse(data["size"]),
+            maximum_runtime=data.get("runtime", None),
+            verdict=Verdict.get(data["verdict"]) if data.get("verdict", None) is not None else None,
+            too_late=data["too_late"],
+            **ParticipantSubmissionDto.parse(data).__dict__
+        )
 
 @dataclasses.dataclass
 class SubmissionWithFilesDto(ParticipantSubmissionDto):

@@ -140,6 +140,8 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
         if runtime is None and judging_result != Verdict.COMPILER_ERROR:
             logging.warning("No runtime found for submission %s/judging %s with result %s",
                             submission_id, judging_id, judging_result)
+        if runtime is not None:
+            runtime = round(runtime, 3)  # Round to milliseconds
 
         submission = SubmissionWithVerdictDto(
             team_key=team_key,
