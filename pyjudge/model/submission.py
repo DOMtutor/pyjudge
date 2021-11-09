@@ -11,11 +11,11 @@ class Verdict(enum.Enum):
     COMPILER_ERROR = "COMPILER_ERROR"
     PRESENTATION_ERROR = "PRESENTATION_ERROR"
     CORRECT = "CORRECT"
-    TIME_LIMIT = "TIME_LIMIT"
+    TIME_LIMIT = "TIMELIMIT"
     MEMORY_LIMIT = "MEMORY_LIMIT"
     OUTPUT_LIMIT = "OUTPUT_LIMIT"
     RUN_ERROR = "RUN_ERROR"
-    WRONG_ANSWER = "WRONG_ANSWER"
+    WRONG_ANSWER = "WRONG-ANSWER"
     NO_OUTPUT = "NO_OUTPUT"
 
     @staticmethod
@@ -53,10 +53,6 @@ class ProblemSubmission(abc.ABC):
     @abc.abstractmethod
     def source(self):
         pass
-
-    def load_source(self) -> bytes:
-        with open(self.source, mode="rb") as f:
-            return f.read()
 
     def source_md5(self) -> str:
         return get_md5(self.source)

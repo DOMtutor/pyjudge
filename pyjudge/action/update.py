@@ -161,7 +161,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
     problem_id = id_query[0]
     cursor.execute("UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id))
 
-    text_data, text_type = problem.load_problem_text()
+    text_data, text_type = problem.problem_text
     cursor.execute("UPDATE problem "
                    "SET problemtext = ?, problemtext_type = ? "
                    "WHERE probid = ?",
@@ -171,7 +171,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
 
 def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
-    problem_testcases = problem.load_testcases()
+    problem_testcases = problem.testcases
 
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
@@ -184,7 +184,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
         cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.key, problem.name))
         problem_id = cursor.lastrowid
 
-    text_data, text_type = problem.load_problem_text()
+    text_data, text_type = problem.problem_text
 
     time_limit = problem.limits.time_s if problem.limits.time_s else 1.0
     cursor.execute("UPDATE problem "
@@ -220,7 +220,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     missing_cases: List[ProblemTestCase] = []
 
     for problem_testcase in problem_testcases:
-        testcase_name = problem_testcase.get_unique_name()
+        testcase_name = problem_testcase.unique_name
 
         if testcase_name in testcases_by_name:
             database_case = testcases_by_name.pop(testcase_name)
@@ -265,7 +265,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
         if problem_testcase.description and len(description) >= 255:
             description = description[:255]
 
-        testcase_data = [problem_testcase.get_unique_name(), description, problem_testcase.input_md5,
+        testcase_data = [problem_testcase.unique_name, description, problem_testcase.input_md5,
                          problem_testcase.output_md5, 1 if problem_testcase.is_sample() else 0,
                          problem_testcase.image_extension]
         if leftover_cases:
@@ -287,7 +287,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
                            "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)", testcase_data)
             case_id = cursor.lastrowid
 
-        database_case = DbTestCase(case_id, problem_testcase.get_unique_name(), problem_testcase.description,
+        database_case = DbTestCase(case_id, problem_testcase.unique_name, problem_testcase.description,
                                    case_rank, problem_testcase.input_md5, problem_testcase.output_md5)
         existing_cases.append((problem_testcase, database_case))
         update_testcase_content.append((problem_testcase, database_case))
@@ -354,7 +354,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
 
     logging.debug("Updated test cases")
 
-    checker = problem.get_checker()
+    checker = problem.checker
     if checker is None:
         cursor.execute("UPDATE problem SET special_compare = NULL WHERE probid = ?", (problem_id,))
     if checker is not None:
@@ -613,7 +613,7 @@ def create_problem_submissions(cursor, problem: Problem,
                 if insert:
                     updated_submissions += 1
             if insert:
-                sourcecode: bytes = submission.load_source()
+                sourcecode: bytes = submission.source
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
@@ -643,6 +643,8 @@ def create_problem_submissions(cursor, problem: Problem,
 
 def create_or_update_contest_problems(cursor: MySQLCursor, contest: Contest, contest_id: int,
                                       problem_ids: Dict[Problem, int]):
+    # TODO Does not yet handle the case when contest problem is changed
+
     for contest_problem in contest.problems:
         # Cannot REPLACE INTO because of database triggers
         problem_id = problem_ids[contest_problem.problem]
