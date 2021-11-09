@@ -6,8 +6,8 @@ from typing import Dict, Collection, Optional, List, Tuple, Set
 
 from mysql.connector.cursor import MySQLCursor
 
-from judge.db import list_param
-from judge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
+from pyjudge.db import list_param
+from pyjudge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
     JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, User, Affiliation
 from .data import DbTestCase, test_case_compare_key
 
@@ -332,7 +332,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
     if update_testcase_content:
         logging.debug("Updating content of %d cases", len(update_testcase_content))
         for problem_testcase, database_case in update_testcase_content:
-            image_data = problem_testcase.load_image_with_thumbnail()
+            image_data = problem_testcase.image
             if image_data is None:
                 image, thumbnail = None, None
             else:
@@ -340,7 +340,7 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
 
             cursor.execute("REPLACE INTO testcase_content (testcaseid, input, output, image, image_thumb)"
                            "VALUES (?, ?, ?, ?, ?)",
-                           (database_case.case_id, problem_testcase.load_input(), problem_testcase.load_output(),
+                           (database_case.case_id, problem_testcase.input, problem_testcase.output,
                             image, thumbnail))
 
     testcases_without_image_ids = [database_case.case_id for case, database_case in existing_cases

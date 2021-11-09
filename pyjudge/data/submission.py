@@ -1,8 +1,8 @@
 import dataclasses
-from typing import Optional, List, Dict, Collection
+from typing import Optional, List, Dict
 
-from judge.data.teams import TeamDto
-from judge.model import Verdict
+from pyjudge.data.teams import TeamDto
+from pyjudge.model import Verdict
 
 
 @dataclasses.dataclass

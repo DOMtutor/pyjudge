@@ -1,6 +1,6 @@
 import abc
 import dataclasses
-from typing import Optional, Tuple, Collection
+from typing import Optional, Tuple, Collection, TypeVar, Generic
 
 from .submission import JuryProblemSubmission
 from .language import Executable
@@ -8,53 +8,44 @@ from .util import get_md5
 
 
 class ProblemTestCase(abc.ABC):
+    @property
     @abc.abstractmethod
     def input(self):
         pass
 
-    def load_input(self) -> bytes:
-        with open(self.input(), mode="rb") as f:
-            return f.read()
-
     @property
     def input_md5(self) -> str:
-        return get_md5(self.input())
+        return get_md5(self.input)
 
+    @property
     @abc.abstractmethod
     def output(self):
         pass
 
-    def load_output(self) -> bytes:
-        with open(self.output(), mode="rb") as f:
-            return f.read()
-
     @property
     def output_md5(self) -> str:
-        return get_md5(self.output())
+        return get_md5(self.output)
 
     @abc.abstractmethod
     def is_sample(self):
         pass
 
+    @property
     @abc.abstractmethod
-    def get_unique_name(self) -> str:
-        pass
-
-    @abc.abstractmethod
-    def load_image(self) -> Optional[bytes]:
+    def unique_name(self) -> str:
         pass
 
     @property
-    @abc.abstractmethod
-    def image_extension(self) -> str:
-        pass
+    def image_extension(self) -> Optional[str]:
+        return None
 
     @property
     def description(self) -> Optional[str]:
         return None
 
-    def load_image_with_thumbnail(self) -> Optional[Tuple[bytes, bytes]]:
-        image = self.load_image()
+    @property
+    def image(self) -> Optional[Tuple[bytes, bytes]]:
+        image = self._load_image()
         if image is None:
             return None
 
@@ -68,8 +59,12 @@ class ProblemTestCase(abc.ABC):
             im.save(thumbnail, format=self.image_extension)
         return image, thumbnail.getvalue()
 
+    @abc.abstractmethod
+    def _load_image(self) -> Optional[bytes]:
+        pass
+
     def __str__(self):
-        return f"TC({self.get_unique_name()})"
+        return f"TC({self.unique_name})"
 
 
 @dataclasses.dataclass
@@ -100,34 +95,44 @@ class Problem(object):
         pass
 
     @property
+    @abc.abstractmethod
+    def checker(self) -> Optional[Executable]:
+        pass
+
+    @property
     def checker_flags(self) -> Optional[str]:
         return None
 
+    @property
     @abc.abstractmethod
-    def get_checker(self) -> Optional[Executable]:
+    def problem_text(self) -> Tuple[bytes, str]:
         pass
 
+    @property
     @abc.abstractmethod
-    def load_problem_text(self) -> Tuple[bytes, str]:
+    def testcases(self) -> Collection[ProblemTestCase]:
         pass
 
+    @property
     @abc.abstractmethod
-    def load_testcases(self) -> Collection[ProblemTestCase]:
-        pass
-
-    @abc.abstractmethod
-    def load_submissions(self) -> Collection[JuryProblemSubmission]:
+    def submissions(self) -> Collection[JuryProblemSubmission]:
         pass
 
     def __str__(self):
         return f"{self.name}"
 
 
-class ProblemLoader(abc.ABC):
+P = TypeVar('P', bound=Problem)
+
+
+class ProblemLoader(abc.ABC, Generic[P]):
     @abc.abstractmethod
-    def load_problem(self, key):
+    def load_problem(self, key) -> P:
         pass
 
+    def __getitem__(self, item):
+        return self.load_problem(item)
+
     @abc.abstractmethod
-    def serialize_problem(self, problem: Problem):
+    def serialize_problem(self, problem: P):
         pass

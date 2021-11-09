@@ -3,12 +3,12 @@ from typing import List, Collection, Optional, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
 
-from judge.action.update import category_to_database
-from judge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, \
+from pyjudge.action.update import category_to_database
+from pyjudge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, \
     ClarificationDto, ContestProblemDto, SubmissionSize
-from judge.data.teams import UserDto, TeamDto
-from judge.db import Database, list_param, get_unique
-from judge.model import Verdict, TeamCategory
+from pyjudge.data.teams import UserDto, TeamDto
+from pyjudge.db import Database, list_param, get_unique
+from pyjudge.model import Verdict, TeamCategory
 
 
 def parse_judging_verdict(key):
