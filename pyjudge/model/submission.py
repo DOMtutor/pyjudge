@@ -19,9 +19,16 @@ class Verdict(enum.Enum):
     NO_OUTPUT = "NO_OUTPUT"
 
     @staticmethod
-    def get(key):
+    def parse_from_judge(key):
         for verdict in Verdict:
             if verdict.value == key:
+                return verdict
+        raise KeyError(key)
+
+    @staticmethod
+    def get(key):
+        for verdict in Verdict:
+            if verdict.name == key:
                 return verdict
         raise KeyError(key)
 

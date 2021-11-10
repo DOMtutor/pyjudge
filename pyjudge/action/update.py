@@ -508,7 +508,8 @@ def create_problem_submissions(cursor, problem: Problem,
     for submission_id, original_submission_id, team_id, contest_id, expected_results_string, language_id in cursor:
         expected_results_list = json.loads(expected_results_string) if expected_results_string else []
         try:
-            expected_results: Tuple[Verdict, ...] = tuple(Verdict.get(verdict) for verdict in expected_results_list)
+            expected_results: Tuple[Verdict, ...] = tuple(Verdict.parse_from_judge(verdict)
+                                                          for verdict in expected_results_list)
         except KeyError:
             logging.warning("Submission %s has invalid results %s", submission_id, expected_results_string)
             invalid_submissions_groups.append((contest_id, team_id))
