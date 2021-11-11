@@ -24,7 +24,7 @@ class DbTestCase(object):
 
 def test_case_compare_key(case: DbTestCase):
     order = ["sample", "secret/tiny", "secret/small", "secret/medium", "secret/large", "secret/huge",
-             "secret/xlarge", "secret/special", "secret/sparse"]
+             "secret/xlarge", "secret/test-", "secret/special", "secret/sparse"]
     for i, prefix in enumerate(order):
         if case.name.startswith(prefix):
             return i, case.name[len(prefix):]

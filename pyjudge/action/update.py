@@ -1,6 +1,8 @@
 import json
 import logging
 import time
+import faulthandler
+
 from collections import defaultdict
 from typing import Dict, Collection, Optional, List, Tuple, Set
 
@@ -10,6 +12,9 @@ from pyjudge.db import list_param
 from pyjudge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
     JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, User, Affiliation
 from .data import DbTestCase, test_case_compare_key
+
+# Debug MySQL in case it acts up
+faulthandler.enable()
 
 category_to_database = {
     TeamCategory.Participants: "Participants",
@@ -462,6 +467,7 @@ def clear_invalid_submissions(cursor):
 def create_problem_submissions(cursor, problem: Problem,
                                existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
                                team_ids: Dict[Team, int], contest_ids: Optional[List[int]] = None):
+    logging.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
     if not id_query:
@@ -479,6 +485,9 @@ def create_problem_submissions(cursor, problem: Problem,
         if not contest_ids:
             logging.info("Problem not used in any contests")
             return
+    elif not contest_ids:
+        logging.info("No contests specified")
+        return
     else:
         contest_ids = set(contest_ids)
         cursor.execute(f"SELECT cid, starttime FROM contest WHERE cid IN {list_param(contest_ids)}",
@@ -487,6 +496,7 @@ def create_problem_submissions(cursor, problem: Problem,
             contest_start[contest_id] = start_time
         if len(contest_start) != len(contest_ids):
             raise KeyError("Not all given contests exist")
+    logging.debug("Updating for contests with ids %s", ','.join(map(str, contest_ids)))
 
     submissions_grouped: Dict[Tuple[int, Tuple[str, ...]], ProblemSubmission] = dict()
     used_team_ids = set()
@@ -494,15 +504,21 @@ def create_problem_submissions(cursor, problem: Problem,
         team_id = team_ids[team]
         key = team_id, (submission.file_name,)
         if key in submissions_grouped:
-            logging.warning("Multiple submissions for %s/%s", team, submission)
+            logging.warning("Multiple submissions for %s/%s (same file name)", team, submission)
             continue
         used_team_ids.add(team_id)
         submissions_grouped[key] = submission
 
-    cursor.execute(f"SELECT submitid, origsubmitid, teamid, cid, expected_results, langid FROM submission s "
-                   f"WHERE probid = ? AND teamid IN {list_param(used_team_ids)}",
-                   (problem_id,) + tuple(used_team_ids))
-    invalid_submissions_groups = []
+    cursor.execute(f"SELECT "
+                   f"  submitid, origsubmitid, teamid, cid, expected_results, langid "
+                   f"FROM submission s "
+                   f"WHERE "
+                   f"  probid = ? AND "
+                   f"  teamid IN {list_param(used_team_ids)} AND "
+                   f"  cid IN {list_param(contest_ids)}",
+                   (problem_id,) + tuple(used_team_ids) + tuple(contest_ids))
+    invalid_submission_ids = set()
+    invalid_submissions_groups = set()
     existing_submissions: Dict[int, Tuple[int, int, int, int, Tuple[Verdict, ...]]] = {}
     submission_successor: Dict[int, int] = {}
     for submission_id, original_submission_id, team_id, contest_id, expected_results_string, language_id in cursor:
@@ -512,7 +528,8 @@ def create_problem_submissions(cursor, problem: Problem,
                                                           for verdict in expected_results_list)
         except KeyError:
             logging.warning("Submission %s has invalid results %s", submission_id, expected_results_string)
-            invalid_submissions_groups.append((contest_id, team_id))
+            invalid_submissions_groups.add((contest_id, team_id))
+            invalid_submission_ids.add(submission_id)
             continue
         if submission_id in existing_submissions:
             raise ValueError(f"Multiple submissions for id {submission_id}")
@@ -524,8 +541,8 @@ def create_problem_submissions(cursor, problem: Problem,
                                  f"{submission_id} and {submission_successor[original_submission_id]}")
             submission_successor[original_submission_id] = submission_id
 
-        existing_submissions[submission_id] = (original_submission_id, team_id, contest_id, language_id,
-                                               expected_results)
+        existing_submissions[submission_id] = \
+            (original_submission_id, team_id, contest_id, language_id, expected_results)
 
     submission_files: Dict[int, Dict[str, str]] = defaultdict(dict)
     if existing_submissions:
@@ -550,13 +567,13 @@ def create_problem_submissions(cursor, problem: Problem,
         file_names = submission_file_names.get(submission_id, {})
         if not file_names:
             logging.warning("No files for submission %d", submission_id)
+        assert team_id in used_team_ids, f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
         submissions_by_contest_and_team[contest_id][team_id][file_names].append(submission_id)
 
-    invalid_submission_ids: List[int] = []
     for contest_id, team_id in invalid_submissions_groups:
         if contest_id in submissions_by_contest_and_team and team_id in submissions_by_contest_and_team[contest_id]:
             for submission_ids in submissions_by_contest_and_team[contest_id].pop(team_id).values():
-                invalid_submission_ids.extend(submission_ids)
+                invalid_submission_ids.update(set(submission_ids))
 
     logging.debug("Found %d submissions, %d files, %d invalid submissions",
                   len(existing_submissions), sum(map(len, submission_file_names.values())), len(invalid_submission_ids))
@@ -615,19 +632,23 @@ def create_problem_submissions(cursor, problem: Problem,
                     updated_submissions += 1
             if insert:
                 sourcecode: bytes = submission.source
+                logging.debug("Adding submission %s to contest %s, problem %s",
+                              submission.file_name, contest_id, problem_id)
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
                                (existing_id, contest_id, team_id, problem_id, language.key,
                                 contest_start[contest_id],
-                                json.dumps([expected_result.name for expected_result in submission.expected_results])))
+                                json.dumps([expected_result.value for expected_result in submission.expected_results])))
                 new_submission_id = cursor.lastrowid
-                cursor.execute("INSERT INTO submission_file (submitid, sourcecode, filename, `rank`) "
-                               "VALUES (?, ?, ?, 1)",
-                               (new_submission_id, sourcecode, submission.file_name))
+                cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
+                               "VALUES (?, ?, 1, ?)",
+                               (new_submission_id, submission.file_name, sourcecode))
 
-    submissions_to_delete = invalid_submission_ids + old_submission_ids
+    submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
+        logging.debug("Deleting %d submissions (%s)",
+                      len(submissions_to_delete), ','.join(map(str, submissions_to_delete)))
         cursor.execute("DELETE FROM submission_file "
                        f"WHERE submitid IN {list_param(submissions_to_delete)}",
                        tuple(submissions_to_delete))
