@@ -126,3 +126,6 @@ class Contest(object):
 
     def is_active(self, point: datetime):
         return self.activation_time <= point <= self.end_time
+
+    def __str__(self):
+        return f"C({self.key})"

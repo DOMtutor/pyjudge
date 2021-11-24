@@ -1,4 +1,5 @@
 import dataclasses
+import base64
 from typing import Optional, List, Dict
 
 from pyjudge.data.teams import TeamDto
@@ -8,84 +9,78 @@ from pyjudge.model import Verdict
 @dataclasses.dataclass
 class SubmissionFileDto(object):
     filename: str
-    content: str
+    content: bytes
+
+    @property
+    def byte_size(self):
+        return len(self.content)
+
+    @property
+    def line_count(self) -> Optional[int]:
+        try:
+            return self.content.decode('utf-8').count("\n")
+        except UnicodeDecodeError:
+            return None
+
+    def content_safe(self, default=None):
+        try:
+            return self.content.decode('utf-8')
+        except UnicodeDecodeError:
+            return default
+
+    def serialize(self):
+        return {"name": self.filename, "content": base64.b85encode(self.content).decode('utf-8')}
+
+    @staticmethod
+    def parse(data):
+        return SubmissionFileDto(filename=data["name"], content=base64.b85decode(data["content"].encode('utf-8')))
 
 
 @dataclasses.dataclass
-class ParticipantSubmissionDto(object):
+class SubmissionDto(object):
     team_key: str
     contest_key: str
     contest_problem_key: str
     language_key: str
     submission_time: float
 
-    def serialize(self):
-        return {
-            "team": self.team_key,
-            "contest": self.contest_key,
-            "problem": self.contest_problem_key,
-            "language": self.language_key,
-            "time": self.submission_time
-        }
-
-    @staticmethod
-    def parse(data):
-        return ParticipantSubmissionDto(
-            team_key=data["team"],
-            contest_key=data["contest"],
-            contest_problem_key=data["problem"],
-            language_key=data["language"],
-            submission_time=data["time"]
-        )
-
-
-@dataclasses.dataclass
-class SubmissionSize(object):
-    file_count: int
-    line_count: int
-    byte_size: int
-
-    def serialize(self):
-        return {"files": self.file_count, "lines": self.line_count, "size": self.byte_size}
-
-    @staticmethod
-    def parse(data):
-        return SubmissionSize(file_count=data["files"], line_count=data["lines"], byte_size=data["size"])
-
-
-@dataclasses.dataclass
-class SubmissionWithVerdictDto(ParticipantSubmissionDto):
-    size: SubmissionSize
     maximum_runtime: Optional[float]
     verdict: Optional[Verdict]
     too_late: bool
 
+    files: List[SubmissionFileDto]
+
     def serialize(self):
-        data = super(SubmissionWithVerdictDto, self).serialize()
-        data.update({
-            "size": self.size.serialize(),
+        data = {
+            "team": self.team_key,
+            "contest": self.contest_key,
+            "problem": self.contest_problem_key,
+            "language": self.language_key,
+            "time": self.submission_time,
             "too_late": self.too_late
-        })
+        }
         if self.maximum_runtime is not None:
             data["runtime"] = self.maximum_runtime
         if self.verdict is not None:
             data["verdict"] = self.verdict.name
+        if self.files:
+            data["files"] = [file.serialize() for file in self.files]
         return data
 
     @staticmethod
     def parse(data):
-        return SubmissionWithVerdictDto(
-            size=SubmissionSize.parse(data["size"]),
+        return SubmissionDto(
+            team_key=data["team"],
+            contest_key=data["contest"],
+            contest_problem_key=data["problem"],
+            language_key=data["language"],
+            submission_time=data["time"],
+
             maximum_runtime=data.get("runtime", None),
             verdict=Verdict.get(data["verdict"]) if data.get("verdict", None) is not None else None,
             too_late=data["too_late"],
-            **ParticipantSubmissionDto.parse(data).__dict__
+            files=[SubmissionFileDto.parse(file) for file in data.get("files", [])]
         )
-
-
-@dataclasses.dataclass
-class SubmissionWithFilesDto(ParticipantSubmissionDto):
-    files: List[SubmissionFileDto]
 
 
 @dataclasses.dataclass
@@ -142,7 +137,7 @@ class ContestDataDto(object):
     teams: Dict[str, TeamDto]
     languages: Dict[str, str]
     problems: Dict[str, str]
-    submissions: List[SubmissionWithVerdictDto]
+    submissions: List[SubmissionDto]
     clarifications: List[ClarificationDto]
 
     def serialize(self):
@@ -160,6 +155,6 @@ class ContestDataDto(object):
             teams={team.key: team for team in map(TeamDto.parse, data["teams"])},
             languages=data["languages"],
             problems=data["problems"],
-            submissions=[SubmissionWithVerdictDto.parse(submission) for submission in data["submissions"]],
+            submissions=[SubmissionDto.parse(submission) for submission in data["submissions"]],
             clarifications=[ClarificationDto.parse(clarification) for clarification in data["clarifications"]]
         )

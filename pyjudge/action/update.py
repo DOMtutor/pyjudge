@@ -632,8 +632,8 @@ def create_problem_submissions(cursor, problem: Problem,
                     updated_submissions += 1
             if insert:
                 sourcecode: bytes = submission.source
-                logging.debug("Adding submission %s to contest %s, problem %s",
-                              submission.file_name, contest_id, problem_id)
+                logging.debug("Adding submission %s by %s to contest %s, problem %s",
+                              submission.file_name, team_id, contest_id, problem_id)
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",

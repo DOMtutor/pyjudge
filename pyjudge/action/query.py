@@ -1,11 +1,11 @@
 import logging
+from collections import defaultdict
 from typing import List, Collection, Optional, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
 
 from pyjudge.action.update import category_to_database
-from pyjudge.data.submission import SubmissionFileDto, SubmissionWithFilesDto, SubmissionWithVerdictDto, \
-    ClarificationDto, ContestProblemDto, SubmissionSize
+from pyjudge.data.submission import SubmissionDto, SubmissionFileDto, ClarificationDto, ContestProblemDto
 from pyjudge.data.teams import UserDto, TeamDto
 from pyjudge.db import Database, list_param, get_unique
 from pyjudge.model import Verdict, TeamCategory
@@ -59,7 +59,7 @@ def find_contest_problems(database: Database, contest_key: str) -> List[ContestP
         return list(problems.values())
 
 
-def find_valid_submissions(database: Database, contest_key: str) -> List[SubmissionWithVerdictDto]:
+def find_submissions(database: Database, contest_key: str, only_valid=True) -> Generator[SubmissionDto, None, None]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
         _, contest_end = _find_contest_end(cursor, contest_key)
@@ -83,16 +83,27 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
             contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
             submission_data[submission_id] = (float(submission_time), contest_problem_key, language_key, team_key)
 
-        cursor.execute(
-            f"SELECT "
-            f"  s.submitid, j.judgingid, j.result "
-            f"FROM submission s "
-            f"  JOIN judging j on s.submitid = j.submitid "
-            f"WHERE "
-            f"  j.valid = 1 AND "
-            f"  s.submitid IN {list_param(submission_data)}",
-            tuple(submission_data.keys())
-        )
+        if only_valid:
+            cursor.execute(
+                f"SELECT "
+                f"  s.submitid, j.judgingid, j.result "
+                f"FROM submission s "
+                f"  JOIN judging j on s.submitid = j.submitid "
+                f"WHERE "
+                f"  j.valid = 1 AND "
+                f"  s.submitid IN {list_param(submission_data)}",
+                tuple(submission_data.keys())
+            )
+        else:
+            cursor.execute(
+                f"SELECT "
+                f"  s.submitid, j.judgingid, j.result "
+                f"FROM submission s "
+                f"  JOIN judging j on s.submitid = j.submitid "
+                f"WHERE "
+                f"  s.submitid IN {list_param(submission_data)}",
+                tuple(submission_data.keys())
+            )
         judging_ids = set()
         judging_data = {}
         for submission_id, judging_id, judging_result in cursor:
@@ -107,8 +118,7 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
 
         cursor.execute(
             f"SELECT "
-            f"  s.submitid, COUNT(sf.submitid), SUM(LENGTH(sf.sourcecode)), "
-            f"  LENGTH(sourcecode) - LENGTH(REPLACE(sourcecode, '\n', '')) "
+            f"  s.submitid, sf.filename, sf.sourcecode "
             f"FROM submission s "
             f"  JOIN submission_file sf on s.submitid = sf.submitid "
             f"WHERE "
@@ -116,8 +126,9 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
             f"GROUP BY s.submitid",
             tuple(submission_data.keys())
         )
-        source_data = {submission_id: (int(file_count), int(source_size), int(source_lines))
-                       for submission_id, file_count, source_size, source_lines in cursor}
+        source_data = defaultdict(dict)
+        for submission_id, filename, content in cursor:
+            source_data[submission_id][filename] = content
 
         cursor.execute(
             f"SELECT "
@@ -131,11 +142,11 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
         )
         judging_runtime = {judging_id: float(runtime) for judging_id, runtime in cursor}
 
-    submissions = []
-
     for submission_id, (submission_time, contest_problem_key, language_key, team_key) in submission_data.items():
+        if submission_id not in judging_data:
+            logging.warning("No judging for submission %s by team %s", submission_id, team_key)
+            continue
         judging_id, judging_result = judging_data[submission_id]
-        source_files, source_size, source_lines = source_data[submission_id]
         runtime = judging_runtime.get(judging_id, None)
         if runtime is None and judging_result != Verdict.COMPILER_ERROR:
             logging.warning("No runtime found for submission %s/judging %s with result %s",
@@ -143,72 +154,17 @@ def find_valid_submissions(database: Database, contest_key: str) -> List[Submiss
         if runtime is not None:
             runtime = round(runtime, 3)  # Round to milliseconds
 
-        submission = SubmissionWithVerdictDto(
+        yield SubmissionDto(
             team_key=team_key,
             contest_key=contest_key,
             contest_problem_key=contest_problem_key,
             language_key=language_key,
             verdict=judging_result,
             submission_time=submission_time,
-            size=SubmissionSize(file_count=source_files, line_count=source_lines, byte_size=source_size),
+            files=[SubmissionFileDto(filename, content) for (filename, content) in source_data[submission_id].items()],
             too_late=contest_end < submission_time,
             maximum_runtime=runtime
         )
-        submissions.append(submission)
-    return submissions
-
-
-def find_all_submissions_with_files(database: Database, contest_key: str) \
-        -> Generator[SubmissionWithFilesDto, None, None]:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
-        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
-
-        cursor.execute(
-            f"SELECT s.submitid, p.probid, p.externalid, s.submittime, s.langid, t.name "
-            f"FROM team t "
-            f"  JOIN submission s ON t.teamid = s.teamid "
-            f"  JOIN problem p on s.probid = p.probid "
-            f"WHERE "
-            f"  p.probid IN {list_param(contest_problems_by_id)} ",
-            tuple(contest_problems_by_id.keys())
-        )
-        submission_data = {
-            submission_id: (contest_problems_by_id[problem_id], submission_time, language_key, team_name)
-            for submission_id, problem_id, problem_name, submission_time, language_key, team_name in cursor
-        }
-
-        cursor.execute(
-            f"SELECT s.submitid, sf.filename, sf.sourcecode "
-            f"FROM submission s"
-            f"  JOIN submission_file sf on s.submitid = sf.submitid "
-            f"WHERE"
-            f"  s.submitid IN {list_param(submission_data)} "
-            f"ORDER BY"
-            f"  s.submitid, sf.rank",
-            tuple(submission_data.keys())
-        )
-
-        def make_submission(submission_id, submission_files):
-            contest_problem, submission_time, language_key, team_key = submission_data[submission_id]
-            return SubmissionWithFilesDto(
-                team_key=team_key,
-                contest_key=contest_key,
-                contest_problem_key=contest_problem.contest_problem_key,
-                language_key=language_key,
-                submission_time=submission_time, files=list(submission_files)
-            )
-
-        current_id: Optional[int] = None
-        current_files: List[SubmissionFileDto] = []
-        for submission_id, filename, source_code in cursor:
-            if current_id is None:
-                current_id = submission_id
-            if current_id != submission_id:
-                yield make_submission(current_id, current_files)
-                current_id, current_files = submission_id, []
-            current_files.append(SubmissionFileDto(filename, source_code.decode("utf-8")))
-        if current_id:
-            yield make_submission(current_id, current_files)
 
 
 def find_clarifications(database: Database, contest_key: str) -> Collection[ClarificationDto]:
