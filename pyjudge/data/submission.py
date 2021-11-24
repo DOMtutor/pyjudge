@@ -50,6 +50,14 @@ class SubmissionDto(object):
 
     files: List[SubmissionFileDto]
 
+    @property
+    def line_count(self):
+        return sum(file.line_count for file in self.files if file.line_count is not None)
+
+    @property
+    def byte_size(self):
+        return sum(file.byte_size for file in self.files)
+
     def serialize(self):
         data = {
             "team": self.team_key,
