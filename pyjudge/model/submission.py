@@ -58,11 +58,11 @@ class ProblemSubmission(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def source(self):
+    def source(self) -> str:
         pass
 
     def source_md5(self) -> str:
-        return get_md5(self.source)
+        return get_md5(self.source.encode("utf-8"))
 
 
 @dataclasses.dataclass

@@ -12,7 +12,7 @@ class SubmissionFileDto(object):
     content: bytes
 
     @property
-    def byte_size(self):
+    def byte_size(self) -> int:
         return len(self.content)
 
     @property
@@ -22,7 +22,7 @@ class SubmissionFileDto(object):
         except UnicodeDecodeError:
             return None
 
-    def content_safe(self, default=None):
+    def content_safe(self, default=None) -> str:
         try:
             return self.content.decode('utf-8')
         except UnicodeDecodeError:

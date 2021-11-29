@@ -631,7 +631,7 @@ def create_problem_submissions(cursor, problem: Problem,
                 if insert:
                     updated_submissions += 1
             if insert:
-                sourcecode: bytes = submission.source
+                source_code: str = submission.source
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
                               submission.file_name, team_id, contest_id, problem_id)
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
@@ -643,7 +643,7 @@ def create_problem_submissions(cursor, problem: Problem,
                 new_submission_id = cursor.lastrowid
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
-                               (new_submission_id, submission.file_name, sourcecode))
+                               (new_submission_id, submission.file_name, source_code.encode("utf-8")))
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
