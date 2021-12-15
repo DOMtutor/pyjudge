@@ -614,17 +614,17 @@ def create_problem_submissions(cursor, problem: Problem,
                 existing_file_hashes = submission_files[existing_id]
 
                 if language.key != existing_language_id:
-                    logging.info("Submission %s changed language?", submission)
+                    logging.info("%s changed language?", submission)
                     insert = True
                 elif set(file_names) != set(existing_file_hashes.keys()):
-                    logging.debug("Submission %s changed files from %s to %s",
+                    logging.debug("%s changed files from %s to %s",
                                   ','.join(file_names), ','.join(existing_file_hashes.keys()))
                     insert = True
                 else:
                     # TODO Multiple file submissions
                     assert len(file_names) == 1
                     if submission.source_md5() != existing_file_hashes[submission.file_name]:
-                        logging.debug("Submission %s changed content in file %s", submission, submission.file_name)
+                        logging.debug("%s changed content in file %s", submission, submission.file_name)
                         insert = True
                     else:
                         insert = False
