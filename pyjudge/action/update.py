@@ -644,6 +644,13 @@ def create_problem_submissions(cursor, problem: Problem,
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
                                (new_submission_id, submission.file_name, source_code.encode("utf-8")))
+            else:
+                cursor.execute("UPDATE submission "
+                               "SET submittime = ?, expected_results = ? "
+                               "WHERE submitid = ?",
+                               (contest_start[contest_id],
+                                json.dumps([expected_result.value for expected_result in submission.expected_results]),
+                                existing_id))
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
