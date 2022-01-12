@@ -128,6 +128,11 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
         )
         source_data = defaultdict(dict)
         for submission_id, filename, content in cursor:
+            if isinstance(content, str):
+                content = content.encode("utf-8")
+
+            if not isinstance(content, bytes):
+                raise TypeError(type(content))
             source_data[submission_id][filename] = content
 
         cursor.execute(

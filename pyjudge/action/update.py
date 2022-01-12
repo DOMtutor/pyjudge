@@ -174,9 +174,8 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
     return problem_id
 
 
-def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
+def create_or_update_problem_data(cursor: MySQLCursor, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
-    problem_testcases = problem.testcases
 
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
@@ -198,6 +197,25 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
                    "WHERE probid = ?",
                    (text_data, text_type, problem.checker_flags, time_limit, problem.limits.memory_kib,
                     problem.limits.output_kib, problem_id))
+
+    checker = problem.checker
+    if checker is None:
+        cursor.execute("UPDATE problem SET special_compare = NULL WHERE probid = ?", (problem_id,))
+    if checker is not None:
+        assert checker.executable_type == ExecutableType.Compare
+        create_or_update_executable(cursor, checker)
+        cursor.execute("UPDATE problem SET special_compare = ? WHERE probid = ?", (checker.key, problem_id))
+        logging.debug("Updated checker")
+
+    return problem_id
+
+
+def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) -> int:
+    logging.debug("Updating problem test cases %s", problem)
+    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+    problem_id = cursor.fetchone()[0]
+
+    problem_testcases = problem.testcases
 
     testcases_by_name: Dict[str, DbTestCase] = {}
     leftover_cases = []
@@ -356,17 +374,6 @@ def create_or_update_problem(cursor: MySQLCursor, problem: Problem) -> int:
                        tuple(testcases_without_image_ids))
         if cursor.rowcount:
             logging.debug("Removed images from %d cases", cursor.rowcount)
-
-    logging.debug("Updated test cases")
-
-    checker = problem.checker
-    if checker is None:
-        cursor.execute("UPDATE problem SET special_compare = NULL WHERE probid = ?", (problem_id,))
-    if checker is not None:
-        assert checker.executable_type == ExecutableType.Compare
-        create_or_update_executable(cursor, checker)
-        cursor.execute("UPDATE problem SET special_compare = ? WHERE probid = ?", (checker.key, problem_id))
-        logging.debug("Updated checker")
 
     return problem_id
 

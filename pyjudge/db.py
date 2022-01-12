@@ -74,7 +74,8 @@ class DatabaseConfig(object):
             port=self.config["port"],
             user=self.config["user"],
             passwd=self.config["password"],
-            database=self.config["database"]
+            database=self.config["database"],
+            use_pure=True
         ))
         return self.database
 
