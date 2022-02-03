@@ -506,14 +506,14 @@ def create_problem_submissions(cursor, problem: Problem,
     logging.debug("Updating for contests with ids %s", ','.join(map(str, contest_ids)))
 
     submissions_grouped: Dict[Tuple[int, Tuple[str, ...]], ProblemSubmission] = dict()
-    used_team_ids = set()
+    used_team_ids = dict()
     for team, submission in existing_submissions:
         team_id = team_ids[team]
         key = team_id, (submission.file_name,)
         if key in submissions_grouped:
             logging.warning("Multiple submissions for %s/%s (same file name)", team, submission)
             continue
-        used_team_ids.add(team_id)
+        used_team_ids[team_id] = team
         submissions_grouped[key] = submission
 
     cursor.execute(f"SELECT "
@@ -521,9 +521,9 @@ def create_problem_submissions(cursor, problem: Problem,
                    f"FROM submission s "
                    f"WHERE "
                    f"  probid = ? AND "
-                   f"  teamid IN {list_param(used_team_ids)} AND "
+                   f"  teamid IN {list_param(used_team_ids.keys())} AND "
                    f"  cid IN {list_param(contest_ids)}",
-                   (problem_id,) + tuple(used_team_ids) + tuple(contest_ids))
+                   (problem_id,) + tuple(used_team_ids.keys()) + tuple(contest_ids))
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
     existing_submissions: Dict[int, Tuple[int, int, int, int, Tuple[Verdict, ...]]] = {}
@@ -567,7 +567,7 @@ def create_problem_submissions(cursor, problem: Problem,
 
     # contest -> team -> file name(s) -> submission ids
     submissions_by_contest_and_team: Dict[int, Dict[int, Dict[Tuple[str, ...], List[int]]]] = \
-        {contest_id: {team_id: defaultdict(list) for team_id in used_team_ids}
+        {contest_id: {team_id: defaultdict(list) for team_id in used_team_ids.keys()}
          for contest_id in contest_ids}
 
     for submission_id, (_, team_id, contest_id, expected_results, language_id) in existing_submissions.items():
@@ -640,7 +640,7 @@ def create_problem_submissions(cursor, problem: Problem,
             if insert:
                 source_code: str = submission.source
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
-                              submission.file_name, team_id, contest_id, problem_id)
+                              submission.file_name, used_team_ids[team_id], contest_id, problem_id)
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",

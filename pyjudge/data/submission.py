@@ -98,7 +98,6 @@ class ContestProblemDto(object):
     points: int
     color: Optional[str]
 
-
 @dataclasses.dataclass
 class ClarificationDto(object):
     key: str
@@ -139,9 +138,34 @@ class ClarificationDto(object):
             body=data["body"]
         )
 
+@dataclasses.dataclass
+class ContestDescriptionDto(object):
+    contest_key: str
+    start: Optional[float]
+    end: Optional[float]
+
+    def serialize(self):
+        data = {
+            "key": self.contest_key
+        }
+        if self.start is not None:
+            data["start"] = self.start
+        if self.end is not None:
+            data["end"] = self.end
+        return data
+
+    @staticmethod
+    def parse(data):
+        return ContestDescriptionDto(
+            contest_key = data["key"],
+            start = data.get("start", None),
+            end = data.get("end", None)
+        )
+
 
 @dataclasses.dataclass
 class ContestDataDto(object):
+    description: ContestDescriptionDto
     teams: Dict[str, TeamDto]
     languages: Dict[str, str]
     problems: Dict[str, str]
@@ -149,17 +173,20 @@ class ContestDataDto(object):
     clarifications: List[ClarificationDto]
 
     def serialize(self):
-        return {
+        data = {
+            "description": self.description.serialize(),
             "teams": [team.serialize() for team in self.teams.values()],
             "languages": self.languages,
             "problems": self.problems,
             "submissions": [submission.serialize() for submission in self.submissions],
             "clarifications": [clarification.serialize() for clarification in self.clarifications]
         }
+        return data
 
     @staticmethod
     def parse(data):
         return ContestDataDto(
+            description=ContestDescriptionDto.parse(data["description"]),
             teams={team.key: team for team in map(TeamDto.parse, data["teams"])},
             languages=data["languages"],
             problems=data["problems"],

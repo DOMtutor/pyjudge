@@ -5,7 +5,7 @@ from typing import List, Collection, Optional, Tuple, Dict, Generator
 from mysql.connector.cursor import MySQLCursor
 
 from pyjudge.action.update import category_to_database
-from pyjudge.data.submission import SubmissionDto, SubmissionFileDto, ClarificationDto, ContestProblemDto
+from pyjudge.data.submission import SubmissionDto, SubmissionFileDto, ClarificationDto, ContestProblemDto, ContestDescriptionDto
 from pyjudge.data.teams import UserDto, TeamDto
 from pyjudge.db import Database, list_param, get_unique
 from pyjudge.model import Verdict, TeamCategory
@@ -57,6 +57,13 @@ def find_contest_problems(database: Database, contest_key: str) -> List[ContestP
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
         return list(problems.values())
+
+
+def find_contest_description(database: Database, contest_key: str) -> Tuple[ContestDescriptionDto]:
+    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+        cursor.execute("SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,))
+        start_time, end_time = get_unique(cursor)
+        return ContestDescriptionDto(contest_key=contest_key, start=start_time, end=end_time)
 
 
 def find_submissions(database: Database, contest_key: str, only_valid=True) -> Generator[SubmissionDto, None, None]:
