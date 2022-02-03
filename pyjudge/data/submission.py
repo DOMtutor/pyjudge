@@ -18,7 +18,7 @@ class SubmissionFileDto(object):
     @property
     def line_count(self) -> Optional[int]:
         try:
-            return self.content.decode('utf-8').count("\n")
+            return self.content.decode('utf-8').count("\n") + 1
         except UnicodeDecodeError:
             return None
 
@@ -27,6 +27,14 @@ class SubmissionFileDto(object):
             return self.content.decode('utf-8')
         except UnicodeDecodeError:
             return default
+
+    @property
+    def is_text_file(self):
+        try:
+            self.content.decode('utf-8')
+            return True
+        except UnicodeDecodeError:
+            return False
 
     def serialize(self):
         return {"name": self.filename, "content": base64.b85encode(self.content).decode('utf-8')}
@@ -53,6 +61,10 @@ class SubmissionDto(object):
     @property
     def line_count(self):
         return sum(file.line_count for file in self.files if file.line_count is not None)
+
+    @property
+    def is_source_submission(self):
+        return all(file.is_text_file for file in self.files)
 
     @property
     def byte_size(self):
@@ -98,6 +110,7 @@ class ContestProblemDto(object):
     points: int
     color: Optional[str]
 
+
 @dataclasses.dataclass
 class ClarificationDto(object):
     key: str
@@ -106,7 +119,7 @@ class ClarificationDto(object):
     contest_problem_key: Optional[str]
 
     request_time: float
-    response_key: Optional[str]
+    response_to: Optional[str]
     from_jury: bool
     body: str
 
@@ -121,22 +134,26 @@ class ClarificationDto(object):
         }
         if self.contest_problem_key is not None:
             data["contest_problem"] = self.contest_problem_key
-        if self.response_key is not None:
-            data["response"] = self.response_key
+        if self.response_to is not None:
+            data["response"] = self.response_to
         return data
 
     @staticmethod
     def parse(data):
+        response_to = data.get("response", None)
+        if response_to == "None":
+            response_to = None
         return ClarificationDto(
             key=data["key"],
             team_key=data["team"],
             contest_key=data["contest"],
             contest_problem_key=data.get("contest_problem", None),
             request_time=data["time"],
-            response_key=data.get("response", None),
+            response_to=response_to,
             from_jury=data["jury"],
             body=data["body"]
         )
+
 
 @dataclasses.dataclass
 class ContestDescriptionDto(object):
@@ -149,17 +166,23 @@ class ContestDescriptionDto(object):
             "key": self.contest_key
         }
         if self.start is not None:
-            data["start"] = self.start
+            data["start"] = float(self.start)
         if self.end is not None:
-            data["end"] = self.end
+            data["end"] = float(self.end)
         return data
 
     @staticmethod
     def parse(data):
+        start = data.get("start", None)
+        if start is not None:
+            start = float(start)
+        end = data.get("end", None)
+        if end is not None:
+            end = float(end)
         return ContestDescriptionDto(
-            contest_key = data["key"],
-            start = data.get("start", None),
-            end = data.get("end", None)
+            contest_key=data["key"],
+            start=start,
+            end=end
         )
 
 

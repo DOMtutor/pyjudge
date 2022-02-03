@@ -75,7 +75,7 @@ class DatabaseConfig(object):
             user=self.config["user"],
             passwd=self.config["password"],
             database=self.config["database"],
-            use_pure=True
+            use_pure=False
         ))
         return self.database
 

@@ -63,7 +63,7 @@ def find_contest_description(database: Database, contest_key: str) -> Tuple[Cont
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         cursor.execute("SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,))
         start_time, end_time = get_unique(cursor)
-        return ContestDescriptionDto(contest_key=contest_key, start=start_time, end=end_time)
+        return ContestDescriptionDto(contest_key=contest_key, start=float(start_time), end=float(end_time))
 
 
 def find_submissions(database: Database, contest_key: str, only_valid=True) -> Generator[SubmissionDto, None, None]:
@@ -137,7 +137,8 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
         for submission_id, filename, content in cursor:
             if isinstance(content, str):
                 content = content.encode("utf-8")
-
+            elif isinstance(content, bytearray):
+                content = bytes(content)
             if not isinstance(content, bytes):
                 raise TypeError(type(content))
             source_data[submission_id][filename] = content
@@ -202,9 +203,11 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
             if response_id is not None:
                 if response_id not in clarification_data:
                     raise ValueError(f"Inconsistent clarification {clarification_id} (response not in list)")
-                _, response_team_key, response_from_jury, _, _, _ = clarification_data[response_id]
+                _, response_team_key, response_from_jury, _, _, response_submit_time = clarification_data[response_id]
                 if (team_key, not from_jury) != (response_team_key, response_from_jury):
                     raise ValueError(f"Inconsistent clarification {clarification_id} (invalid response)")
+                if submit_time < response_submit_time:
+                    raise ValueError(f"Response {clarification_id} to {response_id} sent before")
             if problem_id is None:
                 contest_problem_key = None
             else:
@@ -214,7 +217,7 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
                 key=str(clarification_id),
                 team_key=team_key,
                 request_time=submit_time,
-                response_key=str(response_id),  # Hack
+                response_to=str(response_id),  # Hack
                 from_jury=from_jury,
                 contest_key=contest_key,
                 contest_problem_key=contest_problem_key,
