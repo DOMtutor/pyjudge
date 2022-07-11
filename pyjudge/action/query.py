@@ -59,7 +59,7 @@ def find_contest_problems(database: Database, contest_key: str) -> List[ContestP
         return list(problems.values())
 
 
-def find_contest_description(database: Database, contest_key: str) -> Tuple[ContestDescriptionDto]:
+def find_contest_description(database: Database, contest_key: str) -> ContestDescriptionDto:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         cursor.execute("SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,))
         start_time, end_time = get_unique(cursor)
