@@ -1,16 +1,20 @@
-#!/usr/bin/env python
+import pathlib
 import re
 import sys
 import argparse
+import logging
 
 from pyjudge.repository.kattis import RepositoryProblem, Repository
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--keyword", required=False, action='append', help="Keywords to match", default=[])
     parser.add_argument("--name", required=False, action='append', help="Names to match", default=[])
     parser.add_argument("--exclude", required=False, action='append', help="Names to exclude", default=[])
+    parser.add_argument("--repository", type=pathlib.Path, default=pathlib.Path.cwd())
     args = parser.parse_args()
 
     name_patterns = [re.compile(pattern) for pattern in args.name]
@@ -21,7 +25,7 @@ def main():
         print("No patterns given")
         sys.exit()
 
-    repository = Repository()
+    repository = Repository(args.repository)
     filtered_problems = []
     for problem in repository.problems.load_all_problems():
         if keyword_patterns and not any(any(pattern.search(keyword) for keyword in problem.keywords)

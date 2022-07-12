@@ -1,0 +1,12 @@
+#!/bin/sh
+
+destination="$1"
+# memory_limit="$2"
+shift 2
+
+export HOME=/
+
+ghc -DDOMJUDGE -x hs -ferror-spans -Wall -O -static -o "$destination" "$@"
+exitcode=$?
+rm -f "$DEST.o" Main.hi
+exit $exitcode

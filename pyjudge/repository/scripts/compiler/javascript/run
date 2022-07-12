@@ -1,0 +1,24 @@
+#!/bin/sh
+
+destination="$1"
+# memory_limit="$2"
+shift 2
+main_source="${ENTRY_POINT:-$1}"
+
+# Report the entry point, so it can be saved, e.g. for later replay:
+if [ -z "$ENTRY_POINT" ]; then
+  echo "Info: detected entry_point: $main_source"
+fi
+
+# Write executing script:
+cat > "$destination" <<EOF
+#!/bin/sh
+# Generated shell-script to execute Node interpreter on source.
+
+if [ "\${0%/*}" != "\$0" ]; then
+  cd "\${0%/*}"
+fi
+exec nodejs "$main_source" "\$@"
+EOF
+chmod a+x "$destination"
+exit 0

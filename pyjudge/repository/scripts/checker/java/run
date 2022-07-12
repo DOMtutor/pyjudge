@@ -1,0 +1,35 @@
+#!/bin/sh
+
+path="$(dirname "$(readlink -f "$0")")"
+checker_file="$(echo "${path}/"*Checker.class)"
+
+if [ ! -f "$checker_file" ]; then
+	echo "Error: '$checker_file' not found in $path." >&2
+	echo "Internal error"
+	exit 1
+fi
+
+checker="$(basename "$checker_file")"
+checker_name="${checker%.class}"
+
+test_input="$1"
+test_output="$2"
+feedback_dir="$3"
+message_file="${feedback_dir}/judgemessage.txt"
+
+# Run the program:
+java -Xlog:all=error -cp "$path" framework.CheckerLauncher "$checker_name" "$test_input" "$test_output" < /dev/stdin > "$message_file"
+exit_code=$?
+
+# Exit with failure, when non-zero exitcode found:
+if [ $exit_code -ne 0 ]; then
+	echo "Error: '$checker_name' exited with exitcode $exit_code." >&2
+	echo "Internal error"
+	exit 1
+fi
+
+# Check result and write result file:
+if [ -s "$message_file" ]; then
+	exit 43 # Wrong answer
+fi
+exit 42 # Correct

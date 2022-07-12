@@ -1,0 +1,4 @@
+#!/bin/sh
+
+g++ -std=c++11 -Wall -pedantic -O2 validate.h validate.cpp -o validate
+chmod +x validate

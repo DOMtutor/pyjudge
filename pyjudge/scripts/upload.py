@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
 # version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
 from mysql.connector.cursor import MySQLCursor
@@ -162,9 +161,7 @@ def update_settings(db: DatabaseConfig, repository: Repository):
             update.set_languages(cursor, repository.languages)
 
 
-def command_problem(db: DatabaseConfig, args):
-    repository: Repository = Repository()
-
+def command_problem(db: DatabaseConfig, repository: Repository, args):
     problems: List[RepositoryProblem] = []
     if args.regex:
         patterns = [re.compile(pattern) for pattern in args.regex]
@@ -188,8 +185,7 @@ def command_problem(db: DatabaseConfig, args):
                     update_submissions=args.update_submissions)
 
 
-def command_contest(db: DatabaseConfig, args):
-    repository: Repository = Repository()
+def command_contest(db: DatabaseConfig, repository: Repository, args):
     with args.contest.open(mode="rt") as file:
         contest_upload_data = json.load(file)
     upload_contest(db, Contest.parse(contest_upload_data, repository.problems), repository,
@@ -200,14 +196,14 @@ def command_contest(db: DatabaseConfig, args):
                    update_test_cases=args.update_testcases)
 
 
-def command_users(db: DatabaseConfig, args):
+def command_users(db: DatabaseConfig, repository: Repository, args):
     with args.users.open("rt") as file:
         user_data = json.load(file)
-    upload_users(db, UsersDescription.parse(user_data), Repository())
+    upload_users(db, UsersDescription.parse(user_data), repository)
 
 
-def command_settings(db: DatabaseConfig, _):
-    update_settings(db, Repository())
+def command_settings(db: DatabaseConfig, repository: Repository, _):
+    update_settings(db, repository)
 
 
 def main():
@@ -215,6 +211,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=pathlib.Path, required=False, help="Path to database config")
+    parser.add_argument("--repository", type=pathlib.Path, default=pathlib.Path.cwd())
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
     problem_parser.add_argument("--regex", nargs='*', help="Regexes to match problem name", default=[])
@@ -250,4 +247,4 @@ def main():
     settings_parser.set_defaults(func=command_settings)
 
     arguments = parser.parse_args()
-    arguments.func(DatabaseConfig(arguments.config), arguments)
+    arguments.func(DatabaseConfig(arguments.config), Repository(arguments.repository), arguments)

@@ -1,0 +1,31 @@
+#!/bin/sh
+
+destination="$1"
+# memory_limit="$2"
+shift 2
+main_source="${ENTRY_POINT:-$1}"
+
+# Report the entry point, so it can be saved, e.g. for later replay:
+if [ -z "$ENTRY_POINT" ]; then
+  echo "Info: detected entry_point: $main_source"
+fi
+
+# Check syntax
+pypy3 -m py_compile "$main_source" "$@"
+compilation_exit_code=$?
+[ "$compilation_exit_code" -ne 0 ] && exit $compilation_exit_code
+rm -f -- *.pyc
+
+# Write executing script:
+cat >"$destination" <<EOF
+#!/bin/sh
+# Generated shell-script to execute python interpreter on source.
+
+# Detect dirname and change dir to prevent class not found errors.
+if [ "\${0%/*}" != "\$0" ]; then
+	cd "\${0%/*}"
+fi
+exec pypy3 "$main_source" "\$@"
+EOF
+chmod a+x "$destination"
+exit 0

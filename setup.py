@@ -10,10 +10,12 @@ setup(
     'console_scripts': [
       'judge_upload=pyjudge.scripts.upload:main',
       'judge_export=pyjudge.scripts.export:main',
-      'find_problem=pyjudge.scripts.find_problem:main'
+      'find_problem=pyjudge.scripts.find_problem:main',
+      'check_problem=pyjudge.scripts.check:main'
     ],
   },
-  # license='LICENSE.txt',
+  include_package_data=True,
+  license="GPLv3",
   install_requires=[
     'mysql-connector-python>=8.0'
   ],

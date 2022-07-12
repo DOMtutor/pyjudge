@@ -1,0 +1,78 @@
+#!/bin/sh
+
+destination="$1"
+memory_limit="$2"
+shift 2
+# main_source="$1"
+main_class=""
+compile_script_directory="$(dirname "$0")"
+
+# Stack size in the JVM in KB.
+java_stack_size=65536
+# Amount of memory reserved for the Java virtual machine in KB.
+java_jvm_size=65536
+java_total_memory=$((java_stack_size + java_jvm_size))
+# Calculate Java program memlimit as memory_limit - max. JVM memory usage:
+java_memory_limit=$((memory_limit - java_total_memory))
+
+if [ $java_memory_limit -le 0 ]; then
+  echo "internal-error: total memory $memory_limit KiB <= $java_jvm_size + $java_stack_size = $java_total_memory KiB reserved for JVM and stack leaves none for heap."
+  exit 1
+fi
+
+# Java needs filename to match main class:
+if [ -z "$ENTRY_POINT" ]; then
+  [ -n "$DEBUG" ] && echo "Debug: no ENTRY_POINT provided, trying to detect main class."
+else
+  [ -n "$DEBUG" ] && echo "Debug: using main class provided by ENTRY_POINT='$ENTRY_POINT'."
+  main_class="$ENTRY_POINT"
+fi
+
+temp_file=$(mktemp --tmpdir domjudge_javac_output.XXXXXX) || exit 1
+
+# Byte-compile:
+javac -encoding UTF-8 -sourcepath . -d . "$@" 2> "$temp_file"
+compilation_exit_code=$?
+
+cat "$temp_file"
+rm -f "$temp_file"
+
+[ "$compilation_exit_code" -ne 0 ] && exit $compilation_exit_code
+
+if [ -z "$main_class" ]; then
+  # Look for class that has the 'main' function:
+  class_names="$(find ./* -type f -regex '^.*\.class$' \
+              | sed -e 's/\.class$//' -e 's/^\.\///' -e 's/\//./g')"
+  main_class=$(java -cp "$compile_script_directory" DetectMain "$(pwd)" "$class_names")
+  detect_main_class_exit_code=$?
+  [ "$detect_main_class_exit_code" -ne 0 ] && exit $detect_main_class_exit_code
+
+  # Report the entry point, so it can be saved, e.g. for later replay:
+  echo "Info: detected entry_point: $main_class"
+else
+  # Check if entry point is valid
+  java -cp "$compile_script_directory" DetectMain "$(pwd)" "$main_class" > /dev/null
+  detect_main_class_exit_code=$?
+  [ "$detect_main_class_exit_code" -ne 0 ] && exit $detect_main_class_exit_code
+fi
+
+# Write executing script:
+# Executes java byte-code interpreter with following options
+# -Xmx: maximum size of memory allocation pool
+# -Xms: initial size of memory, improves runtime stability
+# -XX:+UseSerialGC: Serialized garbage collector improves runtime stability
+# -Xss${java_stack_size}k: stack size as configured above
+# -Dfile.encoding=UTF-8: set file encoding to UTF-8
+cat > "$destination" <<EOF
+#!/bin/sh
+# Generated shell-script to execute java interpreter on source.
+
+# Detect dirname and change dir to prevent class not found errors.
+if [ "\${0%/*}" != "\$0" ]; then
+  cd "\${0%/*}"
+fi
+
+exec java -DDOMJUDGE -Dfile.encoding=UTF-8 -XX:+UseSerialGC -Xss${java_stack_size}k -Xms${java_memory_limit}k -Xmx${java_memory_limit}k '$main_class' "\$@"
+EOF
+chmod a+x "$destination"
+exit 0

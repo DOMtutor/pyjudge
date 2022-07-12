@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import argparse
 import json
 import logging
@@ -51,7 +50,6 @@ def write_contest(db: DatabaseConfig, contest_key: str, destination: Optional[pa
                 json.dump(data, f)
 
 
-
 def write_submission_files(db: DatabaseConfig, contest_key: str, destination: Optional[pathlib.Path]):
     with db as connection:
         teams = query.find_teams(connection, [TeamCategory.Participants, TeamCategory.Hidden])
@@ -82,6 +80,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=pathlib.Path, required=True, help="Path to database config")
     parser.add_argument("-d", "--destination", help="Destination file", type=pathlib.Path, default=None)
+
     subparsers = parser.add_subparsers(help="Help for commands")
     contest_data_parser = subparsers.add_parser("contest", help="Relevant data of a contest")
     contest_data_parser.add_argument("contest", help="The contest key")

@@ -1,0 +1,17 @@
+#!/bin/sh
+
+path="$(dirname "$(readlink -f "$0")")"
+checker="${path}/validate"
+
+if [ ! -x "$checker" ]; then
+	echo "Error: '$checker' not found or executable." >&2
+	echo "Internal error"
+	exit 1
+fi
+
+test_input="$1"
+test_output="$2"
+feedback_dir="$3"
+message_file="${feedback_dir}/judgemessage.txt"
+
+exec "$checker" "$test_input" "$test_output" "$feedback_dir" < /dev/stdin > "$message_file"

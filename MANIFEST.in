@@ -1,0 +1,1 @@
+recursive-include pyjudge/repository/scripts/ *

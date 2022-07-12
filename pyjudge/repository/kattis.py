@@ -3,15 +3,16 @@ import logging
 import mimetypes
 import pathlib
 import re
+import stat
 import subprocess
 from typing import Optional, List, Dict, Tuple, Collection, Set
 
+import problemtools.run as run
+import problemtools.verifyproblem as verify
 import yaml
 
 from pyjudge.model import *
 from pyjudge.model.util import get_md5
-
-base_directory = pathlib.Path(__file__).parent.parent
 
 
 class MakeError(Exception):
@@ -229,7 +230,9 @@ class RepositoryProblem(Problem):
         )
 
         self._test_cases = None
-        self._solutions = None
+        self._submissions = None
+        self._generator = None
+        self._problemtools = verify.Problem(str(self.directory.absolute()))
 
     @property
     def name(self) -> str:
@@ -240,7 +243,29 @@ class RepositoryProblem(Problem):
         return self._limits
 
     def check(self):
-        self.make("validate-input", timeout=600)
+        self._generate_testcases()
+
+        import problemtools.run.limit as limit
+        limit.check_limit_capabilities(self)
+
+        verify.ProblemAspect.bail_on_error = True
+        with self._problemtools as p:
+            if p.output_validators._validators:
+                # Add the checkers support data as include directory
+                validators = run.find_programs(str(self.directory / "output_validators"),
+                                               include_dir=str(self.config.checkers_base_directory),
+                                               language_config=p.language_config, work_dir=p.tmpdir)
+                p.output_validators._validators = validators
+
+            p.config.check(None)
+            p.attachments.check(None)
+            p.input_format_validators.check(None)
+            p.output_validators.check(None)
+            p.graders.check(None)
+
+            args = verify.default_args()
+            p.testdata.check(args)
+            p.submissions.check(args)
 
     @property
     def checker_flags(self) -> Optional[str]:
@@ -255,69 +280,113 @@ class RepositoryProblem(Problem):
         return self.config.get_checker_of(self)
 
     @property
-    def problem_text(self) -> Tuple[bytes, str]:
-        problem_pdf = self.directory / "build" / "problem.en.pdf"
-        if not problem_pdf.exists():
-            self.make("problem")
+    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+        import problemtools.problem2pdf
+
+        source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
+        if not source_file.exists():
+            raise ValueError(f"Problem {self.name} does not have a statement in language {lang}")
+        problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
+
+        if not problem_pdf.exists() or problem_pdf.stat().st_mtime < source_file.stat().st_mtime:
+            logging.debug("%s: Building problem pdf for language %s", self, lang)
+            options = problemtools.problem2pdf.ConvertOptions()
+            options.language = lang
+            options.destfile = str(problem_pdf.absolute())
+            problemtools.problem2pdf.convert(self.directory, options)
+
             if not problem_pdf.exists():
                 raise ValueError(f"Missing problem pdf")
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 
-    @property
-    def testcases(self):
-        self.make("output", timeout=60)
+    def _generate_input_if_required(self, seed_file):
+        generator_dir = self.directory / "generators"
+        generator_files = list(generator_dir.glob("*.java"))
+        generators = [file for file in generator_files if file.stem.endswith("Generator")]
+        if len(generators) != 1:
+            def generate(s, _):
+                raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
+        else:
+            generator_classes = [file.name for file in generator_files]
+            logging.debug("%s: Compiling generator files %s", self, ' '.join(generator_classes))
+            subprocess.run(["javac"] + generator_classes,
+                           cwd=generator_dir.absolute(), timeout=30)
+            generator_name = generators[0].with_suffix("").name
 
+            def generate(s, seed: pathlib.Path):
+                in_file = seed.with_suffix(".in")
+                if in_file.exists():
+                    in_stat = in_file.stat()
+                    if in_stat.st_size > 0 and seed.stat().st_mtime <= in_stat.st_mtime:
+                        return
+
+                lines = []
+                with seed.open(mode="rt") as f:
+                    for line in f:
+                        line = line[:line.find("#")].strip()
+                        if line:
+                            lines.append(line)
+
+                with in_file.open(mode="wt") as input_file:
+                    logging.debug("%s: Generating %s", s, seed)
+                    subprocess.run(["java", generator_name], cwd=generator_dir.absolute(), timeout=20,
+                                   input="\n".join(lines), stdout=input_file, universal_newlines=True)
+
+        self._generate_input_if_required = generate.__get__(self, RepositoryProblem)
+        self._generate_input_if_required(seed_file)
+
+    def _generate_testcases(self):
         if self._test_cases is None:
             self._test_cases = []
-            for category_directory in (self.directory / "data").iterdir():
-                if category_directory.is_dir():
+
+            with self._problemtools as p:
+                for category_directory in (self.directory / "data").iterdir():
+                    if not category_directory.is_dir():
+                        continue
+                    for seed_file in category_directory.glob("*.seed"):
+                        self._generate_input_if_required(seed_file)
+
                     for input_file in category_directory.glob("*.in"):
                         if not input_file.is_file():
                             continue
                         case_name = input_file.name[:-3]
                         answer_file = category_directory / (case_name + ".ans")
-                        if not answer_file.is_file():
+
+                        if not answer_file.is_file() or answer_file.stat().st_mtime < input_file.stat().st_mtime:
+                            submission: run.SourceCode = p.submissions._submissions['AC'][0]
+                            logging.debug("%s: Running submission %s", self, submission.name)
+                            result, error = submission.compile()
+                            if not result:
+                                raise ValueError(error)
+                            status, _ = submission.run(str(input_file), str(answer_file))
+                            flag = ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                            answer_file.chmod(answer_file.stat().st_mode & flag)
+                            if status:
+                                answer_file.unlink(missing_ok=True)
+                                raise ValueError(status)
+
+                        if not answer_file.stat().st_size:
+                            answer_file.unlink(missing_ok=True)
                             continue
                         self._test_cases.append(RepositoryTestCase(category_directory / case_name))
+
         return self._test_cases
 
     @property
+    def testcases(self):
+        return self._generate_testcases()
+
+    @property
     def submissions(self) -> Collection[JurySubmission]:
-        if self._solutions is None:
-            self._solutions = []
+        if self._submissions is None:
+            self._submissions = []
             for category_directory in (self.directory / "submissions").iterdir():
                 if category_directory.is_dir():
                     for path in category_directory.iterdir():
                         if path.is_file() and not path.name.endswith(".class") and not path.stem == "impossible":
-                            self._solutions.append(JurySubmission(path, self.config))
-        return self._solutions
-
-    def make(self, *args, timeout=10):
-        rules = list(map(str, args))
-        logging.debug("%s: make %s", self, " ".join(rules))
-        call = ["make"] + rules
-
-        process = subprocess.Popen(call, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   encoding="utf-8", cwd=str(self.directory))
-        try:
-            out, err = process.communicate(timeout=timeout)
-            return_code = process.poll()
-            if return_code is None:
-                logging.debug("Timeout, killing make process")
-                process.terminate()
-                kill_out, kill_err = process.communicate(timeout=10)
-                out += kill_out
-                err += kill_err
-                return_code = process.poll()
-                if return_code is None:
-                    logging.warning("Failed to kill process after timeout")
-                    process.kill()
-            if return_code != 0:
-                raise MakeError(rules, return_code, out, err)
-        finally:
-            if process.returncode is None:
-                process.kill()
+                            self._submissions.append(JurySubmission(path, self.config))
+        return self._submissions
 
     @property
     def json_ref(self):
@@ -334,7 +403,9 @@ class RepositoryProblem(Problem):
 
 
 class RepositoryProblems(ProblemLoader[RepositoryProblem]):
-    def __init__(self, repository: "Repository", repository_path=(base_directory / "problems")):
+    def __init__(self, repository: "Repository", repository_path=None):
+        if repository_path is None:
+            repository_path = repository.base_directory / "problems"
         self.base_path = repository_path.resolve()
         self._problems = {}
         self._all_loaded = False
@@ -405,13 +476,15 @@ class Repository(object):
             compile_script=compile_script
         )
 
-    def __init__(self, base_path=base_directory):
+    def __init__(self, base_path):
         with (base_path / "config.yaml").open(mode="rt") as f:
             configuration = yaml.safe_load(f)
         self.base_directory = base_path
-        self.checkers_base_directory = base_path / "checkers"
-        self.language_base_directory = base_path / "languages"
-        self.runscript_directory = base_path / "runscript"
+
+        scripts_directory = pathlib.Path(__file__).parent / "scripts"
+        self.checkers_base_directory = scripts_directory / "checker"
+        self.language_base_directory = scripts_directory / "compiler"
+        self.runscript_directory = scripts_directory / "runscript"
 
         self.authors: List[RepositoryAuthor] = [RepositoryAuthor.parse(author, data)
                                                 for author, data in configuration.get("authors", {}).items()]
