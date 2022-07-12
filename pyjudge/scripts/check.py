@@ -8,7 +8,7 @@ from pyjudge.repository.kattis import RepositoryProblem, Repository
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger("problemtools").setLevel(logging.WARNING)
 
     parser = argparse.ArgumentParser()

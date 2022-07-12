@@ -2,3 +2,4 @@ PyYAML~=6.0
 mysql-connector-python~=8.0.29
 setuptools==63.1.0
 Pillow~=9.2.0
+problemtools~=1.20191126

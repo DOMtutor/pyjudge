@@ -14,6 +14,8 @@ import yaml
 from pyjudge.model import *
 from pyjudge.model.util import get_md5
 
+log = logging.getLogger(__name__)
+
 
 class MakeError(Exception):
     def __init__(self, rules, code, out, err):
@@ -36,11 +38,11 @@ class RepositoryTestCase(ProblemTestCase):
             (mimetype, _) = mimetypes.guess_type(sibling)
             if mimetype and mimetype.startswith("image/"):
                 if self._image_path is not None:
-                    logging.warning("Found multiple images for submission %s", self)
+                    log.warning("Found multiple images for submission %s", self)
                 else:
                     extension = mimetypes.guess_extension(mimetype)
                     if extension is None:
-                        logging.warning("Could not find extension for mimetype %s", mimetype)
+                        log.warning("Could not find extension for mimetype %s", mimetype)
                     else:
                         self._image_path = sibling
                         self._image_extension = extension[1:]
@@ -233,6 +235,7 @@ class RepositoryProblem(Problem):
         self._submissions = None
         self._generator = None
         self._problemtools = verify.Problem(str(self.directory.absolute()))
+        self.log = log.getChild(self.repository_key)
 
     @property
     def name(self) -> str:
@@ -289,7 +292,7 @@ class RepositoryProblem(Problem):
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
         if not problem_pdf.exists() or problem_pdf.stat().st_mtime < source_file.stat().st_mtime:
-            logging.debug("%s: Building problem pdf for language %s", self, lang)
+            self.log.debug("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
             options.language = lang
             options.destfile = str(problem_pdf.absolute())
@@ -309,7 +312,7 @@ class RepositoryProblem(Problem):
                 raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
         else:
             generator_classes = [file.name for file in generator_files]
-            logging.debug("%s: Compiling generator files %s", self, ' '.join(generator_classes))
+            log.debug("%s: Compiling generator files %s", self, ' '.join(generator_classes))
             subprocess.run(["javac"] + generator_classes,
                            cwd=generator_dir.absolute(), timeout=30)
             generator_name = generators[0].with_suffix("").name
@@ -324,13 +327,16 @@ class RepositoryProblem(Problem):
                 lines = []
                 with seed.open(mode="rt") as f:
                     for line in f:
-                        line = line[:line.find("#")].strip()
+                        index = line.find("#")
+                        if index >= 0:
+                            line = line[:index]
+                        line = line.strip()
                         if line:
                             lines.append(line)
 
                 with in_file.open(mode="wt") as input_file:
-                    logging.debug("%s: Generating %s", s, seed)
-                    subprocess.run(["java", generator_name], cwd=generator_dir.absolute(), timeout=20,
+                    s.log.debug("Generating input %s from seed file %s", in_file.name, seed.name)
+                    subprocess.run(["java", generator_name], cwd=generator_dir.absolute(), timeout=20, check=True,
                                    input="\n".join(lines), stdout=input_file, universal_newlines=True)
 
         self._generate_input_if_required = generate.__get__(self, RepositoryProblem)
@@ -355,7 +361,8 @@ class RepositoryProblem(Problem):
 
                         if not answer_file.is_file() or answer_file.stat().st_mtime < input_file.stat().st_mtime:
                             submission: run.SourceCode = p.submissions._submissions['AC'][0]
-                            logging.debug("%s: Running submission %s", self, submission.name)
+                            self.log.debug("Generating answer for %s using submission %s",
+                                           answer_file.name, submission.name)
                             result, error = submission.compile()
                             if not result:
                                 raise ValueError(error)
