@@ -8,6 +8,7 @@ import subprocess
 from typing import Optional, List, Dict, Tuple, Collection, Set
 
 import problemtools.run as run
+import problemtools.verifyproblem
 import problemtools.verifyproblem as verify
 import yaml
 
@@ -17,12 +18,16 @@ from pyjudge.model.util import get_md5
 log = logging.getLogger(__name__)
 
 
-class MakeError(Exception):
-    def __init__(self, rules, code, out, err):
-        self.rules = rules
+class ExecutionError(Exception):
+    def __init__(self, err):
+        self.err = err
+
+
+class StatusExecutionError(ExecutionError):
+    def __init__(self, code, out, err):
+        super.__init__(err)
         self.code = code
         self.out = out
-        self.err = err
 
 
 class RepositoryTestCase(ProblemTestCase):
@@ -235,6 +240,7 @@ class RepositoryProblem(Problem):
         self._submissions = None
         self._generator = None
         self._problemtools = verify.Problem(str(self.directory.absolute()))
+        self._problemtools_loaded = False
         self.log = log.getChild(self.repository_key)
 
     @property
@@ -245,6 +251,25 @@ class RepositoryProblem(Problem):
     def limits(self) -> ProblemLimits:
         return self._limits
 
+    def __enter__(self) -> problemtools.verifyproblem.Problem:
+        p = self._problemtools.__enter__()
+        if p.output_validators._validators:
+            # Add the checkers support data as include directory
+            validators = run.find_programs(str(self.directory / "output_validators"),
+                                           include_dir=str(self.config.checkers_base_directory),
+                                           language_config=p.language_config, work_dir=p.tmpdir)
+            p.output_validators._validators = validators
+        self._problemtools_loaded = True
+        return p
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._problemtools_loaded = False
+        self._problemtools.__exit__(exc_type, exc_val, exc_tb)
+
+    def kattis_problem(self) -> problemtools.verifyproblem.Problem:
+        assert self._problemtools_loaded
+        return self._problemtools
+
     def check(self):
         self._generate_testcases()
 
@@ -252,14 +277,7 @@ class RepositoryProblem(Problem):
         limit.check_limit_capabilities(self)
 
         verify.ProblemAspect.bail_on_error = True
-        with self._problemtools as p:
-            if p.output_validators._validators:
-                # Add the checkers support data as include directory
-                validators = run.find_programs(str(self.directory / "output_validators"),
-                                               include_dir=str(self.config.checkers_base_directory),
-                                               language_config=p.language_config, work_dir=p.tmpdir)
-                p.output_validators._validators = validators
-
+        with self as p:
             p.config.check(None)
             p.attachments.check(None)
             p.input_format_validators.check(None)
@@ -303,29 +321,30 @@ class RepositoryProblem(Problem):
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 
-    def _generate_input_if_required(self, seed_file):
+    def generate_input_if_required(self, seed, input_=None):
         generator_dir = self.directory / "generators"
         generator_files = list(generator_dir.glob("*.java"))
         generators = [file for file in generator_files if file.stem.endswith("Generator")]
         if len(generators) != 1:
-            def generate(s, _):
+            def generate(s, a, b):
                 raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
         else:
             generator_classes = [file.name for file in generator_files]
-            log.debug("%s: Compiling generator files %s", self, ' '.join(generator_classes))
-            subprocess.run(["javac"] + generator_classes,
-                           cwd=generator_dir.absolute(), timeout=30)
+            self.log.debug("Compiling generator files %s", ' '.join(generator_classes))
+            subprocess.run(["javac"] + generator_classes, cwd=generator_dir.absolute(), timeout=30, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
             generator_name = generators[0].with_suffix("").name
 
-            def generate(s, seed: pathlib.Path):
-                in_file = seed.with_suffix(".in")
-                if in_file.exists():
-                    in_stat = in_file.stat()
-                    if in_stat.st_size > 0 and seed.stat().st_mtime <= in_stat.st_mtime:
+            def generate(s, seed_file: pathlib.Path, input_file: Optional[pathlib.Path] = None):
+                if input_file is None:
+                    input_file = seed_file.with_suffix(".in")
+                if input_file.exists():
+                    in_stat = input_file.stat()
+                    if in_stat.st_size > 0 and seed_file.stat().st_mtime <= in_stat.st_mtime:
                         return
 
                 lines = []
-                with seed.open(mode="rt") as f:
+                with seed_file.open(mode="rt") as f:
                     for line in f:
                         index = line.find("#")
                         if index >= 0:
@@ -334,49 +353,64 @@ class RepositoryProblem(Problem):
                         if line:
                             lines.append(line)
 
-                with in_file.open(mode="wt") as input_file:
-                    s.log.debug("Generating input %s from seed file %s", in_file.name, seed.name)
+                s.log.debug("Generating input %s from seed file %s", input_file.name, seed_file.name)
+                with input_file.open(mode="wt") as f:
                     subprocess.run(["java", generator_name], cwd=generator_dir.absolute(), timeout=20, check=True,
-                                   input="\n".join(lines), stdout=input_file, universal_newlines=True)
+                                   input="\n".join(lines), stdout=f, stderr=subprocess.PIPE,
+                                   universal_newlines=True)
 
-        self._generate_input_if_required = generate.__get__(self, RepositoryProblem)
-        self._generate_input_if_required(seed_file)
+        # noinspection PyAttributeOutsideInit
+        self.generate_input_if_required = generate.__get__(self, RepositoryProblem)
+        self.generate_input_if_required(seed, input_)
+
+    def generate_answer_if_required(self, input_file: pathlib.Path, answer_file: Optional[pathlib.Path] = None):
+        if answer_file is None:
+            answer_file = input_file.with_suffix(".ans")
+        if answer_file.is_file() and answer_file.stat().st_mtime >= input_file.stat().st_mtime:
+            return
+        assert self._problemtools_loaded
+
+        # noinspection PyProtectedMember
+        submission: run.SourceCode = self._problemtools.submissions._submissions['AC'][0]
+        self.log.debug("Generating answer for %s using submission %s",
+                       answer_file.name, submission.name)
+        result, error = submission.compile()
+        if not result:
+            raise ExecutionError(error)
+
+        error_file = pathlib.Path(self._problemtools.tmpdir) / "submission_ans_error"
+        status, _ = submission.run(infile=str(input_file), outfile=str(answer_file), errfile=str(error_file))
+        flag = ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        answer_file.chmod(answer_file.stat().st_mode & flag)
+        if status:
+            answer_file.unlink(missing_ok=True)
+            error = ""
+            if error_file.exists():
+                with error_file.open(mode="rb") as f:
+                    error = f.read().decode("utf-8", "replace")
+                error_file.unlink(missing_ok=True)
+            raise StatusExecutionError(stat, "", error)
 
     def _generate_testcases(self):
         if self._test_cases is None:
             self._test_cases = []
 
-            with self._problemtools as p:
+            with self as p:
                 for category_directory in (self.directory / "data").iterdir():
                     if not category_directory.is_dir():
                         continue
                     for seed_file in category_directory.glob("*.seed"):
-                        self._generate_input_if_required(seed_file)
+                        self.generate_input_if_required(seed_file)
 
                     for input_file in category_directory.glob("*.in"):
                         if not input_file.is_file():
                             continue
-                        case_name = input_file.name[:-3]
-                        answer_file = category_directory / (case_name + ".ans")
-
-                        if not answer_file.is_file() or answer_file.stat().st_mtime < input_file.stat().st_mtime:
-                            submission: run.SourceCode = p.submissions._submissions['AC'][0]
-                            self.log.debug("Generating answer for %s using submission %s",
-                                           answer_file.name, submission.name)
-                            result, error = submission.compile()
-                            if not result:
-                                raise ValueError(error)
-                            status, _ = submission.run(str(input_file), str(answer_file))
-                            flag = ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-                            answer_file.chmod(answer_file.stat().st_mode & flag)
-                            if status:
-                                answer_file.unlink(missing_ok=True)
-                                raise ValueError(status)
-
+                        answer_file = input_file.with_suffix(".ans")
+                        self.generate_answer_if_required(input_file, answer_file)
                         if not answer_file.stat().st_size:
                             answer_file.unlink(missing_ok=True)
                             continue
-                        self._test_cases.append(RepositoryTestCase(category_directory / case_name))
+                        self._test_cases.append(RepositoryTestCase(category_directory / input_file.stem))
 
         return self._test_cases
 
