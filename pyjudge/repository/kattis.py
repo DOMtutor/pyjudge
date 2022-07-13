@@ -266,8 +266,8 @@ class RepositoryProblem(Problem):
         self._problemtools_loaded = False
         self._problemtools.__exit__(exc_type, exc_val, exc_tb)
 
+    @property
     def kattis_problem(self) -> problemtools.verifyproblem.Problem:
-        assert self._problemtools_loaded
         return self._problemtools
 
     def check(self):
