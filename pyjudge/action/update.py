@@ -52,10 +52,11 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
                                                if name not in expected_category_names}
 
     # TODO Maybe not hardcode?
-    for category, color, visible, order in [(TeamCategory.Participants, 'white', True, 0),
-                                            (TeamCategory.Hidden, 'lightgray', False, 0),
-                                            (TeamCategory.Jury, 'lightgreen', False, 8),
-                                            (TeamCategory.Solution, 'green', False, 9)]:
+    for category, color, visible, order, self_reg in \
+            [(TeamCategory.Participants, 'white', True, 0, False),
+             (TeamCategory.Hidden, 'lightgray', False, 0, False),
+             (TeamCategory.Jury, 'lightgreen', False, 8, False),
+             (TeamCategory.Solution, 'green', False, 9, False)]:
         name = category_to_database[category]
         cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
         result = cursor.fetchall()
@@ -69,9 +70,9 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
             category_ids[category] = category_id
 
         cursor.execute("UPDATE team_category "
-                       "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = FALSE "
+                       "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = ? "
                        "WHERE categoryid = ?",
-                       (order, color, visible, category_id))
+                       (order, color, visible, category_id, self_reg))
 
     if category_ids_to_delete:
         logging.info("Deleting %d categories", len(category_ids_to_delete))
@@ -118,9 +119,9 @@ def create_or_update_teams(cursor: MySQLCursor, teams: Collection[Team],
 
         if team.members:
             member_ids = [user_ids[user] for user in team.members]
-            cursor.execute(f"UPDATE user SET teamid = ? WHERE userid IN {list_param(member_ids)}",
+            cursor.execute(f"UPDATE `user` SET teamid = ? WHERE userid IN {list_param(member_ids)}",
                            (team_id, *member_ids))
-            cursor.execute(f"UPDATE user SET teamid = NULL "
+            cursor.execute(f"UPDATE `user` SET teamid = NULL "
                            f"WHERE teamid = ? AND userid NOT IN {list_param(team.members)}",
                            (team_id, *member_ids))
 
@@ -219,7 +220,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
 
     testcases_by_name: Dict[str, DbTestCase] = {}
     leftover_cases = []
-    cursor.execute("SELECT t.testcaseid, t.orig_input_filename, t.description, t.`rank`,"
+    cursor.execute("SELECT t.testcaseid, t.orig_input_filename, t.description, t.`rank`, "
                    "t.md5sum_input, t.md5sum_output "
                    "FROM testcase t "
                    "WHERE t.probid = ?",
@@ -832,20 +833,20 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
     role_ids_by_name = fetch_user_roles(cursor)
 
     users_by_login = {user.login_name: user for user in users}
-    cursor.execute(f"SELECT userid, username FROM user WHERE username IN {list_param(users)}",
+    cursor.execute(f"SELECT userid, username FROM `user` WHERE username IN {list_param(users)}",
                    tuple(user.login_name for user in users))
     user_ids = {users_by_login[name]: user_id for user_id, name in cursor}
 
     for user in users:
         if user in user_ids:
             user_id = user_ids[user]
-            cursor.execute("UPDATE user SET username = ?, name = ?, email = ?, password = NULL, enabled = TRUE "
+            cursor.execute("UPDATE `user` SET username = ?, name = ?, email = ?, password = ?, enabled = TRUE "
                            "WHERE userid = ?",
-                           (user.login_name, user.display_name, user.email, user_id))
+                           (user.login_name, user.display_name, user.email, user.password_hash, user_id))
         else:
-            cursor.execute("INSERT INTO user (username, name, email, password, enabled) "
-                           "VALUES (?, ?, ?, NULL, TRUE)",
-                           (user.login_name, user.display_name, user.email))
+            cursor.execute("INSERT INTO `user` (username, name, email, password, enabled) "
+                           "VALUES (?, ?, ?, ?, TRUE)",
+                           (user.login_name, user.display_name, user.email, user.password_hash))
             user_id = cursor.lastrowid
             user_ids[user] = user_id
         user_roles = set(role_ids_by_name[role] for role in user_role_to_database[user.role])
@@ -865,7 +866,7 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
 def disable_unknown_users(cursor: MySQLCursor, user_login_names: Set[str]):
     valid_users = {"admin", "judgehost"}
     valid_users.update(user_login_names)
-    cursor.execute(f"UPDATE user SET enabled = FALSE "
+    cursor.execute(f"UPDATE `user` SET enabled = FALSE "
                    f"WHERE username NOT IN {list_param(valid_users)}",
                    tuple(valid_users))
     if cursor.rowcount:

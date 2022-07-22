@@ -28,14 +28,17 @@ class TeamCategory(enum.Enum):
 class Affiliation(object):
     short_name: str
     name: str
-    country: str
+    country: Optional[str]
 
     @staticmethod
     def parse(data):
-        return Affiliation(data["short_name"], data["name"], data["country"])
+        return Affiliation(data["short_name"], data["name"], data.get("country", None))
 
     def serialize(self):
-        return {"short_name": self.short_name, "name": self.name, "country": self.country}
+        data = {"short_name": self.short_name, "name": self.name}
+        if self.country is not None:
+            data["country"] = self.country
+        return data
 
     def __hash__(self):
         return hash(self.short_name)

@@ -25,15 +25,21 @@ class User(object):
     login_name: str
     display_name: str
     email: Optional[str]
+    password_hash: Optional[str]
     role: UserRole
 
     @staticmethod
     def parse(data):
-        return User(data["login"], data["display_name"], data["email"], UserRole.parse(data["role"]))
+        return User(data["login"], data["display_name"], data["email"],
+                    password_hash=data.get("password_hash", None),
+                    role=UserRole.parse(data["role"]))
 
     def serialize(self):
-        return {"login": self.login_name, "display_name": self.display_name, "email": self.email,
+        data = {"login": self.login_name, "display_name": self.display_name, "email": self.email,
                 "role": self.role.serialize()}
+        if self.password_hash is not None:
+            data["password_hash"] = self.password_hash
+        return data
 
     def __hash__(self):
         return hash(self.login_name)

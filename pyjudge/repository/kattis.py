@@ -309,12 +309,15 @@ class RepositoryProblem(Problem):
             raise ValueError(f"Problem {self.name} does not have a statement in language {lang}")
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
+        problem_pdf.parent.mkdir(exist_ok=True, parents=True)
         if not problem_pdf.exists() or problem_pdf.stat().st_mtime < source_file.stat().st_mtime:
             self.log.debug("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
             options.language = lang
             options.destfile = str(problem_pdf.absolute())
-            problemtools.problem2pdf.convert(self.directory, options)
+            options.quiet = not log.isEnabledFor(logging.DEBUG)
+
+            problemtools.problem2pdf.convert(str(self.directory.absolute()), options)
 
             if not problem_pdf.exists():
                 raise ValueError(f"Missing problem pdf")
@@ -517,8 +520,11 @@ class Repository(object):
             compile_script=compile_script
         )
 
-    def __init__(self, base_path):
-        with (base_path / "config.yaml").open(mode="rt") as f:
+    def __init__(self, base_path: pathlib.Path):
+        config_path = base_path / "config.yaml"
+        if not config_path.is_file():
+            raise ValueError(f"Directory {base_path} does not seem to be a repository")
+        with config_path.open(mode="rt") as f:
             configuration = yaml.safe_load(f)
         self.base_directory = base_path
 

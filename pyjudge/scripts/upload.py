@@ -13,10 +13,12 @@ import re
 import sys
 from typing import List, Tuple, Collection, Optional, Dict, Set
 
+from problemtools.verifyproblem import VerifyError
+
 import pyjudge.action.update as update
 from pyjudge.db import DatabaseConfig
 from pyjudge.model import Contest, Verdict, Problem, ProblemSubmission, Team, User, Affiliation
-from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission, MakeError
+from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
 
 
 def _update_problem_submissions(cursor: MySQLCursor,
@@ -64,8 +66,8 @@ def upload_contest(db: DatabaseConfig, contest: Contest, repository: Repository,
             try:
                 for contest_problem in contest.problems:
                     contest_problem.problem.check()
-            except MakeError as e:
-                logging.error("Make failed with code: %s\n%s", e.code, e.out)
+            except VerifyError as e:
+                logging.error("Problem verification failed", exc_info=e)
                 return
         else:
             logging.info("Skipping problem verification")
@@ -142,15 +144,16 @@ class UsersDescription(object):
                           for team in sorted(self.teams, key=lambda t: t.name)]}
 
 
-def upload_users(db: DatabaseConfig, description: UsersDescription, repository: Repository):
+def upload_users(db: DatabaseConfig, description: UsersDescription, repository: Repository, disable_unknown=False):
     with db as connection:
         with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
             affiliation_ids = update.create_or_update_affiliations(cursor, description.affiliations)
             user_ids = update.create_or_update_users(cursor, description.users)
             update.create_or_update_teams(cursor, description.teams, affiliation_ids, user_ids)
-            valid_users = set(itertools.chain([user.login_name for user in description.users],
-                                              repository.judge_user_whitelist))
-            update.disable_unknown_users(cursor, valid_users)
+            if disable_unknown:
+                valid_users = set(itertools.chain([user.login_name for user in description.users],
+                                                  repository.judge_user_whitelist))
+                update.disable_unknown_users(cursor, valid_users)
 
 
 def update_settings(db: DatabaseConfig, repository: Repository):
@@ -199,7 +202,7 @@ def command_contest(db: DatabaseConfig, repository: Repository, args):
 def command_users(db: DatabaseConfig, repository: Repository, args):
     with args.users.open("rt") as file:
         user_data = json.load(file)
-    upload_users(db, UsersDescription.parse(user_data), repository)
+    upload_users(db, UsersDescription.parse(user_data), repository, disable_unknown=args.disable)
 
 
 def command_settings(db: DatabaseConfig, repository: Repository, _):
@@ -241,6 +244,7 @@ def main():
 
     users_parser = subparsers.add_parser("users", help="Upload user file")
     users_parser.add_argument("users", type=pathlib.Path, help="Path to user specification")
+    users_parser.add_argument("--disable", action='store_true', help="Disable unknown users")
     users_parser.set_defaults(func=command_users)
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")
