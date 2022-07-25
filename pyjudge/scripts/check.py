@@ -1,10 +1,9 @@
-import pathlib
-import re
-import sys
 import argparse
 import logging
+import pathlib
+import sys
 
-from pyjudge.repository.kattis import RepositoryProblem, Repository
+from pyjudge.repository.kattis import Repository
 
 
 def main():

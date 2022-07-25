@@ -5,14 +5,15 @@ import pathlib
 import re
 import stat
 import subprocess
-from typing import Optional, List, Dict, Tuple, Collection, Set
+from typing import Optional, List, Dict, Tuple, Collection
+
+import yaml
 
 import problemtools.run as run
 import problemtools.verifyproblem
 import problemtools.verifyproblem as verify
-import yaml
-
-from pyjudge.model import *
+from pyjudge.model import ProblemTestCase, Affiliation, JuryProblemSubmission, Verdict, Language, Problem, \
+    ProblemLimits, Executable, ProblemLoader, ExecutableType, Team, TeamCategory
 from pyjudge.model.util import get_md5
 
 log = logging.getLogger(__name__)
@@ -196,8 +197,8 @@ class RepositoryProblem(Problem):
     DIFFICULTIES = ["very easy", "easy", "medium", "hard", "very hard", "unknown"]
     UNKNOWN_DIFFICULTY = "unknown"
 
-    def __init__(self, directory: pathlib.Path, config: "Repository"):
-        self.config = config
+    def __init__(self, directory: pathlib.Path, repository: "Repository"):
+        self.repository = repository
         self.repository_key = directory.name
         self.directory = directory
         description_file = self.directory / "problem.yaml"
@@ -227,11 +228,11 @@ class RepositoryProblem(Problem):
         self.validation = self.description.get("validation")
 
         limits = self.description.get("limits", {})
-        time_s = limits.get("time_limit", 1.0)
-        if "time_multiplier" in limits:
-            time_s *= limits["time_multiplier"]
+        time_factor = limits.get("time_multiplier", 1.0)
+        if time_factor <= 0.0:
+            raise ValueError(f"Invalid time factor {time_factor} on problem {self.repository_key}")
         self._limits = ProblemLimits(
-            time_s=time_s,
+            time_factor=time_factor,
             memory_kib=limits.get("memory_limit", None),
             output_kib=limits.get("output_limit", None),
         )
@@ -242,6 +243,9 @@ class RepositoryProblem(Problem):
         self._problemtools = verify.Problem(str(self.directory.absolute()))
         self._problemtools_loaded = False
         self.log = log.getChild(self.repository_key)
+
+        if "time_limit" in limits:
+            self.log.warning("Fixed time limit specified, ignoring")
 
     @property
     def name(self) -> str:
@@ -256,7 +260,7 @@ class RepositoryProblem(Problem):
         if p.output_validators._validators:
             # Add the checkers support data as include directory
             validators = run.find_programs(str(self.directory / "output_validators"),
-                                           include_dir=str(self.config.checkers_base_directory),
+                                           include_dir=str(self.repository.checkers_base_directory),
                                            language_config=p.language_config, work_dir=p.tmpdir)
             p.output_validators._validators = validators
         self._problemtools_loaded = True
@@ -298,7 +302,7 @@ class RepositoryProblem(Problem):
 
     @property
     def checker(self) -> Optional[Executable]:
-        return self.config.get_checker_of(self)
+        return self.repository.get_checker_of(self)
 
     @property
     def problem_text(self, lang="en") -> Tuple[bytes, str]:
@@ -314,6 +318,7 @@ class RepositoryProblem(Problem):
             self.log.debug("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
             options.language = lang
+            # noinspection SpellCheckingInspection
             options.destfile = str(problem_pdf.absolute())
             options.quiet = not log.isEnabledFor(logging.DEBUG)
 
@@ -329,6 +334,7 @@ class RepositoryProblem(Problem):
         generator_files = list(generator_dir.glob("*.java"))
         generators = [file for file in generator_files if file.stem.endswith("Generator")]
         if len(generators) != 1:
+            # noinspection PyUnusedLocal
             def generate(s, a, b):
                 raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
         else:
@@ -398,7 +404,7 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-            with self as p:
+            with self:
                 for category_directory in (self.directory / "data").iterdir():
                     if not category_directory.is_dir():
                         continue
@@ -429,7 +435,7 @@ class RepositoryProblem(Problem):
                 if category_directory.is_dir():
                     for path in category_directory.iterdir():
                         if path.is_file() and not path.name.endswith(".class") and not path.stem == "impossible":
-                            self._submissions.append(JurySubmission(path, self.config))
+                            self._submissions.append(JurySubmission(path, self.repository))
         return self._submissions
 
     @property
@@ -483,27 +489,8 @@ class RepositoryProblems(ProblemLoader[RepositoryProblem]):
 
 class Repository(object):
     @staticmethod
-    def parse_verdict(key):
-        return {
-            "correct": Verdict.CORRECT,
-            "wrong_answer": Verdict.WRONG_ANSWER,
-            "time_limit": Verdict.TIME_LIMIT,
-            "run_error": Verdict.RUN_ERROR,
-            "memory_limit": Verdict.MEMORY_LIMIT,
-            "output_limit": Verdict.OUTPUT_LIMIT,
-            "no_output": Verdict.NO_OUTPUT
-        }[key]
-
-    @staticmethod
-    def parse_scoring(data) -> ScoringSettings:
-        priorities: Dict[Verdict, int] = dict()
-        for key, priority in data["results_priority"].items():
-            priorities[Repository.parse_verdict(key)] = priority
-
-        return ScoringSettings(penalty_time=data["penalty_time"], result_priority=priorities)
-
-    def parse_language(self, key: str, data) -> Language:
-        language_directory = self.language_base_directory / key
+    def parse_language(base_directory, key: str, data) -> Language:
+        language_directory = base_directory / key
         if not language_directory.is_dir():
             raise ValueError(f"No language data found for {key} (at {language_directory})")
 
@@ -521,24 +508,25 @@ class Repository(object):
         )
 
     def __init__(self, base_path: pathlib.Path):
-        config_path = base_path / "config.yaml"
-        if not config_path.is_file():
-            raise ValueError(f"Directory {base_path} does not seem to be a repository")
-        with config_path.open(mode="rt") as f:
-            configuration = yaml.safe_load(f)
         self.base_directory = base_path
 
-        scripts_directory = pathlib.Path(__file__).parent / "scripts"
-        self.checkers_base_directory = scripts_directory / "checker"
-        self.language_base_directory = scripts_directory / "compiler"
-        self.runscript_directory = scripts_directory / "runscript"
-
+        config_path = base_path / "config.yaml"
+        if not config_path.is_file():
+            raise ValueError(f"Directory {base_path} does not seem to be a Kattis repository")
+        with config_path.open(mode="rt") as f:
+            configuration = yaml.safe_load(f)
         self.authors: List[RepositoryAuthor] = [RepositoryAuthor.parse(author, data)
                                                 for author, data in configuration.get("authors", {}).items()]
-        self.languages: List[Language] = [self.parse_language(lang, data)
-                                          for lang, data in configuration.get("languages", {}).items()]
-        self.judge_user_whitelist: Set[str] = set(configuration.get("user_whitelist", []))
 
+        data_directory = pathlib.Path(__file__).parent
+        self.checkers_base_directory = data_directory / "checker"
+        self.language_base_directory = data_directory / "compiler"
+        self.runscript_directory = data_directory / "runscript"
+
+        with (data_directory / "languages.yml").open(mode="rt") as f:
+            language_configuration = yaml.safe_load(f)
+        self.languages: List[Language] = [Repository.parse_language(self.language_base_directory, lang, data)
+                                          for lang, data in language_configuration.items()]
         self.languages_by_extension: Dict[str, Language] = dict()
         for lang in self.languages:
             for extension in lang.extensions:
@@ -547,12 +535,6 @@ class Repository(object):
                                      f"{lang} and {self.languages_by_extension[extension]}")
                 self.languages_by_extension[extension] = lang
 
-        scoring = Repository.parse_scoring(configuration["score"])
-        judging = JudgingSettings(**configuration["judging"])
-        display = DisplaySettings(**configuration["display"])
-        clarification = ClarificationSettings(**configuration["clarification"])
-        self.judge_settings: JudgeSettings = JudgeSettings(judging=judging, scoring=scoring,
-                                                           display=display, clarification=clarification)
         self.problems = RepositoryProblems(self, base_path / "problems")
 
     def find_author_of(self, submission: JurySubmission) -> Optional[RepositoryAuthor]:
@@ -599,10 +581,12 @@ class Repository(object):
         return Executable(f"cmp_{problem.repository_key}", f"checker for {problem.repository_key}",
                           executable_type=ExecutableType.Compare, contents=files)
 
+    # noinspection PyMethodMayBeStatic
     def get_solution_team_of_language(self, language: Language):
         return Team(name=f"sol_lang_{language.key}", display_name=f"Sample Solution {language.name}",
                     category=TeamCategory.Solution, affiliation=None, members=[])
 
+    # noinspection PyMethodMayBeStatic
     def get_team_of_author(self, author: Optional[RepositoryAuthor]):
         if author is None:
             return Team(name="sol_author_unknown", display_name="Author Unknown",

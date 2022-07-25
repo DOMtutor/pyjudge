@@ -1,11 +1,30 @@
 import dataclasses
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from .submission import Verdict
 
 
 @dataclasses.dataclass
 class ScoringSettings(object):
+    @staticmethod
+    def parse_verdict(key):
+        return {
+            "correct": Verdict.CORRECT,
+            "wrong_answer": Verdict.WRONG_ANSWER,
+            "time_limit": Verdict.TIME_LIMIT,
+            "run_error": Verdict.RUN_ERROR,
+            "memory_limit": Verdict.MEMORY_LIMIT,
+            "output_limit": Verdict.OUTPUT_LIMIT,
+            "no_output": Verdict.NO_OUTPUT
+        }[key]
+
+    @staticmethod
+    def parse_scoring(data) -> "ScoringSettings":
+        priorities: Dict[Verdict, int] = dict()
+        for key, priority in data["results_priority"].items():
+            priorities[ScoringSettings.parse_verdict(key)] = priority
+        return ScoringSettings(penalty_time=data["penalty_time"], result_priority=priorities)
+
     penalty_time: float
     result_priority: Dict[Verdict, int]
 
@@ -48,3 +67,10 @@ class JudgeSettings(object):
     display: DisplaySettings
     clarification: ClarificationSettings
 
+    @staticmethod
+    def parse_settings(data):
+        scoring = ScoringSettings.parse_scoring(data["score"])
+        judging = JudgingSettings(**data["judging"])
+        display = DisplaySettings(**data["display"])
+        clarification = ClarificationSettings(**data["clarification"])
+        return JudgeSettings(judging=judging, scoring=scoring, display=display, clarification=clarification)

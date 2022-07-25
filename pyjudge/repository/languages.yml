@@ -1,0 +1,45 @@
+cpp:
+  name: "C++"
+  time_factor: 1
+  extensions:
+    - cpp
+java:
+  name: "Java"
+  time_factor: 2
+  extensions:
+    - java
+python:
+  name: "Python"
+  time_factor: 2
+  extensions:
+    - py
+    - py3
+    - pypy
+    - pypy3
+pascal:
+  name: "Pascal"
+  time_factor: 1
+  extensions:
+    - pas
+    - p
+javascript:
+  name: "JavaScript"
+  time_factor: 1.5
+  extensions:
+    - js
+julia:
+  name: "Julia"
+  time_factor: 1.5
+  extensions:
+    - jl
+rust:
+  name: "Rust"
+  time_factor: 1
+  extensions:
+    - rs
+haskell:
+  name: "Haskell"
+  time_factor: 1
+  extensions:
+    - hs
+    - lhs
