@@ -1,7 +1,7 @@
 # NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
 # version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
-import yaml
 from mysql.connector.cursor import MySQLCursor
+#
 
 import argparse
 import dataclasses
@@ -14,13 +14,19 @@ import re
 import sys
 from typing import List, Tuple, Collection, Optional, Dict, Set
 
-from problemtools.verifyproblem import VerifyError
-
 import pyjudge.action.update as update
-from pyjudge.db import Database
-from pyjudge.instance import JudgeInstance
-from pyjudge.model import Contest, Verdict, Problem, ProblemSubmission, Team, User, Affiliation, JudgeSettings
+from problemtools.verifyproblem import VerifyError
+from pyjudge.model import Contest, Verdict, Problem, ProblemSubmission, Team, User, Affiliation
+from pyjudge.model.settings import JudgeInstance
 from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
+from pyjudge.scripts.db import Database
+
+
+@dataclasses.dataclass
+class PyjudgeConfig(object):
+    repository: Repository
+    judge: JudgeInstance
+    database: Database
 
 
 def _update_problem_submissions(cursor: MySQLCursor,
@@ -56,7 +62,7 @@ def _update_problem_submissions(cursor: MySQLCursor,
     update.create_problem_submissions(cursor, problem, submissions, team_ids, contest_ids)
 
 
-def upload_contest(judge: JudgeInstance, contest: Contest, repository: Repository,
+def upload_contest(config: PyjudgeConfig, contest: Contest,
                    force=False, update_problems=True, verify_problems=True, update_submissions=True,
                    update_test_cases=True):
     if not force and contest.is_running(datetime.datetime.now().astimezone()):
@@ -74,7 +80,7 @@ def upload_contest(judge: JudgeInstance, contest: Contest, repository: Repositor
         else:
             logging.info("Skipping problem verification")
 
-    with judge.database as connection:
+    with config.database as connection:
         with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
@@ -83,7 +89,7 @@ def upload_contest(judge: JudgeInstance, contest: Contest, repository: Repositor
             for contest_problem in contest.problems:
                 with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
                     problem_ids[contest_problem.problem] = \
-                        update.create_or_update_problem_data(cursor, contest_problem.problem, judge)
+                        update.create_or_update_problem_data(cursor, config.judge, contest_problem.problem)
                     if update_test_cases:
                         update.create_or_update_problem_testcases(cursor, contest_problem.problem)
 
@@ -92,12 +98,12 @@ def upload_contest(judge: JudgeInstance, contest: Contest, repository: Repositor
                 if update_submissions:
                     for contest_problem in contest.problems:
                         assert isinstance(contest_problem.problem, RepositoryProblem)
-                        _update_problem_submissions(cursor, contest_problem.problem, repository, [contest_id])
+                        _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
 
     logging.info("Updated contest %s", contest)
 
 
-def upload_problems(judge: JudgeInstance, problems: List[RepositoryProblem], repository: Repository,
+def upload_problems(config: PyjudgeConfig, problems: List[RepositoryProblem],
                     update_submissions: bool = True, verify_problems: bool = False):
     if update_submissions:
         if verify_problems:
@@ -112,13 +118,13 @@ def upload_problems(judge: JudgeInstance, problems: List[RepositoryProblem], rep
         else:
             logging.info("Skipping verification")
 
-    with judge.database as connection:
+    with config.database as connection:
         for problem in problems:
             with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
-                update.create_or_update_problem_data(cursor, problem, judge)
+                update.create_or_update_problem_data(cursor, config.judge, problem)
                 update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:
-                    _update_problem_submissions(cursor, problem, repository, None)
+                    _update_problem_submissions(cursor, problem, config.repository, None)
 
 
 @dataclasses.dataclass
@@ -146,54 +152,54 @@ class UsersDescription(object):
                           for team in sorted(self.teams, key=lambda t: t.name)]}
 
 
-def upload_users(judge: JudgeInstance, description: UsersDescription, disable_unknown=False):
-    with judge.database as connection:
+def upload_users(config: PyjudgeConfig, description: UsersDescription, disable_unknown=False):
+    with config.database as connection:
         with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
             affiliation_ids = update.create_or_update_affiliations(cursor, description.affiliations)
             user_ids = update.create_or_update_users(cursor, description.users)
             update.create_or_update_teams(cursor, description.teams, affiliation_ids, user_ids)
             if disable_unknown:
                 valid_users = set(itertools.chain([user.login_name for user in description.users],
-                                                  judge.user_whitelist))
+                                                  config.judge.user_whitelist))
                 update.disable_unknown_users(cursor, valid_users)
 
 
-def update_settings(judge: JudgeInstance, repository: Repository, settings: JudgeSettings):
-    with judge.database as connection:
+def update_settings(config: PyjudgeConfig):
+    with config.database as connection:
         with connection.transaction_cursor(prepared_cursor=True) as cursor:
-            update.update_settings(cursor, settings)
+            update.update_settings(cursor, config.judge.settings)
             update.update_categories(cursor, lazy=False)
-            update.set_languages(cursor, repository.languages)  # TODO Awkward
+            update.set_languages(cursor, config.repository.languages)  # TODO Awkward
 
 
-def command_problem(judge: JudgeInstance, repository: Repository, args):
+def command_problem(config: PyjudgeConfig, args):
     problems: List[RepositoryProblem] = []
     if args.regex:
         patterns = [re.compile(pattern) for pattern in args.regex]
-        for problem in repository.problems.load_all_problems():
+        for problem in config.repository.problems.load_all_problems():
             if any(pattern.match(problem.repository_key) for pattern in patterns):
                 problems.append(problem)
-    problems.extend(repository.problems.load_problem(name) for name in args.name)
+    problems.extend(config.repository.problems.load_problem(name) for name in args.name)
     for contest_json in args.contest:
         contest_json: pathlib.Path
         with contest_json.open(mode="rt") as f:
             data = json.load(f)
-        problems.extend(contest_problem.problem
-                        for contest_problem in Contest.parse(data, repository.problems).problems)
+        contest = Contest.parse(data, config.repository.problems)
+        problems.extend(contest_problem.problem for contest_problem in contest.problems)
 
     if not problems:
         sys.exit(f"No problems found")
     logging.info("Found problems %s", ' '.join(problem.name for problem in problems))
 
-    upload_problems(judge, problems, repository,
+    upload_problems(config, problems,
                     verify_problems=args.verify,
                     update_submissions=args.update_submissions)
 
 
-def command_contest(judge: JudgeInstance, repository: Repository, args):
+def command_contest(config: PyjudgeConfig, args):
     with args.contest.open(mode="rt") as file:
         contest_upload_data = json.load(file)
-    upload_contest(judge, Contest.parse(contest_upload_data, repository.problems), repository,
+    upload_contest(config, Contest.parse(contest_upload_data, config.repository.problems),
                    force=args.force,
                    update_problems=args.update_problems,
                    verify_problems=args.verify,
@@ -201,16 +207,14 @@ def command_contest(judge: JudgeInstance, repository: Repository, args):
                    update_test_cases=args.update_testcases)
 
 
-def command_users(judge: JudgeInstance, args):
+def command_users(config: PyjudgeConfig, args):
     with args.users.open("rt") as file:
         user_data = json.load(file)
-    upload_users(judge, UsersDescription.parse(user_data), disable_unknown=args.disable)
+    upload_users(config, UsersDescription.parse(user_data), disable_unknown=args.disable)
 
 
-def command_settings(judge: JudgeInstance, repository: Repository, args):
-    with args.settings.open(mode="rt") as f:
-        settings_data = yaml.safe_load(f)
-    update_settings(judge, repository, JudgeSettings.parse_settings(settings_data))
+def command_settings(config: PyjudgeConfig, _):
+    update_settings(config)
 
 
 def main():
@@ -219,6 +223,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=pathlib.Path, required=True, help="Path to database config")
     parser.add_argument("--repository", "-r", type=pathlib.Path, default=pathlib.Path.cwd(), help="Path to repository")
+    parser.add_argument("--instance", type=pathlib.Path, required=True, help="Path to instance specification")
     parser.add_argument("--factor", type=float, default=1.0, help="Time factor on judge machine")
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
@@ -253,8 +258,13 @@ def main():
     users_parser.set_defaults(func=command_users)
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")
-    settings_parser.add_argument("--settings", type=pathlib.Path, help="Path to settings specification")
     settings_parser.set_defaults(func=command_settings)
 
     arguments = parser.parse_args()
-    arguments.func(JudgeInstance(arguments.factor, Database(arguments.db)), Repository(arguments.repository), arguments)
+
+    with arguments.instance.open(mode="rt") as f:
+        instance_data = json.load(f)
+    instance = JudgeInstance.parse_instance(instance_data)
+
+    arguments.func(PyjudgeConfig(repository=Repository(arguments.repository),
+                                 judge=instance, database=Database(arguments.db)), arguments)

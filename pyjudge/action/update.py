@@ -8,14 +8,14 @@ from typing import Dict, Collection, Optional, List, Tuple, Set
 
 from mysql.connector.cursor import MySQLCursor
 
-from pyjudge.db import list_param
+from pyjudge.scripts.db import list_param
 from pyjudge.model import TeamCategory, Team, Executable, Language, Problem, ProblemTestCase, ExecutableType, \
     JudgeSettings, Verdict, ProblemSubmission, Contest, UserRole, User, Affiliation
-from pyjudge.instance import JudgeInstance
 
 from .data import DbTestCase, test_case_compare_key
 
 # Debug MySQL in case it acts up
+from ..model.settings import JudgeInstance
 
 faulthandler.enable()
 
@@ -178,7 +178,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
     return problem_id
 
 
-def create_or_update_problem_data(cursor: MySQLCursor, problem: Problem, judge: JudgeInstance) -> int:
+def create_or_update_problem_data(cursor: MySQLCursor, instance: JudgeInstance, problem: Problem) -> int:
     logging.debug("Updating problem %s", problem)
 
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
@@ -197,7 +197,7 @@ def create_or_update_problem_data(cursor: MySQLCursor, problem: Problem, judge: 
     time_factor = problem.limits.time_factor
     if time_factor is None or time_factor <= 0.0:
         raise ValueError(f"Invalid time factor {time_factor} on problem {problem}")
-    time_limit = round(judge.base_time * time_factor, 1)
+    time_limit = round(instance.base_time * time_factor, 1)
     if time_limit <= 0:
         time_limit = 0.1
 
