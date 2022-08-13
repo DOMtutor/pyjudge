@@ -224,7 +224,6 @@ def main():
     parser.add_argument("--db", type=pathlib.Path, required=True, help="Path to database config")
     parser.add_argument("--repository", "-r", type=pathlib.Path, default=pathlib.Path.cwd(), help="Path to repository")
     parser.add_argument("--instance", type=pathlib.Path, required=True, help="Path to instance specification")
-    parser.add_argument("--factor", type=float, default=1.0, help="Time factor on judge machine")
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
     problem_parser.add_argument("--regex", nargs='*', help="Regexes to match problem name", default=[])

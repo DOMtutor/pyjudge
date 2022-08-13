@@ -27,9 +27,9 @@ class ScoringSettings(object):
 
     @staticmethod
     def parse_scoring(data) -> "ScoringSettings":
-        if "results_priority" in data:
-            data["results_priority"] = {Verdict.parse(key): priority for key, priority in
-                                        data["results_priority"].items()}
+        if "result_priority" in data:
+            data["result_priority"] = {Verdict.parse(key): priority for key, priority in
+                                       data["result_priority"].items()}
         return ScoringSettings(**data)
 
     def serialize(self):
