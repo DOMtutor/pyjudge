@@ -16,6 +16,7 @@ from .data import DbTestCase, test_case_compare_key
 
 # Debug MySQL in case it acts up
 from ..model.settings import JudgeInstance
+from ..model.util import get_md5
 
 faulthandler.enable()
 
@@ -133,10 +134,43 @@ def create_or_update_teams(cursor: MySQLCursor, teams: Collection[Team],
 
 def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
     logging.debug("Updating executable %s", executable)
-    data, md5 = executable.make_zip()
-    cursor.execute("REPLACE INTO executable (execid, type, description, zipfile, md5sum) "
-                   "VALUES (?, ?, ?, ?, ?)",
-                   (executable.key, executable.executable_type.value, executable.description, data, md5))
+    cursor.execute("SELECT immutable_execid FROM executable WHERE execid = ?", (executable.key,))
+    id_query = cursor.fetchone()
+
+    file_data = []
+    for name, path in sorted(executable.contents.items()):
+        with path.open(mode="rb") as f:
+            data = f.read()
+        data_hash = get_md5(data)
+        file_data.append((name, data, data_hash))
+
+    immutable_hash = get_md5("".join(path_hash for _, _, path_hash in file_data).encode("ascii"))
+    if id_query:
+        immutable_id = id_query[0]
+        cursor.execute("SELECT filename, ranknumber, hash, is_executable FROM executable_file "
+                       "WHERE execfileid = ?", (executable.key,))
+        files = {filename: file_hash for filename, rank, file_hash, executable in cursor}
+
+        if all(files.get(name, None) == data_hash for name, _, data_hash in file_data):
+            return
+        cursor.execute("UPDATE immutable_executable SET hash = ? WHERE immutable_execid = ?",
+                       (immutable_hash, immutable_id))
+    else:
+        cursor.execute("INSERT INTO immutable_executable (hash) VALUES (?)", (immutable_hash,))
+        immutable_id = cursor.lastrowid
+
+    cursor.execute("INSERT INTO executable (execid, description, type, immutable_execid) VALUES (?, ?, ?, ?)"
+                   "ON DUPLICATE KEY UPDATE description = ?, type = ?, immutable_execid = ?",
+                   (executable.key, executable.description, executable.executable_type.name, immutable_id,
+                    executable.description, executable.executable_type.name, immutable_id))
+
+    cursor.execute("DELETE FROM executable_file "
+                   "WHERE execfileid = ?", (executable.key,))
+    for rank, (name, data, data_hash) in enumerate(file_data):
+        executable_bit = name in {"build", "run"}
+        cursor.execute("INSERT INTO executable_file (immutable_execid, filename, "
+                       "ranknumber, file_content, hash, is_executable) VALUES (?, ?, ?, ?, ?, ?)",
+                       (immutable_id, name, rank, data, data_hash, executable_bit))
 
 
 def create_or_update_language(cursor: MySQLCursor, language: Language):
@@ -229,7 +263,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
 
     testcases_by_name: Dict[str, DbTestCase] = {}
     leftover_cases = []
-    cursor.execute("SELECT t.testcaseid, t.orig_input_filename, t.description, t.`rank`, "
+    cursor.execute("SELECT t.testcaseid, t.orig_input_filename, t.description, t.ranknumber, "
                    "t.md5sum_input, t.md5sum_output "
                    "FROM testcase t "
                    "WHERE t.probid = ?",
@@ -316,7 +350,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             case_rank = maximal_rank
             testcase_data.extend([maximal_rank, problem_id])
             cursor.execute("INSERT INTO testcase (orig_input_filename, description, md5sum_input, md5sum_output, "
-                           "sample, image_type, deleted, `rank`, probid) "
+                           "sample, image_type, deleted, ranknumber, probid) "
                            "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)", testcase_data)
             case_id = cursor.lastrowid
 
@@ -355,9 +389,9 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         maximal_rank = max(database_case.rank for _, database_case in existing_cases) + 1
         for _, case in rank_update:
             maximal_rank += 1
-            cursor.execute("UPDATE testcase SET `rank` = ? WHERE testcaseid = ?", (maximal_rank, case.case_id))
+            cursor.execute("UPDATE testcase SET ranknumber = ? WHERE testcaseid = ?", (maximal_rank, case.case_id))
         for new_rank, case in rank_update:
-            cursor.execute("UPDATE testcase SET `rank` = ? WHERE testcaseid = ?", (new_rank, case.case_id))
+            cursor.execute("UPDATE testcase SET ranknumber = ? WHERE testcaseid = ?", (new_rank, case.case_id))
             case.rank = new_rank
     else:
         logging.debug("No rank updates required")
@@ -392,7 +426,6 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
     logging.info("Updating judge settings")
     verdict_names = {
         Verdict.COMPILER_ERROR: "compiler-error",
-        Verdict.PRESENTATION_ERROR: "presentation-error",
         Verdict.CORRECT: "correct",
         Verdict.WRONG_ANSWER: "wrong-answer",
         Verdict.OUTPUT_LIMIT: "output-limit",
@@ -459,6 +492,7 @@ def set_languages(cursor: MySQLCursor, languages: List[Language]):
             if script:
                 scripts_to_delete.append(script)
     if scripts_to_delete:
+        # TODO remove executable_file and immutable_executable
         cursor.execute(f"DELETE FROM executable WHERE execid IN {list_param(scripts_to_delete)} "
                        f"AND type = 'compile'", tuple(scripts_to_delete))  # Safeguard
     if languages_to_delete:
@@ -652,13 +686,13 @@ def create_problem_submissions(cursor, problem: Problem,
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
                               submission.file_name, used_team_ids[team_id], contest_id, problem_id)
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
-                               "judgehost, valid, expected_results) "
-                               "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
+                               "valid, expected_results) "
+                               "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
                                (existing_id, contest_id, team_id, problem_id, language.key,
                                 contest_start[contest_id],
                                 json.dumps([expected_result.value for expected_result in submission.expected_results])))
                 new_submission_id = cursor.lastrowid
-                cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
+                cursor.execute("INSERT INTO submission_file (submitid, filename, ranknumber, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
                                (new_submission_id, submission.file_name, source_code.encode("utf-8")))
             else:
@@ -818,12 +852,12 @@ def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[
     for affiliation in affiliations:
         if affiliation in affiliation_ids:
             cursor.execute("UPDATE team_affiliation SET "
-                           "externalid = ?, shortname = ?, name = ?, country = ?, comments = NULL "
+                           "externalid = ?, shortname = ?, name = ?, country = ?, internalcomments = NULL "
                            "WHERE affilid = ?",
                            (affiliation.short_name, affiliation.short_name, affiliation.name,
                             affiliation.country, affiliation_ids[affiliation]))
         else:
-            cursor.execute("INSERT INTO team_affiliation (externalid, shortname, name, country, comments) "
+            cursor.execute("INSERT INTO team_affiliation (externalid, shortname, name, country, internalcomments) "
                            "VALUES (?, ?, ?, ?, NULL) ",
                            (affiliation.short_name, affiliation.short_name, affiliation.name,
                             affiliation.country))

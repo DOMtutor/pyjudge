@@ -9,7 +9,6 @@ from .util import get_md5
 
 class Verdict(enum.Enum):
     COMPILER_ERROR = "COMPILER_ERROR", "compiler_error"
-    PRESENTATION_ERROR = "PRESENTATION_ERROR", "presentation_error"
     CORRECT = "CORRECT", "correct"
     TIME_LIMIT = "TIMELIMIT", "time_limit"
     MEMORY_LIMIT = "MEMORY_LIMIT", "memory_limit"
