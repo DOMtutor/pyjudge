@@ -8,29 +8,35 @@ from .util import get_md5
 
 
 class Verdict(enum.Enum):
-    COMPILER_ERROR = "COMPILER_ERROR"
-    PRESENTATION_ERROR = "PRESENTATION_ERROR"
-    CORRECT = "CORRECT"
-    TIME_LIMIT = "TIMELIMIT"
-    MEMORY_LIMIT = "MEMORY_LIMIT"
-    OUTPUT_LIMIT = "OUTPUT_LIMIT"
-    RUN_ERROR = "RUN_ERROR"
-    WRONG_ANSWER = "WRONG-ANSWER"
-    NO_OUTPUT = "NO_OUTPUT"
+    COMPILER_ERROR = "COMPILER_ERROR", "compiler_error"
+    PRESENTATION_ERROR = "PRESENTATION_ERROR", "presentation_error"
+    CORRECT = "CORRECT", "correct"
+    TIME_LIMIT = "TIMELIMIT", "time_limit"
+    MEMORY_LIMIT = "MEMORY_LIMIT", "memory_limit"
+    OUTPUT_LIMIT = "OUTPUT_LIMIT", "output_limit"
+    RUN_ERROR = "RUN_ERROR", "run_error"
+    WRONG_ANSWER = "WRONG-ANSWER", "wrong_answer"
+    NO_OUTPUT = "NO_OUTPUT", "no_output"
 
     @staticmethod
     def parse_from_judge(key):
         for verdict in Verdict:
-            if verdict.value == key:
+            if verdict.value[0] == key:
                 return verdict
         raise KeyError(key)
 
     @staticmethod
-    def get(key):
+    def parse(key):
         for verdict in Verdict:
-            if verdict.name == key:
+            if verdict.value[1] == key:
                 return verdict
         raise KeyError(key)
+
+    def serialize(self):
+        return self.value[1]
+
+    def __str__(self):
+        return self.serialize()
 
 
 class ProblemSubmission(abc.ABC):

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+IFS=$'\n\t'
+
 destination="$1"
 memory_limit="$2"
 shift 2
@@ -29,21 +31,16 @@ else
 fi
 
 temp_file=$(mktemp --tmpdir domjudge_javac_output.XXXXXX) || exit 1
-
-# Byte-compile:
 javac -encoding UTF-8 -sourcepath . -d . "$@" 2> "$temp_file"
 compilation_exit_code=$?
-
 cat "$temp_file"
 rm -f "$temp_file"
-
 [ "$compilation_exit_code" -ne 0 ] && exit $compilation_exit_code
 
 if [ -z "$main_class" ]; then
   # Look for class that has the 'main' function:
-  class_names="$(find ./* -type f -regex '^.*\.class$' \
-              | sed -e 's/\.class$//' -e 's/^\.\///' -e 's/\//./g')"
-  main_class=$(java -cp "$compile_script_directory" DetectMain "$(pwd)" "$class_names")
+  class_names="$(find ./* -type f -regex '^.*\.class$' | sed -e 's/\.class$//' -e 's/^\.\///' -e 's/\//./g')"
+  main_class=$(java -cp "$compile_script_directory" DetectMain "$(pwd)" $class_names)
   detect_main_class_exit_code=$?
   [ "$detect_main_class_exit_code" -ne 0 ] && exit $detect_main_class_exit_code
 
@@ -72,7 +69,7 @@ if [ "\${0%/*}" != "\$0" ]; then
   cd "\${0%/*}"
 fi
 
-exec java -DDOMJUDGE -Dfile.encoding=UTF-8 -XX:+UseSerialGC -Xss${java_stack_size}k -Xms${java_memory_limit}k -Xmx${java_memory_limit}k '$main_class' "\$@"
+exec java -DDOMJUDGE -Dfile.encoding=UTF-8 -XX:+UseSerialGC \"-Xss${java_stack_size}k\" \"-Xms${java_memory_limit}k\" \"-Xmx${java_memory_limit}k\" '$main_class' "\$@"
 EOF
 chmod a+x "$destination"
 exit 0

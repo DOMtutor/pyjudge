@@ -1,13 +1,13 @@
 import logging
 from collections import defaultdict
-from typing import List, Collection, Optional, Tuple, Dict, Generator
+from typing import List, Collection, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
 
 from pyjudge.action.update import category_to_database
 from pyjudge.data.submission import SubmissionDto, SubmissionFileDto, ClarificationDto, ContestProblemDto, ContestDescriptionDto
 from pyjudge.data.teams import UserDto, TeamDto
-from pyjudge.db import Database, list_param, get_unique
+from pyjudge.scripts.db import Database, list_param, get_unique
 from pyjudge.model import Verdict, TeamCategory
 
 

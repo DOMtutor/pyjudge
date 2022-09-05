@@ -69,7 +69,7 @@ class ProblemTestCase(abc.ABC):
 
 @dataclasses.dataclass
 class ProblemLimits(object):
-    time_s: float
+    time_factor: float
     memory_kib: Optional[int]
     output_kib: Optional[int]
 
