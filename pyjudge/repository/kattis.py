@@ -606,9 +606,9 @@ class Repository(object):
     def get_team_of_author(self, author: Optional[RepositoryAuthor]):
         if author is None:
             return Team(name="sol_author_unknown", display_name="Author Unknown",
-                        category=TeamCategory.Solution, affiliation=None, members=[])
+                        category=TeamCategory.Author, affiliation=None, members=[])
         return Team(name=f"sol_author_{author.key}", display_name=f"Author {author.name}",
-                    category=TeamCategory.Solution, affiliation=author.affiliation, members=[])
+                    category=TeamCategory.Author, affiliation=author.affiliation, members=[])
 
     def get_default_runscript(self) -> Dict[str, pathlib.Path]:
         if not self.runscript_directory.is_dir():

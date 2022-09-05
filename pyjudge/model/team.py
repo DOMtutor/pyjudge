@@ -10,6 +10,7 @@ class TeamCategory(enum.Enum):
     # TODO However this could be used to manage access permissions on a multi-course instance
     Jury = "jury"
     Solution = "solution"
+    Author = "author"
     Participants = "participants"
     Hidden = "hidden"
 

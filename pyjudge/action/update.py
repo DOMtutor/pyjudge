@@ -21,6 +21,7 @@ category_to_database = {
     TeamCategory.Hidden: "Participants (hidden)",
     TeamCategory.Jury: "Jury",
     TeamCategory.Solution: "Solutions"
+    TeamCategory.Author: "Authors",
 }
 database_to_category = {value: key for key, value in category_to_database.items()}
 
@@ -55,7 +56,8 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
     for category, color, visible, order, self_reg in \
             [(TeamCategory.Participants, 'white', True, 0, False),
              (TeamCategory.Hidden, 'lightgray', False, 0, False),
-             (TeamCategory.Jury, 'lightgreen', False, 8, False),
+             (TeamCategory.Jury, 'lightgreen', False, 6, False),
+             (TeamCategory.Author, 'green', False, 7, False),
              (TeamCategory.Solution, 'green', False, 9, False)]:
         name = category_to_database[category]
         cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
