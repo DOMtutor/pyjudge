@@ -23,7 +23,7 @@ category_to_database = {
     TeamCategory.Participants: "Participants",
     TeamCategory.Hidden: "Participants (hidden)",
     TeamCategory.Jury: "Jury",
-    TeamCategory.Solution: "Solutions"
+    TeamCategory.Solution: "Solutions",
     TeamCategory.Author: "Authors",
 }
 database_to_category = {value: key for key, value in category_to_database.items()}
@@ -483,9 +483,10 @@ def clear_invalid_submissions(cursor):
 # TODO Should be for multiple problems :-)
 # TODO Submission time
 
-def create_problem_submissions(cursor, problem: Problem,
+def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                                existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
-                               team_ids: Dict[Team, int], contest_ids: Optional[List[int]] = None):
+                               team_ids: Dict[Team, int], contest_ids: Optional[List[int]] = None,
+                               force_reinsert=False):
     logging.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
@@ -583,9 +584,10 @@ def create_problem_submissions(cursor, problem: Problem,
          for contest_id in contest_ids}
 
     for submission_id, (_, team_id, contest_id, expected_results, language_id) in existing_submissions.items():
-        file_names = submission_file_names.get(submission_id, {})
+        file_names = submission_file_names.get(submission_id, frozenset())
         if not file_names:
             logging.warning("No files for submission %d", submission_id)
+
         assert team_id in used_team_ids, f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
         submissions_by_contest_and_team[contest_id][team_id][file_names].append(submission_id)
 
@@ -642,7 +644,7 @@ def create_problem_submissions(cursor, problem: Problem,
                 else:
                     # TODO Multiple file submissions
                     assert len(file_names) == 1
-                    if submission.source_md5() != existing_file_hashes[submission.file_name]:
+                    if force_reinsert or submission.source_md5() != existing_file_hashes[submission.file_name]:
                         logging.debug("%s changed content in file %s", submission, submission.file_name)
                         insert = True
                     else:
@@ -653,22 +655,24 @@ def create_problem_submissions(cursor, problem: Problem,
                 source_code: str = submission.source
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
                               submission.file_name, used_team_ids[team_id], contest_id, problem_id)
+
                 cursor.execute("INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
                                (existing_id, contest_id, team_id, problem_id, language.key,
                                 contest_start[contest_id],
-                                json.dumps([expected_result.value for expected_result in submission.expected_results])))
+                                json.dumps([expected_result.judge_key() for expected_result in submission.expected_results])))
                 new_submission_id = cursor.lastrowid
+                source_bytes = bytes(source_code.encode("utf-8"))
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
-                               (new_submission_id, submission.file_name, source_code.encode("utf-8")))
+                               (new_submission_id, submission.file_name, source_bytes))
             else:
                 cursor.execute("UPDATE submission "
                                "SET submittime = ?, expected_results = ? "
                                "WHERE submitid = ?",
                                (contest_start[contest_id],
-                                json.dumps([expected_result.value for expected_result in submission.expected_results]),
+                                json.dumps([expected_result.judge_key() for expected_result in submission.expected_results]),
                                 existing_id))
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)

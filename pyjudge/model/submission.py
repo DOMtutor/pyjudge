@@ -32,6 +32,9 @@ class Verdict(enum.Enum):
                 return verdict
         raise KeyError(key)
 
+    def judge_key(self):
+        return self.value[0]
+
     def serialize(self):
         return self.value[1]
 

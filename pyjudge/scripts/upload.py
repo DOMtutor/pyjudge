@@ -1,8 +1,3 @@
-# NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
-# version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
-from mysql.connector.cursor import MySQLCursor
-#
-
 import argparse
 import dataclasses
 import datetime
@@ -20,6 +15,8 @@ from pyjudge.model import Contest, Verdict, Problem, ProblemSubmission, Team, Us
 from pyjudge.model.settings import JudgeInstance
 from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
 from pyjudge.scripts.db import Database
+
+from mysql.connector.cursor import MySQLCursor
 
 
 @dataclasses.dataclass
@@ -93,10 +90,12 @@ def upload_contest(config: PyjudgeConfig, contest: Contest,
                     if update_test_cases:
                         update.create_or_update_problem_testcases(cursor, contest_problem.problem)
 
-            with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+            with connection.transaction_cursor(prepared_cursor=True) as cursor:
                 update.create_or_update_contest_problems(cursor, contest, contest_id, problem_ids)
-                if update_submissions:
-                    for contest_problem in contest.problems:
+
+            if update_submissions:
+                for contest_problem in contest.problems:
+                    with connection.transaction_cursor(prepared_cursor=True) as cursor:
                         assert isinstance(contest_problem.problem, RepositoryProblem)
                         _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
 
