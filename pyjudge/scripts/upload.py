@@ -78,13 +78,13 @@ def upload_contest(config: PyjudgeConfig, contest: Contest,
             logging.info("Skipping problem verification")
 
     with config.database as connection:
-        with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+        with connection.transaction_cursor(prepared_cursor=True) as cursor:
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
         if update_problems:
             problem_ids: Dict[Problem, int] = {}
             for contest_problem in contest.problems:
-                with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+                with connection.transaction_cursor(prepared_cursor=True) as cursor:
                     problem_ids[contest_problem.problem] = \
                         update.create_or_update_problem_data(cursor, config.judge, contest_problem.problem)
                     if update_test_cases:
@@ -93,11 +93,11 @@ def upload_contest(config: PyjudgeConfig, contest: Contest,
             with connection.transaction_cursor(prepared_cursor=True) as cursor:
                 update.create_or_update_contest_problems(cursor, contest, contest_id, problem_ids)
 
-            if update_submissions:
-                for contest_problem in contest.problems:
-                    with connection.transaction_cursor(prepared_cursor=True) as cursor:
-                        assert isinstance(contest_problem.problem, RepositoryProblem)
-                        _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
+        if update_submissions:
+            for contest_problem in contest.problems:
+                with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
+                    assert isinstance(contest_problem.problem, RepositoryProblem)
+                    _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
 
     logging.info("Updated contest %s", contest)
 
@@ -119,7 +119,7 @@ def upload_problems(config: PyjudgeConfig, problems: List[RepositoryProblem],
 
     with config.database as connection:
         for problem in problems:
-            with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
+            with connection.transaction_cursor(prepared_cursor=True) as cursor:
                 update.create_or_update_problem_data(cursor, config.judge, problem)
                 update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:

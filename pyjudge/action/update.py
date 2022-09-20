@@ -486,7 +486,7 @@ def clear_invalid_submissions(cursor):
 def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                                existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
                                team_ids: Dict[Team, int], contest_ids: Optional[List[int]] = None,
-                               force_reinsert=False):
+                               check_source_code=True):
     logging.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
@@ -584,7 +584,7 @@ def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
          for contest_id in contest_ids}
 
     for submission_id, (_, team_id, contest_id, expected_results, language_id) in existing_submissions.items():
-        file_names = submission_file_names.get(submission_id, frozenset())
+        file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
             logging.warning("No files for submission %d", submission_id)
 
@@ -644,13 +644,25 @@ def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                 else:
                     # TODO Multiple file submissions
                     assert len(file_names) == 1
-                    if force_reinsert or submission.source_md5() != existing_file_hashes[submission.file_name]:
+                    if submission.source_md5() != existing_file_hashes[submission.file_name]:
                         logging.debug("%s changed content in file %s", submission, submission.file_name)
                         insert = True
+                    elif check_source_code:
+                        cursor.execute("SELECT sourcecode FROM submission_file WHERE submitid = ?", (existing_id,))
+                        source_bytes = submission.source.encode("utf-8")
+                        if cursor.fetchone()[0] != source_bytes:
+                            logging.warning("%s has matching hash but differing source code in file",
+                                            submission, submission.file_name)
+                            insert = True
+                        else:
+                            insert = False
                     else:
                         insert = False
                 if insert:
                     updated_submissions += 1
+
+            expected_results_string = json.dumps([expected_result.judge_key()
+                                                  for expected_result in submission.expected_results])
             if insert:
                 source_code: str = submission.source
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
@@ -660,8 +672,7 @@ def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                                "judgehost, valid, expected_results) "
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
                                (existing_id, contest_id, team_id, problem_id, language.key,
-                                contest_start[contest_id],
-                                json.dumps([expected_result.judge_key() for expected_result in submission.expected_results])))
+                                contest_start[contest_id], expected_results_string))
                 new_submission_id = cursor.lastrowid
                 source_bytes = bytes(source_code.encode("utf-8"))
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
@@ -671,9 +682,7 @@ def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                 cursor.execute("UPDATE submission "
                                "SET submittime = ?, expected_results = ? "
                                "WHERE submitid = ?",
-                               (contest_start[contest_id],
-                                json.dumps([expected_result.judge_key() for expected_result in submission.expected_results]),
-                                existing_id))
+                               (contest_start[contest_id], expected_results_string, existing_id))
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
