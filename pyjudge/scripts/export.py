@@ -21,15 +21,22 @@ def write_contest(database: Database, contest_key: str, destination: Optional[pa
         contest_description = query.find_contest_description(connection, contest_key)
 
         contest_problems = query.find_contest_problems(connection, contest_key)
-        problem_key_by_contest_problem_key = {problem.contest_problem_key: problem.problem_key
-                                              for problem in contest_problems}
+        problem_key_by_contest_problem_key = {
+            problem.contest_problem_key: problem.problem_key for problem in contest_problems
+        }
 
         logging.info("Fetching submissions")
-        submissions = [submission for submission in query.find_submissions(connection, contest_key)
-                       if submission.team_key in teams_by_key]
+        submissions = [
+            submission
+            for submission in query.find_submissions(connection, contest_key)
+            if submission.team_key in teams_by_key
+        ]
         logging.info("Fetching clarifications")
-        clarifications = [clarification for clarification in query.find_clarifications(connection, contest_key)
-                          if clarification.team_key in teams_by_key]
+        clarifications = [
+            clarification
+            for clarification in query.find_clarifications(connection, contest_key)
+            if clarification.team_key in teams_by_key
+        ]
 
     data = ContestDataDto(
         description=contest_description,
@@ -37,7 +44,7 @@ def write_contest(database: Database, contest_key: str, destination: Optional[pa
         languages=language_name_by_key,
         problems=problem_key_by_contest_problem_key,
         submissions=submissions,
-        clarifications=clarifications
+        clarifications=clarifications,
     ).serialize()
     if destination is None:
         json.dump(data, sys.stdout)
@@ -54,8 +61,11 @@ def write_submission_files(database: Database, contest_key: str, destination: Op
     with database as connection:
         teams = query.find_teams(connection, [TeamCategory.Participants, TeamCategory.Hidden])
         team_keys = {team.key for team in teams}
-        submissions = [submission for submission in query.find_submissions(connection, contest_key)
-                       if submission.team_key in team_keys]
+        submissions = [
+            submission
+            for submission in query.find_submissions(connection, contest_key)
+            if submission.team_key in team_keys
+        ]
 
     data = [submission.serialize() for submission in submissions]
     if destination is None:

@@ -8,17 +8,19 @@ from .submission import Verdict
 @dataclasses.dataclass
 class ScoringSettings(object):
     penalty_time: float = 600.0
-    result_priority: Dict[Verdict, int] = field(default_factory=lambda: {
-        Verdict.TIME_LIMIT: 70,
-        Verdict.MEMORY_LIMIT: 95,
-        Verdict.OUTPUT_LIMIT: 90,
-        Verdict.RUN_ERROR: 85,
-        Verdict.WRONG_ANSWER: 80,
-        Verdict.NO_OUTPUT: 99,
-        Verdict.PRESENTATION_ERROR: 98,
-        Verdict.COMPILER_ERROR: 100,
-        Verdict.CORRECT: 1
-    })
+    result_priority: Dict[Verdict, int] = field(
+        default_factory=lambda: {
+            Verdict.TIME_LIMIT: 70,
+            Verdict.MEMORY_LIMIT: 95,
+            Verdict.OUTPUT_LIMIT: 90,
+            Verdict.RUN_ERROR: 85,
+            Verdict.WRONG_ANSWER: 80,
+            Verdict.NO_OUTPUT: 99,
+            Verdict.PRESENTATION_ERROR: 98,
+            Verdict.COMPILER_ERROR: 100,
+            Verdict.CORRECT: 1,
+        }
+    )
 
     def __post_init__(self):
         if not self.result_priority.keys() == set(Verdict):
@@ -28,13 +30,16 @@ class ScoringSettings(object):
     @staticmethod
     def parse_scoring(data) -> "ScoringSettings":
         if "result_priority" in data:
-            data["result_priority"] = {Verdict.parse(key): priority for key, priority in
-                                       data["result_priority"].items()}
+            data["result_priority"] = {
+                Verdict.parse(key): priority for key, priority in data["result_priority"].items()
+            }
         return ScoringSettings(**data)
 
     def serialize(self):
-        return {"penalty_time": self.penalty_time,
-                "result_priority": {key.serialize(): value for key, value in self.result_priority.items()}}
+        return {
+            "penalty_time": self.penalty_time,
+            "result_priority": {key.serialize(): value for key, value in self.result_priority.items()},
+        }
 
 
 @dataclasses.dataclass
@@ -109,7 +114,7 @@ class JudgeSettings(object):
             "score": self.scoring.serialize(),
             "judging": self.judging.serialize(),
             "display": self.display.serialize(),
-            "clarification": self.clarification.serialize()
+            "clarification": self.clarification.serialize(),
         }
 
 
@@ -122,13 +127,17 @@ class JudgeInstance(object):
 
     @staticmethod
     def parse_instance(data):
-        return JudgeInstance(identifier=data["id"], settings=JudgeSettings.parse_settings(data["settings"]),
-                             base_time=data["base_time"], user_whitelist=set(data["user_whitelist"]))
+        return JudgeInstance(
+            identifier=data["id"],
+            settings=JudgeSettings.parse_settings(data["settings"]),
+            base_time=data["base_time"],
+            user_whitelist=set(data["user_whitelist"]),
+        )
 
     def serialize(self):
         return {
             "id": self.identifier,
             "settings": self.settings.serialize(),
             "base_time": self.base_time,
-            "user_whitelist": list(self.user_whitelist)
+            "user_whitelist": list(self.user_whitelist),
         }

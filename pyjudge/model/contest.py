@@ -17,12 +17,20 @@ class ContestProblem(object):
 
     @staticmethod
     def parse(data, problem_loader: ProblemLoader):
-        return ContestProblem(name=data["name"], points=data["points"], color=data["color"],
-                              problem=problem_loader.load_problem(data["problem"]))
+        return ContestProblem(
+            name=data["name"],
+            points=data["points"],
+            color=data["color"],
+            problem=problem_loader.load_problem(data["problem"]),
+        )
 
     def serialize(self, problem_loader: ProblemLoader):
-        return {"name": self.name, "points": self.points, "color": self.color,
-                "problem": problem_loader.serialize_problem(self.problem)}
+        return {
+            "name": self.name,
+            "points": self.points,
+            "color": self.color,
+            "problem": problem_loader.serialize_problem(self.problem),
+        }
 
     def __hash__(self):
         return hash(self.problem)
@@ -45,7 +53,7 @@ class ContestAccess(object):
     def serialize(self):
         return {
             "teams": list(self.team_names),
-            "categories": [category.configuration_key for category in self.team_categories]
+            "categories": [category.configuration_key for category in self.team_categories],
         }
 
 
@@ -101,10 +109,18 @@ class Contest(object):
             deactivation = dateutil.parser.parse(deactivation)
         access = ContestAccess.parse(data["access"]) if data.get("access", None) is not None else None
 
-        return Contest(key=data["key"], name=data["name"],
-                       activation_time=activate, start_time=start, end_time=end, freeze_time=freeze,
-                       deactivation_time=deactivation, access=access, public_scoreboard=public_scoreboard,
-                       problems=problems)
+        return Contest(
+            key=data["key"],
+            name=data["name"],
+            activation_time=activate,
+            start_time=start,
+            end_time=end,
+            freeze_time=freeze,
+            deactivation_time=deactivation,
+            access=access,
+            public_scoreboard=public_scoreboard,
+            problems=problems,
+        )
 
     def serialize(self, problem_loader: ProblemLoader):
         self.validate()
@@ -114,7 +130,7 @@ class Contest(object):
             "activate": self.activation_time.strftime(Contest.DATE_FORMAT),
             "start": self.start_time.strftime(Contest.DATE_FORMAT),
             "end": self.end_time.strftime(Contest.DATE_FORMAT),
-            "problems": [problem.serialize(problem_loader) for problem in self.problems]
+            "problems": [problem.serialize(problem_loader) for problem in self.problems],
         }
         if self.access is not None:
             data["access"] = self.access.serialize()

@@ -18,30 +18,30 @@ class SubmissionFileDto(object):
     @property
     def line_count(self) -> Optional[int]:
         try:
-            return self.content.decode('utf-8').count("\n") + 1
+            return self.content.decode("utf-8").count("\n") + 1
         except UnicodeDecodeError:
             return None
 
     def content_safe(self, default=None) -> str:
         try:
-            return self.content.decode('utf-8')
+            return self.content.decode("utf-8")
         except UnicodeDecodeError:
             return default
 
     @property
     def is_text_file(self):
         try:
-            self.content.decode('utf-8')
+            self.content.decode("utf-8")
             return True
         except UnicodeDecodeError:
             return False
 
     def serialize(self):
-        return {"name": self.filename, "content": base64.b85encode(self.content).decode('utf-8')}
+        return {"name": self.filename, "content": base64.b85encode(self.content).decode("utf-8")}
 
     @staticmethod
     def parse(data):
-        return SubmissionFileDto(filename=data["name"], content=base64.b85decode(data["content"].encode('utf-8')))
+        return SubmissionFileDto(filename=data["name"], content=base64.b85decode(data["content"].encode("utf-8")))
 
 
 @dataclasses.dataclass
@@ -77,7 +77,7 @@ class SubmissionDto(object):
             "problem": self.contest_problem_key,
             "language": self.language_key,
             "time": self.submission_time,
-            "too_late": self.too_late
+            "too_late": self.too_late,
         }
         if self.maximum_runtime is not None:
             data["runtime"] = self.maximum_runtime
@@ -95,11 +95,10 @@ class SubmissionDto(object):
             contest_problem_key=data["problem"],
             language_key=data["language"],
             submission_time=data["time"],
-
             maximum_runtime=data.get("runtime", None),
             verdict=Verdict.get(data["verdict"]) if data.get("verdict", None) is not None else None,
             too_late=data["too_late"],
-            files=[SubmissionFileDto.parse(file) for file in data.get("files", [])]
+            files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
         )
 
 
@@ -130,7 +129,7 @@ class ClarificationDto(object):
             "contest": self.contest_key,
             "time": self.request_time,
             "jury": self.from_jury,
-            "body": self.body
+            "body": self.body,
         }
         if self.contest_problem_key is not None:
             data["contest_problem"] = self.contest_problem_key
@@ -151,7 +150,7 @@ class ClarificationDto(object):
             request_time=data["time"],
             response_to=response_to,
             from_jury=data["jury"],
-            body=data["body"]
+            body=data["body"],
         )
 
 
@@ -162,9 +161,7 @@ class ContestDescriptionDto(object):
     end: Optional[float]
 
     def serialize(self):
-        data = {
-            "key": self.contest_key
-        }
+        data = {"key": self.contest_key}
         if self.start is not None:
             data["start"] = float(self.start)
         if self.end is not None:
@@ -179,11 +176,7 @@ class ContestDescriptionDto(object):
         end = data.get("end", None)
         if end is not None:
             end = float(end)
-        return ContestDescriptionDto(
-            contest_key=data["key"],
-            start=start,
-            end=end
-        )
+        return ContestDescriptionDto(contest_key=data["key"], start=start, end=end)
 
 
 @dataclasses.dataclass
@@ -202,7 +195,7 @@ class ContestDataDto(object):
             "languages": self.languages,
             "problems": self.problems,
             "submissions": [submission.serialize() for submission in self.submissions],
-            "clarifications": [clarification.serialize() for clarification in self.clarifications]
+            "clarifications": [clarification.serialize() for clarification in self.clarifications],
         }
         return data
 
@@ -214,5 +207,5 @@ class ContestDataDto(object):
             languages=data["languages"],
             problems=data["problems"],
             submissions=[SubmissionDto.parse(submission) for submission in data["submissions"]],
-            clarifications=[ClarificationDto.parse(clarification) for clarification in data["clarifications"]]
+            clarifications=[ClarificationDto.parse(clarification) for clarification in data["clarifications"]],
         )

@@ -122,7 +122,7 @@ class Problem(object):
         return f"{self.name}"
 
 
-P = TypeVar('P', bound=Problem)
+P = TypeVar("P", bound=Problem)
 
 
 class ProblemLoader(abc.ABC, Generic[P]):

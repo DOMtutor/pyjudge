@@ -12,8 +12,20 @@ import yaml
 import problemtools.run as run
 import problemtools.verifyproblem
 import problemtools.verifyproblem as verify
-from pyjudge.model import ProblemTestCase, Affiliation, JuryProblemSubmission, Verdict, Language, Problem, \
-    ProblemLimits, Executable, ProblemLoader, ExecutableType, Team, TeamCategory
+from pyjudge.model import (
+    ProblemTestCase,
+    Affiliation,
+    JuryProblemSubmission,
+    Verdict,
+    Language,
+    Problem,
+    ProblemLimits,
+    Executable,
+    ProblemLoader,
+    ExecutableType,
+    Team,
+    TeamCategory,
+)
 from pyjudge.model.util import get_md5
 
 log = logging.getLogger(__name__)
@@ -108,22 +120,26 @@ class RepositoryAuthor(object):
             if isinstance(regexes, str):
                 regexes = [regexes]
             patterns = [re.compile(rf"^[a-zA-z\d_-]*{regex}[a-zA-z\d_-]*$") for regex in regexes]
-        return RepositoryAuthor(key=key, name=data["name"], patterns=patterns,
-                                affiliation=Affiliation(short_name="tum", name="TUM", country="DEU"))
+        return RepositoryAuthor(
+            key=key,
+            name=data["name"],
+            patterns=patterns,
+            affiliation=Affiliation(short_name="tum", name="TUM", country="DEU"),
+        )
 
 
 class JurySubmission(JuryProblemSubmission):
     EXPECTED_RESULTS = {
-        'accepted': [Verdict.CORRECT],
-        'too_slow': [Verdict.TIME_LIMIT],
-        'time_limit_exceeded': [Verdict.TIME_LIMIT],
-        'timelimit_exceeded': [Verdict.TIME_LIMIT],
-        'slow_input': [Verdict.CORRECT, Verdict.TIME_LIMIT],
-        'slow': [Verdict.CORRECT, Verdict.TIME_LIMIT],
-        'run_time_error': [Verdict.RUN_ERROR],
-        'runtime_error': [Verdict.RUN_ERROR],
-        'wrong_answer': [Verdict.WRONG_ANSWER],
-        'compile_error': [Verdict.COMPILER_ERROR]
+        "accepted": [Verdict.CORRECT],
+        "too_slow": [Verdict.TIME_LIMIT],
+        "time_limit_exceeded": [Verdict.TIME_LIMIT],
+        "timelimit_exceeded": [Verdict.TIME_LIMIT],
+        "slow_input": [Verdict.CORRECT, Verdict.TIME_LIMIT],
+        "slow": [Verdict.CORRECT, Verdict.TIME_LIMIT],
+        "run_time_error": [Verdict.RUN_ERROR],
+        "runtime_error": [Verdict.RUN_ERROR],
+        "wrong_answer": [Verdict.WRONG_ANSWER],
+        "compile_error": [Verdict.COMPILER_ERROR],
     }
 
     def __init__(self, path: pathlib.Path, config: "Repository"):
@@ -177,7 +193,7 @@ class JurySubmission(JuryProblemSubmission):
         elif self._source_md5 != source_md5:
             raise ValueError("Source MD5 changed")
         try:
-            source_code: str = source_bytes.decode(encoding='utf-8', errors='strict')
+            source_code: str = source_bytes.decode(encoding="utf-8", errors="strict")
         except UnicodeDecodeError as e:
             raise ValueError(f"Failed to decode {self.path}", e)
         if "\x00" in source_code:
@@ -259,9 +275,12 @@ class RepositoryProblem(Problem):
         p = self._problemtools.__enter__()
         if p.output_validators._validators:
             # Add the checkers support data as include directory
-            validators = run.find_programs(str(self.directory / "output_validators"),
-                                           include_dir=str(self.repository.checkers_base_directory),
-                                           language_config=p.language_config, work_dir=p.tmpdir)
+            validators = run.find_programs(
+                str(self.directory / "output_validators"),
+                include_dir=str(self.repository.checkers_base_directory),
+                language_config=p.language_config,
+                work_dir=p.tmpdir,
+            )
             p.output_validators._validators = validators
         self._problemtools_loaded = True
         return p
@@ -278,6 +297,7 @@ class RepositoryProblem(Problem):
         self._generate_testcases()
 
         import problemtools.run.limit as limit
+
         limit.check_limit_capabilities(self)
 
         verify.ProblemAspect.bail_on_error = True
@@ -337,11 +357,19 @@ class RepositoryProblem(Problem):
             # noinspection PyUnusedLocal
             def generate(s, a, b):
                 raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
+
         else:
             generator_classes = [file.name for file in generator_files]
-            self.log.debug("Compiling generator files %s", ' '.join(generator_classes))
-            subprocess.run(["javac"] + generator_classes, cwd=generator_dir.absolute(), timeout=30, check=True,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            self.log.debug("Compiling generator files %s", " ".join(generator_classes))
+            subprocess.run(
+                ["javac"] + generator_classes,
+                cwd=generator_dir.absolute(),
+                timeout=30,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+            )
             generator_name = generators[0].with_suffix("").name
 
             def generate(s, seed_file: pathlib.Path, input_file: Optional[pathlib.Path] = None):
@@ -364,9 +392,16 @@ class RepositoryProblem(Problem):
 
                 s.log.debug("Generating input %s from seed file %s", input_file.name, seed_file.name)
                 with input_file.open(mode="wt") as f:
-                    subprocess.run(["java", generator_name], cwd=generator_dir.absolute(), timeout=20, check=True,
-                                   input="\n".join(lines), stdout=f, stderr=subprocess.PIPE,
-                                   universal_newlines=True)
+                    subprocess.run(
+                        ["java", generator_name],
+                        cwd=generator_dir.absolute(),
+                        timeout=20,
+                        check=True,
+                        input="\n".join(lines),
+                        stdout=f,
+                        stderr=subprocess.PIPE,
+                        universal_newlines=True,
+                    )
 
         # noinspection PyAttributeOutsideInit
         self.generate_input_if_required = generate.__get__(self, RepositoryProblem)
@@ -380,9 +415,8 @@ class RepositoryProblem(Problem):
         assert self._problemtools_loaded
 
         # noinspection PyProtectedMember
-        submission: run.SourceCode = self._problemtools.submissions._submissions['AC'][0]
-        self.log.debug("Generating answer for %s using submission %s",
-                       answer_file.name, submission.name)
+        submission: run.SourceCode = self._problemtools.submissions._submissions["AC"][0]
+        self.log.debug("Generating answer for %s using submission %s", answer_file.name, submission.name)
         result, error = submission.compile()
         if not result:
             raise ExecutionError(error)
@@ -494,9 +528,12 @@ class Repository(object):
         if not language_directory.is_dir():
             raise ValueError(f"No language data found for {key} (at {language_directory})")
 
-        compile_script = Executable(key=f"compile_{key}", description=f"compile {data['name']}",
-                                    executable_type=ExecutableType.Compile,
-                                    contents=Executable.get_directory_contents(language_directory))
+        compile_script = Executable(
+            key=f"compile_{key}",
+            description=f"compile {data['name']}",
+            executable_type=ExecutableType.Compile,
+            contents=Executable.get_directory_contents(language_directory),
+        )
         return Language(
             key=key,
             name=data["name"],
@@ -504,7 +541,7 @@ class Repository(object):
             extensions=set(data["extensions"]),
             entry_point_required=data.get("entry_point_required", False),
             entry_point_description=data.get("entry_point_description", None),
-            compile_script=compile_script
+            compile_script=compile_script,
         )
 
     def __init__(self, base_path: pathlib.Path):
@@ -515,8 +552,9 @@ class Repository(object):
             raise ValueError(f"Directory {base_path} does not seem to be a Kattis repository")
         with config_path.open(mode="rt") as f:
             configuration = yaml.safe_load(f)
-        self.authors: List[RepositoryAuthor] = [RepositoryAuthor.parse(author, data)
-                                                for author, data in configuration.get("authors", {}).items()]
+        self.authors: List[RepositoryAuthor] = [
+            RepositoryAuthor.parse(author, data) for author, data in configuration.get("authors", {}).items()
+        ]
 
         data_directory = pathlib.Path(__file__).parent
         self.checkers_base_directory = data_directory / "checker"
@@ -525,14 +563,18 @@ class Repository(object):
 
         with (data_directory / "languages.yml").open(mode="rt") as f:
             language_configuration = yaml.safe_load(f)
-        self.languages: List[Language] = [Repository.parse_language(self.language_base_directory, lang, data)
-                                          for lang, data in language_configuration.items()]
+        self.languages: List[Language] = [
+            Repository.parse_language(self.language_base_directory, lang, data)
+            for lang, data in language_configuration.items()
+        ]
         self.languages_by_extension: Dict[str, Language] = dict()
         for lang in self.languages:
             for extension in lang.extensions:
                 if extension in self.languages_by_extension:
-                    raise ValueError(f"Multiple languages have extension {extension}: "
-                                     f"{lang} and {self.languages_by_extension[extension]}")
+                    raise ValueError(
+                        f"Multiple languages have extension {extension}: "
+                        f"{lang} and {self.languages_by_extension[extension]}"
+                    )
                 self.languages_by_extension[extension] = lang
 
         self.problems = RepositoryProblems(self, base_path / "problems")
@@ -578,28 +620,50 @@ class Repository(object):
 
         if not files:
             raise ValueError("Empty checker")
-        return Executable(f"cmp_{problem.repository_key}", f"checker for {problem.repository_key}",
-                          executable_type=ExecutableType.Compare, contents=files)
+        return Executable(
+            f"cmp_{problem.repository_key}",
+            f"checker for {problem.repository_key}",
+            executable_type=ExecutableType.Compare,
+            contents=files,
+        )
 
     # noinspection PyMethodMayBeStatic
     def get_solution_team_of_language(self, language: Language):
-        return Team(name=f"sol_lang_{language.key}", display_name=f"Sample Solution {language.name}",
-                    category=TeamCategory.Solution, affiliation=None, members=[])
+        return Team(
+            name=f"sol_lang_{language.key}",
+            display_name=f"Sample Solution {language.name}",
+            category=TeamCategory.Solution,
+            affiliation=None,
+            members=[],
+        )
 
     # noinspection PyMethodMayBeStatic
     def get_team_of_author(self, author: Optional[RepositoryAuthor]):
         if author is None:
-            return Team(name="sol_author_unknown", display_name="Author Unknown",
-                        category=TeamCategory.Author, affiliation=None, members=[])
-        return Team(name=f"sol_author_{author.key}", display_name=f"Author {author.name}",
-                    category=TeamCategory.Author, affiliation=author.affiliation, members=[])
+            return Team(
+                name="sol_author_unknown",
+                display_name="Author Unknown",
+                category=TeamCategory.Author,
+                affiliation=None,
+                members=[],
+            )
+        return Team(
+            name=f"sol_author_{author.key}",
+            display_name=f"Author {author.name}",
+            category=TeamCategory.Author,
+            affiliation=author.affiliation,
+            members=[],
+        )
 
     def get_default_runscript(self) -> Dict[str, pathlib.Path]:
         if not self.runscript_directory.is_dir():
             raise ValueError(f"No runscript found at {self.runscript_directory}")
 
-        return {path.relative_to(self.runscript_directory): path for
-                path in self.runscript_directory.rglob("*") if path.is_file()}
+        return {
+            path.relative_to(self.runscript_directory): path
+            for path in self.runscript_directory.rglob("*")
+            if path.is_file()
+        }
 
     def find_language_of_submission(self, submission: JurySubmission) -> Optional[Language]:
         return self.languages_by_extension.get(submission.extension, None)

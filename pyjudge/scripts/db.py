@@ -46,11 +46,14 @@ class DatabaseTransaction(object):
 
 
 class DatabaseTransactionCursor(object):
-    def __init__(self, connection: MySQLConnectionAbstract,
-                 readonly: bool = False,
-                 isolation_level: Optional[str] = None,
-                 buffered_cursor: bool = False,
-                 prepared_cursor: bool = True):
+    def __init__(
+        self,
+        connection: MySQLConnectionAbstract,
+        readonly: bool = False,
+        isolation_level: Optional[str] = None,
+        buffered_cursor: bool = False,
+        prepared_cursor: bool = True,
+    ):
         self.connection = connection
         self.readonly: bool = readonly
         self.isolation_level: Optional[str] = isolation_level
@@ -60,11 +63,8 @@ class DatabaseTransactionCursor(object):
         self.cursor: Optional[MySQLCursor] = None
 
     def __enter__(self) -> MySQLCursor:
-        self.connection.start_transaction(consistent_snapshot=True,
-                                          isolation_level=self.isolation_level)
-        self.cursor = self.connection.cursor(buffered=self.buffered_cursor,
-                                             raw=False,
-                                             prepared=self.prepared_cursor)
+        self.connection.start_transaction(consistent_snapshot=True, isolation_level=self.isolation_level)
+        self.cursor = self.connection.cursor(buffered=self.buffered_cursor, raw=False, prepared=self.prepared_cursor)
         return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -89,10 +89,9 @@ class Database(object):
         self._connection = None
 
     def __enter__(self):
-        self._connection = mysql.connector.connect(host=self.host, port=self.port,
-                                                   user=self.user, passwd=self.password,
-                                                   database=self.database,
-                                                   use_pure=False)
+        self._connection = mysql.connector.connect(
+            host=self.host, port=self.port, user=self.user, passwd=self.password, database=self.database, use_pure=False
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -102,11 +101,13 @@ class Database(object):
     def transaction(self, **kwargs) -> DatabaseTransaction:
         return DatabaseTransaction(self._connection, **kwargs)
 
-    def transaction_cursor(self,
-                           readonly: bool = False,
-                           isolation_level: Optional[str] = None,
-                           buffered_cursor: bool = False,
-                           prepared_cursor: bool = True) -> DatabaseTransactionCursor:
+    def transaction_cursor(
+        self,
+        readonly: bool = False,
+        isolation_level: Optional[str] = None,
+        buffered_cursor: bool = False,
+        prepared_cursor: bool = True,
+    ) -> DatabaseTransactionCursor:
         return DatabaseTransactionCursor(self._connection, readonly, isolation_level, buffered_cursor, prepared_cursor)
 
 

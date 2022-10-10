@@ -5,7 +5,13 @@ from typing import List, Collection, Tuple, Dict, Generator
 from mysql.connector.cursor import MySQLCursor
 
 from pyjudge.action.update import category_to_database
-from pyjudge.data.submission import SubmissionDto, SubmissionFileDto, ClarificationDto, ContestProblemDto, ContestDescriptionDto
+from pyjudge.data.submission import (
+    SubmissionDto,
+    SubmissionFileDto,
+    ClarificationDto,
+    ContestProblemDto,
+    ContestDescriptionDto,
+)
 from pyjudge.data.teams import UserDto, TeamDto
 from pyjudge.scripts.db import Database, list_param, get_unique
 from pyjudge.model import Verdict, TeamCategory
@@ -21,12 +27,13 @@ def parse_judging_verdict(key):
         "memory-limit": Verdict.MEMORY_LIMIT,
         "output-limit": Verdict.OUTPUT_LIMIT,
         "no-output": Verdict.NO_OUTPUT,
-        "compiler-error": Verdict.COMPILER_ERROR
+        "compiler-error": Verdict.COMPILER_ERROR,
     }[key]
 
 
-def _find_contest_with_problems_by_key(cursor: MySQLCursor, contest_key: str) \
-        -> Tuple[str, Dict[int, ContestProblemDto]]:
+def _find_contest_with_problems_by_key(
+    cursor: MySQLCursor, contest_key: str
+) -> Tuple[str, Dict[int, ContestProblemDto]]:
     cursor.execute("SELECT cid FROM contest WHERE shortname = ?", (contest_key,))
     contest_id = get_unique(cursor)[0]
     cursor.execute(
@@ -34,14 +41,12 @@ def _find_contest_with_problems_by_key(cursor: MySQLCursor, contest_key: str) \
         "FROM contestproblem cp "
         "  JOIN problem p ON p.probid = cp.probid "
         "WHERE cid = ?",
-        (contest_id,)
+        (contest_id,),
     )
     problems = {
         problem_id: ContestProblemDto(
-            problem_key=problem_key,
-            contest_problem_key=contest_name,
-            points=points,
-            color=color)
+            problem_key=problem_key, contest_problem_key=contest_name, points=points, color=color
+        )
         for (contest_name, points, problem_id, color, problem_key) in cursor
     }
     return contest_id, problems
@@ -80,7 +85,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             f"WHERE "
             f"  s.cid = ? AND "
             f"  p.probid IN {list_param(contest_problems_by_id)} ",
-            (contest_id, *contest_problems_by_id.keys())
+            (contest_id, *contest_problems_by_id.keys()),
         )
         submission_data = {}
         for submission_id, problem_id, submission_time, language_key, team_key in cursor:
@@ -99,7 +104,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
                 f"WHERE "
                 f"  j.valid = 1 AND "
                 f"  s.submitid IN {list_param(submission_data)}",
-                tuple(submission_data.keys())
+                tuple(submission_data.keys()),
             )
         else:
             cursor.execute(
@@ -109,7 +114,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
                 f"  JOIN judging j on s.submitid = j.submitid "
                 f"WHERE "
                 f"  s.submitid IN {list_param(submission_data)}",
-                tuple(submission_data.keys())
+                tuple(submission_data.keys()),
             )
         judging_ids = set()
         judging_data = {}
@@ -131,7 +136,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             f"WHERE "
             f"  s.submitid IN {list_param(submission_data)} "
             f"GROUP BY s.submitid",
-            tuple(submission_data.keys())
+            tuple(submission_data.keys()),
         )
         source_data = defaultdict(dict)
         for submission_id, filename, content in cursor:
@@ -151,7 +156,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             f"WHERE "
             f"  j.judgingid IN {list_param(judging_ids)} "
             f"GROUP BY j.judgingid",
-            tuple(judging_ids)
+            tuple(judging_ids),
         )
         judging_runtime = {judging_id: float(runtime) for judging_id, runtime in cursor}
 
@@ -162,8 +167,12 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
         judging_id, judging_result = judging_data[submission_id]
         runtime = judging_runtime.get(judging_id, None)
         if runtime is None and judging_result != Verdict.COMPILER_ERROR:
-            logging.warning("No runtime found for submission %s/judging %s with result %s",
-                            submission_id, judging_id, judging_result)
+            logging.warning(
+                "No runtime found for submission %s/judging %s with result %s",
+                submission_id,
+                judging_id,
+                judging_result,
+            )
         if runtime is not None:
             runtime = round(runtime, 3)  # Round to milliseconds
 
@@ -176,7 +185,7 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             submission_time=submission_time,
             files=[SubmissionFileDto(filename, content) for (filename, content) in source_data[submission_id].items()],
             too_late=contest_end < submission_time,
-            maximum_runtime=runtime
+            maximum_runtime=runtime,
         )
 
 
@@ -189,17 +198,22 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
             f"WHERE "
             f"  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
             f"  c.cid = ? ",
-            (contest_id,)
+            (contest_id,),
         )
 
         clarification_data = {
             clarification_id: (problem_id, team_key, bool(from_jury), body, response_id, float(submit_time))
-            for clarification_id, problem_id, team_key, from_jury, body, response_id, submit_time
-            in cursor
+            for clarification_id, problem_id, team_key, from_jury, body, response_id, submit_time in cursor
         }
         clarifications_by_id = {}
-        for clarification_id, (problem_id, team_key, from_jury, body, response_id, submit_time) in \
-                clarification_data.items():
+        for clarification_id, (
+            problem_id,
+            team_key,
+            from_jury,
+            body,
+            response_id,
+            submit_time,
+        ) in clarification_data.items():
             if response_id is not None:
                 if response_id not in clarification_data:
                     raise ValueError(f"Inconsistent clarification {clarification_id} (response not in list)")
@@ -221,7 +235,7 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
                 from_jury=from_jury,
                 contest_key=contest_key,
                 contest_problem_key=contest_problem_key,
-                body=body
+                body=body,
             )
             clarifications_by_id[clarification_id] = clarification
 
@@ -237,20 +251,22 @@ def find_teams(database: Database, categories: List[TeamCategory]) -> List[TeamD
             f"  JOIN team_category tc on t.categoryid = tc.categoryid "
             f"WHERE "
             f"  tc.name IN {list_param(categories)} ",
-            tuple(category_to_database[category] for category in categories)
+            tuple(category_to_database[category] for category in categories),
         )
         team_data = {team_id: (key, name, category) for team_id, key, name, category in cursor}
         cursor.execute(
             f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
             f"WHERE "
             f"  u.teamid IN {list_param(team_data)}",
-            tuple(team_data.keys())
+            tuple(team_data.keys()),
         )
         team_users = {team_id: [] for team_id in team_data.keys()}
         for name, username, email, team_id in cursor:
             team_users[team_id].append(UserDto(login_name=username, display_name=name, email=email))
-        return [TeamDto(team_key, team_name, category, team_users[team_id])
-                for team_id, (team_key, team_name, category) in team_data.items()]
+        return [
+            TeamDto(team_key, team_name, category, team_users[team_id])
+            for team_id, (team_key, team_name, category) in team_data.items()
+        ]
 
 
 def find_languages(database: Database) -> Dict[str, str]:

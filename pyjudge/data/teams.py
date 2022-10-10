@@ -12,11 +12,7 @@ class UserDto(object):
         return self.display_name
 
     def serialize(self):
-        return {
-            "login": self.login_name,
-            "name": self.display_name,
-            "email": self.email
-        }
+        return {"login": self.login_name, "name": self.display_name, "email": self.email}
 
     @staticmethod
     def parse(data):
@@ -37,7 +33,7 @@ class TeamDto(object):
         data = {
             "key": self.key,
             "display_name": self.display_name,
-            "members": [user.serialize() for user in self.members]
+            "members": [user.serialize() for user in self.members],
         }
         if self.category_name is not None:
             data["category"] = self.category_name
@@ -49,5 +45,5 @@ class TeamDto(object):
             key=data["key"],
             display_name=data["display_name"],
             category_name=data.get("category", None),
-            members=list(map(UserDto.parse, data["members"]))
+            members=list(map(UserDto.parse, data["members"])),
         )

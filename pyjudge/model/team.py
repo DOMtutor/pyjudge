@@ -69,15 +69,22 @@ class Team(object):
                 raise ValueError(f"Non-existing user {member_name}")
             members.append(user_by_name[member_name])
 
-        return Team(name=data["name"], display_name=data["display_name"], members=members,
-                    category=category, affiliation=affiliation)
+        return Team(
+            name=data["name"],
+            display_name=data["display_name"],
+            members=members,
+            category=category,
+            affiliation=affiliation,
+        )
 
     def serialize(self):
-        return {"name": self.name,
-                "display_name": self.display_name,
-                "category": self.category.serialize(),
-                "members": [user.login_name for user in self.members],
-                "affiliation": self.affiliation.short_name if self.affiliation else None}
+        return {
+            "name": self.name,
+            "display_name": self.display_name,
+            "category": self.category.serialize(),
+            "members": [user.login_name for user in self.members],
+            "affiliation": self.affiliation.short_name if self.affiliation else None,
+        }
 
     @property
     def json_ref(self):
