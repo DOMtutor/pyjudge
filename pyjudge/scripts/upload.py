@@ -1,8 +1,6 @@
 # NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
 # version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
-import mysql.connector
 from mysql.connector.cursor import MySQLCursor
-#
 
 import argparse
 import dataclasses
@@ -96,10 +94,12 @@ def upload_contest(config: PyjudgeConfig, contest: Contest,
 
             with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
                 update.create_or_update_contest_problems(cursor, contest, contest_id, problem_ids)
-                if update_submissions:
-                    for contest_problem in contest.problems:
-                        assert isinstance(contest_problem.problem, RepositoryProblem)
-                        _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
+
+        if update_submissions:
+            for contest_problem in contest.problems:
+                with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
+                    assert isinstance(contest_problem.problem, RepositoryProblem)
+                    _update_problem_submissions(cursor, contest_problem.problem, config.repository, [contest_id])
 
     logging.info("Updated contest %s", contest)
 
@@ -121,7 +121,7 @@ def upload_problems(config: PyjudgeConfig, problems: List[RepositoryProblem],
 
     with config.database as connection:
         for problem in problems:
-            with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
+            with connection.transaction_cursor(prepared_cursor=True) as cursor:
                 update.create_or_update_problem_data(cursor, config.judge, problem)
                 update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:
