@@ -27,10 +27,9 @@ from pyjudge.model import (
 )
 
 from .data import DbTestCase, test_case_compare_key
-
-# Debug MySQL in case it acts up
 from ..model.settings import JudgeInstance
 
+# Debug MySQL in case it acts up
 faulthandler.enable()
 
 category_to_database = {
@@ -41,6 +40,8 @@ category_to_database = {
     TeamCategory.Author: "Authors",
 }
 database_to_category = {value: key for key, value in category_to_database.items()}
+
+log = logging.getLogger(__name__)
 
 user_role_to_database = {
     UserRole.Participant: ["team"],
@@ -62,11 +63,12 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
         for name, category_id in category_ids_by_name.items()
         if name in database_to_category
     }
+    log.debug("Found existing categories %s", ", ".join(category_ids_by_name.keys()))
     if lazy and category_ids_by_name.keys() == expected_category_names:
         assert category_ids.keys() == set(TeamCategory)
         return category_ids
 
-    logging.info("Updating judge categories")
+    log.info("Updating judge categories")
 
     category_ids_to_delete: Collection[int] = {
         category_id for name, category_id in category_ids_by_name.items() if name not in expected_category_names
@@ -77,8 +79,8 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
         (TeamCategory.Participants, "white", True, 0, False),
         (TeamCategory.Hidden, "lightgray", False, 0, False),
         (TeamCategory.Jury, "lightgreen", False, 6, False),
-        (TeamCategory.Author, "green", False, 7, False),
-        (TeamCategory.Solution, "green", False, 9, False),
+        (TeamCategory.Solution, "green", False, 7, False),
+        (TeamCategory.Author, "green", False, 8, False),
     ]:
         name = category_to_database[category]
         cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
@@ -96,11 +98,11 @@ def update_categories(cursor: MySQLCursor, lazy=False) -> Dict[TeamCategory, int
             "UPDATE team_category "
             "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = ? "
             "WHERE categoryid = ?",
-            (order, color, visible, category_id, self_reg),
+            (order, color, visible, self_reg, category_id),
         )
 
     if category_ids_to_delete:
-        logging.info("Deleting %d categories", len(category_ids_to_delete))
+        log.info("Deleting %d categories", len(category_ids_to_delete))
         cursor.execute(
             f"UPDATE team SET categoryid = NULL " f"WHERE categoryid IN {list_param(category_ids_to_delete)}",
             tuple(category_ids_to_delete),
@@ -119,7 +121,7 @@ def find_all_categories(cursor) -> Dict[TeamCategory, int]:
 def create_or_update_teams(
     cursor: MySQLCursor, teams: Collection[Team], affiliation_ids: Dict[Affiliation, int], user_ids: Dict[User, int]
 ) -> Dict[Team, int]:
-    logging.info("Updating %d teams", len(teams))
+    log.info("Updating %d teams", len(teams))
     if not teams:
         return {}
 
@@ -142,7 +144,7 @@ def create_or_update_teams(
                 (team.display_name, team_category, affiliation_id, team_id),
             )
         else:
-            logging.debug("Creating team %s", team.name)
+            log.debug("Creating team %s", team.name)
             cursor.execute(
                 "INSERT INTO team (name, display_name, categoryid, affilid) " "VALUES (?, ?, ?, ?)",
                 (team.name, team.display_name, team_category, affiliation_id),
@@ -164,7 +166,7 @@ def create_or_update_teams(
 
 
 def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
-    logging.debug("Updating executable %s", executable)
+    log.debug("Updating executable %s", executable)
     data, md5 = executable.make_zip()
     cursor.execute(
         "REPLACE INTO executable (execid, type, description, zipfile, md5sum) " "VALUES (?, ?, ?, ?, ?)",
@@ -174,7 +176,7 @@ def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
 
 def create_or_update_language(cursor: MySQLCursor, language: Language):
     create_or_update_executable(cursor, language.compile_script)
-    logging.debug("Updating language %s", language)
+    log.debug("Updating language %s", language)
     cursor.execute(
         "INSERT INTO language (langid, "
         "externalid, compile_script, name, extensions, "
@@ -223,16 +225,16 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
 
 
 def create_or_update_problem_data(cursor: MySQLCursor, instance: JudgeInstance, problem: Problem) -> int:
-    logging.debug("Updating problem %s", problem)
+    log.debug("Updating problem %s", problem)
 
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
     if id_query:
         problem_id = id_query[0]
-        logging.debug("Problem present in database with id %d", problem_id)
+        log.debug("Problem present in database with id %d", problem_id)
         cursor.execute("UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id))
     else:
-        logging.debug("Creating problem %s in database", problem)
+        log.debug("Creating problem %s in database", problem)
         cursor.execute("INSERT INTO problem (externalid, name) VALUES (?, ?)", (problem.key, problem.name))
         problem_id = cursor.lastrowid
 
@@ -268,13 +270,13 @@ def create_or_update_problem_data(cursor: MySQLCursor, instance: JudgeInstance, 
         assert checker.executable_type == ExecutableType.Compare
         create_or_update_executable(cursor, checker)
         cursor.execute("UPDATE problem SET special_compare = ? WHERE probid = ?", (checker.key, problem_id))
-        logging.debug("Updated checker")
+        log.debug("Updated checker")
 
     return problem_id
 
 
 def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) -> int:
-    logging.debug("Updating problem test cases %s", problem)
+    log.debug("Updating problem test cases %s", problem)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     problem_id = cursor.fetchone()[0]
 
@@ -301,7 +303,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
                 raise KeyError(f"Duplicate case for problem {problem_id}")
             testcases_by_name[file_name] = test_case
 
-    logging.debug("Found %d test cases in database, %d invalid entries", len(testcases_by_name), len(leftover_cases))
+    log.debug("Found %d test cases in database, %d invalid entries", len(testcases_by_name), len(leftover_cases))
 
     matched_cases: List[Tuple[ProblemTestCase, DbTestCase]] = []
     missing_cases: List[ProblemTestCase] = []
@@ -316,7 +318,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             missing_cases.append(problem_testcase)
     leftover_cases.extend(testcases_by_name.values())
 
-    logging.debug(
+    log.debug(
         "Matched %d cases, creating %d new, %d leftovers", len(matched_cases), len(missing_cases), len(leftover_cases)
     )
 
@@ -345,7 +347,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
                 database_case.input_md5 = problem_testcase.input_md5
                 database_case.output_md5 = problem_testcase.output_md5
         else:
-            logging.warning("Missing test case content on existing case %s", problem_testcase)
+            log.warning("Missing test case content on existing case %s", problem_testcase)
             update_testcase_content.append((problem_testcase, database_case))
 
     existing_cases: List[Tuple[ProblemTestCase, DbTestCase]] = matched_cases.copy()
@@ -400,7 +402,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         update_testcase_content.append((problem_testcase, database_case))
 
     if leftover_cases:
-        logging.debug("Deleting %d leftover cases", len(leftover_cases))
+        log.debug("Deleting %d leftover cases", len(leftover_cases))
         leftover_ids = tuple(case.case_id for case in leftover_cases)
         cursor.execute(f"DELETE FROM testcase_content WHERE testcaseid IN {list_param(leftover_ids)}", leftover_ids)
         cursor.execute(f"DELETE FROM testcase WHERE testcaseid IN {list_param(leftover_ids)}", leftover_ids)
@@ -423,7 +425,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             rank_update.append((rank, case))
 
     if rank_update:
-        logging.debug("Updating ranks of %d elements", len(rank_update))
+        log.debug("Updating ranks of %d elements", len(rank_update))
         # Ugly hack
         maximal_rank = max(database_case.rank for _, database_case in existing_cases) + 1
         for _, case in rank_update:
@@ -433,10 +435,10 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             cursor.execute("UPDATE testcase SET `rank` = ? WHERE testcaseid = ?", (new_rank, case.case_id))
             case.rank = new_rank
     else:
-        logging.debug("No rank updates required")
+        log.debug("No rank updates required")
 
     if update_testcase_content:
-        logging.debug("Updating content of %d cases", len(update_testcase_content))
+        log.debug("Updating content of %d cases", len(update_testcase_content))
         for problem_testcase, database_case in update_testcase_content:
             image_data = problem_testcase.image
             if image_data is None:
@@ -460,13 +462,13 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             tuple(testcases_without_image_ids),
         )
         if cursor.rowcount:
-            logging.debug("Removed images from %d cases", cursor.rowcount)
+            log.debug("Removed images from %d cases", cursor.rowcount)
 
     return problem_id
 
 
 def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
-    logging.info("Updating judge settings")
+    log.info("Updating judge settings")
     verdict_names = {
         Verdict.COMPILER_ERROR: "compiler-error",
         Verdict.PRESENTATION_ERROR: "presentation-error",
@@ -520,7 +522,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 
 def set_languages(cursor: MySQLCursor, languages: List[Language]):
-    logging.debug("Setting the list of languages")
+    log.info("Setting the list of languages")
     cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
         create_or_update_language(cursor, language)
@@ -551,7 +553,7 @@ def set_languages(cursor: MySQLCursor, languages: List[Language]):
             f"DELETE FROM language WHERE langid IN {list_param(languages_to_delete)}", tuple(languages_to_delete)
         )
     if languages_to_disallow:
-        logging.warning("There are some non-configured languages with submissions: %s", ",".join(languages_to_disallow))
+        log.warning("There are some non-configured languages with submissions: %s", ",".join(languages_to_disallow))
         cursor.execute(
             f"UPDATE language SET allow_submit = FALSE " f"WHERE langid IN {list_param(languages_to_disallow)}",
             tuple(languages_to_disallow),
@@ -564,7 +566,7 @@ def clear_invalid_submissions(cursor):
         f"WHERE NOT EXISTS(SELECT * FROM submission_file WHERE submitid = submission.submitid)"
     )
     if cursor.rowcount:
-        logging.warning("Dropped %d invalid submissions without files", cursor.rowcount)
+        log.warning("Dropped %d invalid submissions without files", cursor.rowcount)
 
 
 # TODO Should be for multiple problems :-)
@@ -579,7 +581,7 @@ def create_problem_submissions(
     contest_ids: Optional[List[int]] = None,
     check_source_code=True,
 ):
-    logging.info("Updating submissions of problem %s", problem.name)
+    log.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
     id_query = cursor.fetchone()
     if not id_query:
@@ -597,10 +599,10 @@ def create_problem_submissions(
             contest_ids.add(contest_id)
             contest_start[contest_id] = start_time
         if not contest_ids:
-            logging.info("Problem not used in any contests")
+            log.info("Problem not used in any contests")
             return
     elif not contest_ids:
-        logging.info("No contests specified")
+        log.info("No contests specified")
         return
     else:
         contest_ids = set(contest_ids)
@@ -609,7 +611,7 @@ def create_problem_submissions(
             contest_start[contest_id] = start_time
         if len(contest_start) != len(contest_ids):
             raise KeyError("Not all given contests exist")
-    logging.debug("Updating for contests with ids %s", ",".join(map(str, contest_ids)))
+    log.debug("Updating for contests with ids %s", ",".join(map(str, contest_ids)))
 
     submissions_grouped: Dict[Tuple[int, Tuple[str, ...]], ProblemSubmission] = dict()
     used_team_ids = dict()
@@ -617,7 +619,7 @@ def create_problem_submissions(
         team_id = team_ids[team]
         key = team_id, (submission.file_name,)
         if key in submissions_grouped:
-            logging.warning("Multiple submissions for %s/%s (same file name)", team, submission)
+            log.warning("Multiple submissions for %s/%s (same file name)", team, submission)
             continue
         used_team_ids[team_id] = team
         submissions_grouped[key] = submission
@@ -643,7 +645,7 @@ def create_problem_submissions(
                 Verdict.parse_from_judge(verdict) for verdict in expected_results_list
             )
         except KeyError:
-            logging.warning("Submission %s has invalid results %s", submission_id, expected_results_string)
+            log.warning("Submission %s has invalid results %s", submission_id, expected_results_string)
             invalid_submissions_groups.add((contest_id, team_id))
             invalid_submission_ids.add(submission_id)
             continue
@@ -692,7 +694,7 @@ def create_problem_submissions(
     for submission_id, (_, team_id, contest_id, expected_results, language_id) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
-            logging.warning("No files for submission %d", submission_id)
+            log.warning("No files for submission %d", submission_id)
 
         assert team_id in used_team_ids, f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
         submissions_by_contest_and_team[contest_id][team_id][file_names].append(submission_id)
@@ -702,7 +704,7 @@ def create_problem_submissions(
             for submission_ids in submissions_by_contest_and_team[contest_id].pop(team_id).values():
                 invalid_submission_ids.update(set(submission_ids))
 
-    logging.debug(
+    log.debug(
         "Found %d submissions, %d files, %d invalid submissions",
         len(existing_submissions),
         sum(map(len, submission_file_names.values())),
@@ -746,10 +748,10 @@ def create_problem_submissions(
                 existing_file_hashes = submission_files[existing_id]
 
                 if language.key != existing_language_id:
-                    logging.info("%s changed language?", submission)
+                    log.info("%s changed language?", submission)
                     insert = True
                 elif set(file_names) != set(existing_file_hashes.keys()):
-                    logging.debug(
+                    log.debug(
                         "%s changed files from %s to %s", ",".join(file_names), ",".join(existing_file_hashes.keys())
                     )
                     insert = True
@@ -757,13 +759,14 @@ def create_problem_submissions(
                     # TODO Multiple file submissions
                     assert len(file_names) == 1
                     if submission.source_md5() != existing_file_hashes[submission.file_name]:
-                        logging.debug("%s changed content in file %s", submission, submission.file_name)
+                        log.debug("%s changed hash", submission)
                         insert = True
                     elif check_source_code:
+                        log.debug("Checking existing source code of submission %s", submission)
                         cursor.execute("SELECT sourcecode FROM submission_file WHERE submitid = ?", (existing_id,))
                         source_bytes = submission.source.encode("utf-8")
                         if cursor.fetchone()[0] != source_bytes:
-                            logging.warning(
+                            log.warning(
                                 "%s has matching hash but differing source code in file",
                                 submission,
                                 submission.file_name,
@@ -779,7 +782,7 @@ def create_problem_submissions(
             expected_results_string = json.dumps(expected_keys)
             if insert:
                 source_code: str = submission.source
-                logging.debug(
+                log.debug(
                     "Adding submission %s by %s to contest %s, problem %s",
                     submission.file_name,
                     used_team_ids[team_id],
@@ -804,6 +807,7 @@ def create_problem_submissions(
                 new_submission_id = cursor.lastrowid
                 source_bytes = bytes(source_code.encode("utf-8"))
                 time.sleep(0.1)
+                log.debug("Inserting file %s for submission %s", submission.file_name, new_submission_id)
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) " "VALUES (?, ?, 1, ?)",
                     (new_submission_id, submission.file_name, source_bytes),
@@ -817,7 +821,7 @@ def create_problem_submissions(
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
-        logging.debug(
+        log.debug(
             "Deleting %d submissions (%s)", len(submissions_to_delete), ",".join(map(str, submissions_to_delete))
         )
         cursor.execute(
@@ -830,14 +834,14 @@ def create_problem_submissions(
         )
 
     if new_submissions or updated_submissions or submissions_to_delete:
-        logging.info(
+        log.info(
             "Updated submissions, created %d, updated %d, and deleted %d",
             new_submissions,
             updated_submissions,
             len(submissions_to_delete),
         )
     else:
-        logging.info("Updated submissions, no changes required")
+        log.info("Updated submissions, no changes required")
 
 
 def create_or_update_contest_problems(
@@ -868,7 +872,8 @@ def create_or_update_contest_problems(
 
 
 def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False) -> int:
-    date_format = "%Y-%m-%d %H:%M:%S %Z"
+    date_format = "%Y-%m-%d %H:%M:%S UTC%z"
+    # TODO Ugly hack, DOMjudge needs a timezone here but its not always parsed properly :(
 
     cursor.execute("SELECT cid, starttime, endtime FROM contest WHERE externalid = ?", (contest.key,))
     id_query = cursor.fetchone()
@@ -877,7 +882,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
 
         if float(current_start) <= time.time() <= float(current_end):
             if force:
-                logging.warning("Modified contest is currently running")
+                log.warning("Modified contest is currently running")
             else:
                 raise ValueError("Modified contest is currently running")
 
@@ -976,7 +981,7 @@ def fetch_user_roles(cursor: MySQLCursor) -> Dict[str, int]:
 
 
 def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[Affiliation]) -> Dict[Affiliation, int]:
-    logging.info("Updating %d affiliations", len(affiliations))
+    log.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
         return {}
     affiliations_by_id = {affiliation.short_name: affiliation for affiliation in affiliations}
@@ -1013,7 +1018,7 @@ def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[
 
 
 def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict[User, int]:
-    logging.info("Updating %d users", len(users))
+    log.info("Updating %d users", len(users))
     if not users:
         return {}
     for user in users:
@@ -1066,4 +1071,4 @@ def disable_unknown_users(cursor: MySQLCursor, user_login_names: Set[str]):
         f"UPDATE `user` SET enabled = FALSE " f"WHERE username NOT IN {list_param(valid_users)}", tuple(valid_users)
     )
     if cursor.rowcount:
-        logging.warning("Disabled %d users", cursor.rowcount)
+        log.warning("Disabled %d users", cursor.rowcount)

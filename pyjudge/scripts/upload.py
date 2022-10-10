@@ -234,12 +234,16 @@ def command_settings(config: PyjudgeConfig, _):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=pathlib.Path, required=True, help="Path to database config")
-    parser.add_argument("--repository", "-r", type=pathlib.Path, default=pathlib.Path.cwd(), help="Path to repository")
+    parser.add_argument(
+        "--repository", "-r", type=pathlib.Path, default=pathlib.Path.cwd() / "repository", help="Path to repository"
+    )
     parser.add_argument("--instance", type=pathlib.Path, required=True, help="Path to instance specification")
+    parser.add_argument("--debug", help="Enable debug messages", action='store_true')
+
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
     problem_parser.add_argument("--regex", nargs="*", help="Regexes to match problem name", default=[])
@@ -300,6 +304,9 @@ def main():
     settings_parser.set_defaults(func=command_settings)
 
     arguments = parser.parse_args()
+
+    if arguments.debug:
+        logging.getLogger("pyjudge").setLevel(level=logging.DEBUG)
 
     with arguments.instance.open(mode="rt") as f:
         instance_data = json.load(f)

@@ -73,6 +73,11 @@ class ProblemSubmission(abc.ABC):
     def source_md5(self) -> str:
         return get_md5(self.source.encode("utf-8"))
 
+    def __str__(self):
+        if self.expected_results is None:
+            return self.file_name
+        return f"S({self.file_name}@{','.join(map(str, self.expected_results))})"
+
 
 @dataclasses.dataclass
 class SubmissionAuthor(object):

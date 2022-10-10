@@ -53,13 +53,13 @@ class ContestAccess(object):
     def serialize(self):
         return {
             "teams": list(self.team_names),
-            "categories": [category.configuration_key for category in self.team_categories],
+            "categories": [category.serialize() for category in self.team_categories],
         }
 
 
 @dataclasses.dataclass
 class Contest(object):
-    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S %z"
+    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S UTC%z"
 
     key: str
     name: str
@@ -79,16 +79,26 @@ class Contest(object):
         self.validate()
 
     def validate(self):
+        if self.activation_time.tzinfo is None:
+            raise ValueError("Activation has no timezone")
         if self.start_time < self.activation_time:
             raise ValueError("Start before activate")
+        if self.start_time.tzinfo is None:
+            raise ValueError("Start has no timezone")
         if self.end_time < self.start_time:
             raise ValueError("End before start")
+        if self.end_time.tzinfo is None:
+            raise ValueError("End has no timezone")
         if self.deactivation_time is not None:
             if self.deactivation_time < self.end_time:
                 raise ValueError("Deactivated before end")
+            if self.deactivation_time.tzinfo is None:
+                raise ValueError("Deactivation has no timezone")
         if self.freeze_time is not None:
             if self.freeze_time < self.start_time or self.end_time < self.freeze_time:
                 raise ValueError("Freeze not during contest")
+            if self.freeze_time.tzinfo is None:
+                raise ValueError("Start has no timezone")
 
     def is_running(self, at: datetime):
         return self.start_time <= at <= self.end_time

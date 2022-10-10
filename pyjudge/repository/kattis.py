@@ -215,7 +215,7 @@ class RepositoryProblem(Problem):
 
     def __init__(self, directory: pathlib.Path, repository: "Repository"):
         self.repository = repository
-        self.repository_key = directory.name
+        self.repository_key: str = directory.name
         self.directory = directory
         description_file = self.directory / "problem.yaml"
         if not description_file.is_file():
