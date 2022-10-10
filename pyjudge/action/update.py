@@ -674,9 +674,11 @@ def create_problem_submissions(cursor: MySQLCursor, problem: Problem,
                                 contest_start[contest_id], expected_results_string))
                 new_submission_id = cursor.lastrowid
                 source_bytes = bytes(source_code.encode("utf-8"))
+                time.sleep(0.1)
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
                                (new_submission_id, submission.file_name, source_bytes))
+                time.sleep(0.1)
             else:
                 cursor.execute("UPDATE submission "
                                "SET submittime = ?, expected_results = ? "
