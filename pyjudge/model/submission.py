@@ -21,7 +21,7 @@ class Verdict(enum.Enum):
     @staticmethod
     def parse_from_judge(key):
         for verdict in Verdict:
-            if verdict.value[0] == key:
+            if verdict.judge_key() == key:
                 return verdict
         raise KeyError(key)
 
@@ -31,6 +31,9 @@ class Verdict(enum.Enum):
             if verdict.value[1] == key:
                 return verdict
         raise KeyError(key)
+
+    def judge_key(self):
+        return self.value[0]
 
     def serialize(self):
         return self.value[1]

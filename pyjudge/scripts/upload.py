@@ -1,5 +1,6 @@
 # NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
 # version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
+import mysql.connector
 from mysql.connector.cursor import MySQLCursor
 #
 
@@ -81,19 +82,19 @@ def upload_contest(config: PyjudgeConfig, contest: Contest,
             logging.info("Skipping problem verification")
 
     with config.database as connection:
-        with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+        with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
         if update_problems:
             problem_ids: Dict[Problem, int] = {}
             for contest_problem in contest.problems:
-                with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+                with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
                     problem_ids[contest_problem.problem] = \
                         update.create_or_update_problem_data(cursor, config.judge, contest_problem.problem)
                     if update_test_cases:
                         update.create_or_update_problem_testcases(cursor, contest_problem.problem)
 
-            with connection.transaction_cursor(isolation_level='READ COMMITTED', prepared_cursor=True) as cursor:
+            with connection.transaction_cursor(isolation_level='SERIALIZABLE', prepared_cursor=True) as cursor:
                 update.create_or_update_contest_problems(cursor, contest, contest_id, problem_ids)
                 if update_submissions:
                     for contest_problem in contest.problems:

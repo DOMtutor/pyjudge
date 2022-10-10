@@ -23,8 +23,8 @@ category_to_database = {
     TeamCategory.Participants: "Participants",
     TeamCategory.Hidden: "Participants (hidden)",
     TeamCategory.Jury: "Jury",
-    TeamCategory.Solution: "Solutions"
-    TeamCategory.Author: "Authors",
+    TeamCategory.Solution: "Solutions",
+    TeamCategory.Author: "Authors"
 }
 database_to_category = {value: key for key, value in category_to_database.items()}
 
@@ -649,6 +649,7 @@ def create_problem_submissions(cursor, problem: Problem,
                         insert = False
                 if insert:
                     updated_submissions += 1
+            expected_keys = [expected_result.judge_key() for expected_result in submission.expected_results]
             if insert:
                 source_code: str = submission.source
                 logging.debug("Adding submission %s by %s to contest %s, problem %s",
@@ -658,7 +659,7 @@ def create_problem_submissions(cursor, problem: Problem,
                                "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
                                (existing_id, contest_id, team_id, problem_id, language.key,
                                 contest_start[contest_id],
-                                json.dumps([expected_result.value for expected_result in submission.expected_results])))
+                                json.dumps(expected_keys)))
                 new_submission_id = cursor.lastrowid
                 cursor.execute("INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                                "VALUES (?, ?, 1, ?)",
@@ -668,7 +669,7 @@ def create_problem_submissions(cursor, problem: Problem,
                                "SET submittime = ?, expected_results = ? "
                                "WHERE submitid = ?",
                                (contest_start[contest_id],
-                                json.dumps([expected_result.value for expected_result in submission.expected_results]),
+                                json.dumps(expected_keys),
                                 existing_id))
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
