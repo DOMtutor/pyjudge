@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import time
@@ -872,8 +873,11 @@ def create_or_update_contest_problems(
 
 
 def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False) -> int:
-    date_format = "%Y-%m-%d %H:%M:%S UTC%z"
-    # TODO Ugly hack, DOMjudge needs a timezone here but its not always parsed properly :(
+    date_format = "%Y-%m-%d %H:%M:%S"
+    def format_datetime(dt: Optional[datetime.datetime]):
+        if dt is None:
+            return None
+        return f"{dt.strftime(date_format)} {dt.tzinfo}"
 
     cursor.execute("SELECT cid, starttime, endtime FROM contest WHERE externalid = ?", (contest.key,))
     id_query = cursor.fetchone()
@@ -902,15 +906,15 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
                 contest.name,
                 contest.key,
                 str(contest.activation_time.timestamp()),
-                contest.activation_time.strftime(date_format),
+                format_datetime(contest.activation_time),
                 str(contest.deactivation_time.timestamp()) if contest.deactivation_time else None,
-                contest.deactivation_time.strftime(date_format) if contest.deactivation_time else None,
+                format_datetime(contest.deactivation_time),
                 str(contest.start_time.timestamp()),
-                contest.start_time.strftime(date_format),
+                format_datetime(contest.start_time),
                 str(contest.end_time.timestamp()),
-                contest.end_time.strftime(date_format),
+                format_datetime(contest.end_time),
                 str(contest.freeze_time.timestamp()) if contest.freeze_time else None,
-                contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                format_datetime(contest.freeze_time),
                 contest.public_scoreboard,
                 contest.access is None,
                 contest_id,

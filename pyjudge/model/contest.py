@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional, List, Set
 
 import dateutil.parser
+import pytz
 
 from .problem import Problem, ProblemLoader
 from .team import TeamCategory
@@ -59,7 +60,7 @@ class ContestAccess(object):
 
 @dataclasses.dataclass
 class Contest(object):
-    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S UTC%z"
+    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
     key: str
     name: str
@@ -104,19 +105,28 @@ class Contest(object):
         return self.start_time <= at <= self.end_time
 
     @staticmethod
+    def _format_datetime(dt: datetime):
+        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo}"
+
+    @staticmethod
+    def _parse_datetime(string: str):
+        dt, tz = string.split(" ")
+        return pytz.timezone(tz).localize(datetime.strptime(dt, Contest.DATE_FORMAT))
+
+    @staticmethod
     def parse(data, problem_loader: ProblemLoader):
         public_scoreboard = data.get("public_scoreboard", False)
         problems = [ContestProblem.parse(problem, problem_loader) for problem in data["problems"]]
 
-        activate = dateutil.parser.parse(data["activate"])
-        start = dateutil.parser.parse(data["start"])
-        end = dateutil.parser.parse(data["end"])
+        activate = Contest._parse_datetime(data["activate"])
+        start = Contest._parse_datetime(data["start"])
+        end = Contest._parse_datetime(data["end"])
         freeze = data.get("freeze", None)
         if freeze is not None:
-            freeze = dateutil.parser.parse(freeze)
+            freeze = Contest._parse_datetime(freeze)
         deactivation = data.get("deactivate", None)
         if deactivation is not None:
-            deactivation = dateutil.parser.parse(deactivation)
+            deactivation = Contest._parse_datetime(deactivation)
         access = ContestAccess.parse(data["access"]) if data.get("access", None) is not None else None
 
         return Contest(
@@ -137,17 +147,17 @@ class Contest(object):
         data = {
             "key": self.key,
             "name": self.name,
-            "activate": self.activation_time.strftime(Contest.DATE_FORMAT),
-            "start": self.start_time.strftime(Contest.DATE_FORMAT),
-            "end": self.end_time.strftime(Contest.DATE_FORMAT),
+            "activate": Contest._format_datetime(self.activation_time),
+            "start": Contest._format_datetime(self.start_time),
+            "end": Contest._format_datetime(self.end_time),
             "problems": [problem.serialize(problem_loader) for problem in self.problems],
         }
         if self.access is not None:
             data["access"] = self.access.serialize()
         if self.freeze_time is not None:
-            data["freeze"] = self.freeze_time.strftime(Contest.DATE_FORMAT)
+            data["freeze"] = Contest._format_datetime(self.freeze_time)
         if self.deactivation_time is not None:
-            data["deactivate"] = self.deactivation_time.strftime(Contest.DATE_FORMAT)
+            data["deactivate"] = Contest._format_datetime(self.deactivation_time)
         return data
 
     def is_active(self, point: datetime):
