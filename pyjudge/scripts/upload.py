@@ -187,6 +187,12 @@ def update_settings(config: PyjudgeConfig):
             update.set_languages(cursor, config.repository.languages)  # TODO Awkward
 
 
+def check_database(config: PyjudgeConfig):
+    with config.database as connection:
+        with connection.transaction_cursor(prepared_cursor=True) as cursor:
+            update.clear_invalid_submissions(cursor)
+
+
 def command_problem(config: PyjudgeConfig, args):
     problems: List[RepositoryProblem] = []
     if args.regex:
@@ -233,6 +239,10 @@ def command_settings(config: PyjudgeConfig, _):
     update_settings(config)
 
 
+def command_check(config: PyjudgeConfig, _):
+    check_database(config)
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -242,7 +252,7 @@ def main():
         "--repository", "-r", type=pathlib.Path, default=pathlib.Path.cwd() / "repository", help="Path to repository"
     )
     parser.add_argument("--instance", type=pathlib.Path, required=True, help="Path to instance specification")
-    parser.add_argument("--debug", help="Enable debug messages", action='store_true')
+    parser.add_argument("--debug", help="Enable debug messages", action="store_true")
 
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
@@ -302,6 +312,9 @@ def main():
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")
     settings_parser.set_defaults(func=command_settings)
+
+    check_parser = subparsers.add_parser("check", help="Check things")
+    check_parser.set_defaults(func=command_check)
 
     arguments = parser.parse_args()
 

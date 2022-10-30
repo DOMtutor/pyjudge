@@ -563,11 +563,25 @@ def set_languages(cursor: MySQLCursor, languages: List[Language]):
 
 def clear_invalid_submissions(cursor):
     cursor.execute(
+        "DELETE FROM submission_file "
+        f"WHERE LENGTH(submission_file.sourcecode) = '' OR LOCATE('\\0', submission_file.sourcecode) > 0"
+    )
+    if cursor.rowcount:
+        log.warning("Dropped %d invalid submission files", cursor.rowcount)
+
+    cursor.execute(
         "DELETE FROM submission "
         f"WHERE NOT EXISTS(SELECT * FROM submission_file WHERE submitid = submission.submitid)"
     )
     if cursor.rowcount:
         log.warning("Dropped %d invalid submissions without files", cursor.rowcount)
+
+    cursor.execute(
+        "DELETE FROM submission "
+        f"WHERE NOT EXISTS(SELECT * FROM domjudge.judging WHERE submission.submitid = judging.submitid)"
+    )
+    if cursor.rowcount:
+        log.warning("Dropped %d submissions without judging", cursor.rowcount)
 
 
 # TODO Should be for multiple problems :-)
@@ -579,8 +593,7 @@ def create_problem_submissions(
     problem: Problem,
     existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
     team_ids: Dict[Team, int],
-    contest_ids: Optional[List[int]] = None,
-    check_source_code=True,
+    contest_ids: Optional[List[int]] = None
 ):
     log.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
@@ -740,6 +753,7 @@ def create_problem_submissions(
         for (team_id, file_names), submission in submissions_grouped.items():
             existing_id = current_submissions[contest_id].get((team_id, file_names), None)
             language = submission.language
+            insert = False
 
             if existing_id is None:
                 insert = True
@@ -762,21 +776,6 @@ def create_problem_submissions(
                     if submission.source_md5() != existing_file_hashes[submission.file_name]:
                         log.debug("%s changed hash", submission)
                         insert = True
-                    elif check_source_code:
-                        log.debug("Checking existing source code of submission %s", submission)
-                        cursor.execute("SELECT sourcecode FROM submission_file WHERE submitid = ?", (existing_id,))
-                        source_bytes = submission.source.encode("utf-8")
-                        if cursor.fetchone()[0] != source_bytes:
-                            log.warning(
-                                "%s has matching hash but differing source code in file",
-                                submission,
-                                submission.file_name,
-                            )
-                            insert = True
-                        else:
-                            insert = False
-                    else:
-                        insert = False
                 if insert:
                     updated_submissions += 1
             expected_keys = [expected_result.judge_key() for expected_result in submission.expected_results]
@@ -822,9 +821,7 @@ def create_problem_submissions(
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
-        log.debug(
-            "Deleting %d submissions (%s)", len(submissions_to_delete), ",".join(map(str, submissions_to_delete))
-        )
+        log.debug("Deleting %d submissions (%s)", len(submissions_to_delete), ",".join(map(str, submissions_to_delete)))
         cursor.execute(
             "DELETE FROM submission_file " f"WHERE submitid IN {list_param(submissions_to_delete)}",
             tuple(submissions_to_delete),
@@ -874,6 +871,7 @@ def create_or_update_contest_problems(
 
 def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False) -> int:
     date_format = "%Y-%m-%d %H:%M:%S"
+
     def format_datetime(dt: Optional[datetime.datetime]):
         if dt is None:
             return None
@@ -935,15 +933,15 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
                 contest.name,
                 contest.key,
                 str(contest.activation_time.timestamp()),
-                contest.activation_time.strftime(date_format),
+                format_datetime(contest.activation_time),
                 str(contest.deactivation_time.timestamp()) if contest.deactivation_time else None,
-                contest.deactivation_time.strftime(date_format) if contest.deactivation_time else None,
+                format_datetime(contest.deactivation_time),
                 str(contest.start_time.timestamp()),
-                contest.start_time.strftime(date_format),
+                format_datetime(contest.start_time),
                 str(contest.end_time.timestamp()),
-                contest.end_time.strftime(date_format),
+                format_datetime(contest.end_time),
                 str(contest.freeze_time.timestamp()) if contest.freeze_time else None,
-                contest.freeze_time.strftime(date_format) if contest.freeze_time else None,
+                format_datetime(contest.freeze_time),
                 contest.public_scoreboard,
                 contest.access is None,
             ),

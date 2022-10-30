@@ -520,6 +520,9 @@ class RepositoryProblems(ProblemLoader[RepositoryProblem]):
     def __iter__(self):
         return iter(self.load_all_problems())
 
+    def __getitem__(self, item):
+        return self.load_problem(item)
+
 
 class Repository(object):
     @staticmethod

@@ -82,7 +82,7 @@ class SubmissionDto(object):
         if self.maximum_runtime is not None:
             data["runtime"] = self.maximum_runtime
         if self.verdict is not None:
-            data["verdict"] = self.verdict.name
+            data["verdict"] = self.verdict.serialize()
         if self.files:
             data["files"] = [file.serialize() for file in self.files]
         return data
@@ -96,7 +96,7 @@ class SubmissionDto(object):
             language_key=data["language"],
             submission_time=data["time"],
             maximum_runtime=data.get("runtime", None),
-            verdict=Verdict.get(data["verdict"]) if data.get("verdict", None) is not None else None,
+            verdict=Verdict.parse(data["verdict"]) if data.get("verdict", None) is not None else None,
             too_late=data["too_late"],
             files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
         )

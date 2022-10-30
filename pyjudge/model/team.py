@@ -78,13 +78,15 @@ class Team(object):
         )
 
     def serialize(self):
-        return {
+        data = {
             "name": self.name,
             "display_name": self.display_name,
             "category": self.category.serialize(),
-            "members": [user.login_name for user in self.members],
-            "affiliation": self.affiliation.short_name if self.affiliation else None,
+            "members": [user.login_name for user in self.members]
         }
+        if self.affiliation:
+            data["affiliation"] = self.affiliation.short_name
+        return data
 
     @property
     def json_ref(self):
