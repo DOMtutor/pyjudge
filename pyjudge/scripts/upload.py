@@ -166,11 +166,11 @@ class UsersDescription(object):
         }
 
 
-def upload_users(config: PyjudgeConfig, description: UsersDescription, disable_unknown=False):
+def upload_users(config: PyjudgeConfig, description: UsersDescription, disable_unknown=False, overwrite_passwords=False):
     with config.database as connection:
         with connection.transaction_cursor(isolation_level="SERIALIZABLE", prepared_cursor=True) as cursor:
             affiliation_ids = update.create_or_update_affiliations(cursor, description.affiliations)
-            user_ids = update.create_or_update_users(cursor, description.users)
+            user_ids = update.create_or_update_users(cursor, description.users, overwrite_passwords)
             update.create_or_update_teams(cursor, description.teams, affiliation_ids, user_ids)
             if disable_unknown:
                 valid_users = set(
@@ -232,7 +232,7 @@ def command_contest(config: PyjudgeConfig, args):
 def command_users(config: PyjudgeConfig, args):
     with args.users.open("rt") as file:
         user_data = json.load(file)
-    upload_users(config, UsersDescription.parse(user_data), disable_unknown=args.disable)
+    upload_users(config, UsersDescription.parse(user_data), disable_unknown=args.disable, overwrite_passwords=args.passwords)
 
 
 def command_settings(config: PyjudgeConfig, _):
@@ -308,6 +308,7 @@ def main():
     users_parser = subparsers.add_parser("users", help="Upload user file")
     users_parser.add_argument("users", type=pathlib.Path, help="Path to user specification")
     users_parser.add_argument("--disable", action="store_true", help="Disable unknown users")
+    users_parser.add_argument("--passwords", action="store_true", help="Overwrite passwords of existing users")
     users_parser.set_defaults(func=command_users)
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")

@@ -1019,7 +1019,7 @@ def create_or_update_affiliations(cursor: MySQLCursor, affiliations: Collection[
     return affiliation_ids
 
 
-def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict[User, int]:
+def create_or_update_users(cursor: MySQLCursor, users: Collection[User], overwrite_passwords=False) -> Dict[User, int]:
     log.info("Updating %d users", len(users))
     if not users:
         return {}
@@ -1039,17 +1039,21 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
     for user in users:
         if user in user_ids:
             user_id = user_ids[user]
+
             cursor.execute(
-                "UPDATE `user` SET username = ?, name = ?, email = ?, password = ?, enabled = TRUE " "WHERE userid = ?",
-                (user.login_name, user.display_name, user.email, user.password_hash, user_id),
+                "UPDATE `user` SET username = ?, name = ?, email = ?, enabled = TRUE WHERE userid = ?",
+                (user.login_name, user.display_name, user.email, user_id),
             )
+            if overwrite_passwords:
+                cursor.execute("UPDATE `user` SET password = ? WHERE userid = ?", (user.password_hash, user_id))
         else:
             cursor.execute(
-                "INSERT INTO `user` (username, name, email, password, enabled) " "VALUES (?, ?, ?, ?, TRUE)",
-                (user.login_name, user.display_name, user.email, user.password_hash),
+                "INSERT INTO `user` (username, name, email, password, enabled) VALUES (?, ?, ?, ?, TRUE)",
+                (user.login_name, user.display_name, user.password_hash, user.email),
             )
             user_id = cursor.lastrowid
             user_ids[user] = user_id
+
         user_roles = set(role_ids_by_name[role] for role in user_role_to_database[user.role])
         cursor.execute("SELECT roleid FROM userrole WHERE userid = ?", (user_id,))
         current_roles = set(role_id for (role_id,) in cursor)
@@ -1057,7 +1061,7 @@ def create_or_update_users(cursor: MySQLCursor, users: Collection[User]) -> Dict
         if obsolete_roles:
             cursor.execute(
                 f"DELETE FROM userrole WHERE userid = ? AND roleid IN {list_param(obsolete_roles)}",
-                (user_roles, *obsolete_roles),
+                (user_id, *obsolete_roles),
             )
         missing_roles = user_roles - current_roles
         for role_id in missing_roles:
@@ -1070,7 +1074,7 @@ def disable_unknown_users(cursor: MySQLCursor, user_login_names: Set[str]):
     valid_users = {"admin", "judgehost"}
     valid_users.update(user_login_names)
     cursor.execute(
-        f"UPDATE `user` SET enabled = FALSE " f"WHERE username NOT IN {list_param(valid_users)}", tuple(valid_users)
+        f"UPDATE `user` SET enabled = FALSE WHERE username NOT IN {list_param(valid_users)}" , tuple(valid_users)
     )
     if cursor.rowcount:
         log.warning("Disabled %d users", cursor.rowcount)
