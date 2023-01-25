@@ -1,16 +1,12 @@
 import dataclasses
+import datetime
 import itertools
 import math
-import pathlib
 import statistics
-import datetime
 from collections import defaultdict
 from typing import Set, Dict, List
 
-import matplotlib
-import numpy as np
 import pytz
-from matplotlib import pyplot as plt
 
 from pyjudge.data.submission import SubmissionDto, ContestDataDto
 from pyjudge.model import Verdict
@@ -144,10 +140,10 @@ class ProblemStatistics(object):
             submissions_by_language[submission.language_key].append(submission)
 
         by_language = {
-            language_key: ProblemGroupStatistics(language_submissions)
+            language_key: ProblemGroupStatistics.of(language_submissions)
             for language_key, language_submissions in submissions_by_language.items()
         }
-        overall = ProblemGroupStatistics(submissions)
+        overall = ProblemGroupStatistics.of(submissions)
         return ProblemStatistics(by_language=by_language, overall=overall)
 
 

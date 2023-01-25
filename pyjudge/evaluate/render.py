@@ -37,8 +37,8 @@ class ProblemRenderer(object):
             days.append(start_day)
             start_day += delta
 
-        if len(days) > 7:
-            days = days[:: len(days) // 7]
+        # if len(days) > 7:
+        #     days = days[:: len(days) // 7]
         self.day_seconds = days
 
         self.start_second = int(start_time.timestamp())
@@ -117,7 +117,16 @@ class ProblemRenderer(object):
         ax.set_xlim([-1, self.submission_buckets * self.seconds_per_bucket])
         ax.legend()
         ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
-        plt.xticks(ticks=self.day_seconds, labels=self.day_names)
+
+        if len(self.day_names) <= 7:
+            ticks = self.day_beginning_seconds
+            labels = self.day_names
+        else:
+            idx = np.round(np.linspace(0, len(self.day_names) - 1, 7)).astype(int)
+            ticks = [self.day_beginning_seconds[i] for i in idx]
+            labels = [self.day_names[i] for i in idx]
+        plt.xticks(ticks=ticks, labels=labels)
+
         with file.open(mode="wb") as f:
             plt.savefig(f, format="png", transparent=True)
 
