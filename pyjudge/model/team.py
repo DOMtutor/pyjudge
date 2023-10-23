@@ -61,9 +61,13 @@ class Team(object):
     affiliation: Optional[Affiliation]
 
     @staticmethod
-    def parse(data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation]):
+    def parse(
+        data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation]
+    ):
         category = TeamCategory.parse(data["category"]) if "category" in data else None
-        affiliation = affiliation_by_name[data["affiliation"]] if "affiliation" in data else None
+        affiliation = (
+            affiliation_by_name[data["affiliation"]] if "affiliation" in data else None
+        )
 
         if not data.get("members", []):
             raise ValueError("Invalid team")
@@ -90,7 +94,7 @@ class Team(object):
             "name": self.name,
             "display_name": self.display_name,
             "category": self.category.serialize(),
-            "members": [user.login_name for user in self.members]
+            "members": [user.login_name for user in self.members],
         }
         if self.affiliation:
             data["affiliation"] = self.affiliation.short_name

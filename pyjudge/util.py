@@ -6,5 +6,10 @@ def list_if_not_none(iterable: Optional[Iterable[Any]]):
         return None
     return list(iterable)
 
+
 def filter_none(data: Dict[str, Any], except_keys: Optional[Set[str]] = None):
-    return {key: value for key, value in data.items() if value is not None or key in except_keys}
+    return {
+        key: value
+        for key, value in data.items()
+        if value is not None or key in except_keys
+    }

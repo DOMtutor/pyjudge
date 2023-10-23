@@ -45,12 +45,14 @@ class User(object):
         )
 
     def serialize(self):
-        return filter_none({
-            "display_name": self.display_name,
-            "email": self.email,
-            "role": self.role.serialize(),
-            "password_hash": self.password_hash
-        })
+        return filter_none(
+            {
+                "display_name": self.display_name,
+                "email": self.email,
+                "role": self.role.serialize(),
+                "password_hash": self.password_hash,
+            }
+        )
 
     def __hash__(self):
         return hash(self.login_name)

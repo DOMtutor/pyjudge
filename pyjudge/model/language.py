@@ -36,7 +36,9 @@ class Executable(abc.ABC):
         import hashlib
 
         zip_file = io.BytesIO()
-        with zipfile.ZipFile(zip_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=False) as z:
+        with zipfile.ZipFile(
+            zip_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=False
+        ) as z:
             for name, path in sorted(self.contents.items()):
                 if path.is_file():
                     info = zipfile.ZipInfo.from_file(path, str(name))

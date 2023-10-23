@@ -12,11 +12,17 @@ class UserDto(object):
         return self.display_name
 
     def serialize(self):
-        return {"login": self.login_name, "name": self.display_name, "email": self.email}
+        return {
+            "login": self.login_name,
+            "name": self.display_name,
+            "email": self.email,
+        }
 
     @staticmethod
     def parse(data):
-        return UserDto(login_name=data["login"], display_name=data["name"], email=data["email"])
+        return UserDto(
+            login_name=data["login"], display_name=data["name"], email=data["email"]
+        )
 
 
 @dataclasses.dataclass

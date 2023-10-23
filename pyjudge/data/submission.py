@@ -37,11 +37,17 @@ class SubmissionFileDto(object):
             return False
 
     def serialize(self):
-        return {"name": self.filename, "content": base64.b85encode(self.content).decode("utf-8")}
+        return {
+            "name": self.filename,
+            "content": base64.b85encode(self.content).decode("utf-8"),
+        }
 
     @staticmethod
     def parse(data):
-        return SubmissionFileDto(filename=data["name"], content=base64.b85decode(data["content"].encode("utf-8")))
+        return SubmissionFileDto(
+            filename=data["name"],
+            content=base64.b85decode(data["content"].encode("utf-8")),
+        )
 
 
 @dataclasses.dataclass
@@ -60,7 +66,9 @@ class SubmissionDto(object):
 
     @property
     def line_count(self):
-        return sum(file.line_count for file in self.files if file.line_count is not None)
+        return sum(
+            file.line_count for file in self.files if file.line_count is not None
+        )
 
     @property
     def is_source_submission(self):
@@ -96,7 +104,9 @@ class SubmissionDto(object):
             language_key=data["language"],
             submission_time=data["time"],
             maximum_runtime=data.get("runtime", None),
-            verdict=Verdict.parse(data["verdict"]) if data.get("verdict", None) is not None else None,
+            verdict=Verdict.parse(data["verdict"])
+            if data.get("verdict", None) is not None
+            else None,
             too_late=data["too_late"],
             files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
         )
@@ -195,7 +205,9 @@ class ContestDataDto(object):
             "languages": self.languages,
             "problems": self.problems,
             "submissions": [submission.serialize() for submission in self.submissions],
-            "clarifications": [clarification.serialize() for clarification in self.clarifications],
+            "clarifications": [
+                clarification.serialize() for clarification in self.clarifications
+            ],
         }
         return data
 
@@ -206,6 +218,11 @@ class ContestDataDto(object):
             teams={team.key: team for team in map(TeamDto.parse, data["teams"])},
             languages=data["languages"],
             problems=data["problems"],
-            submissions=[SubmissionDto.parse(submission) for submission in data["submissions"]],
-            clarifications=[ClarificationDto.parse(clarification) for clarification in data["clarifications"]],
+            submissions=[
+                SubmissionDto.parse(submission) for submission in data["submissions"]
+            ],
+            clarifications=[
+                ClarificationDto.parse(clarification)
+                for clarification in data["clarifications"]
+            ],
         )

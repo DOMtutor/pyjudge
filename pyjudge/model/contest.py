@@ -48,7 +48,9 @@ class ContestAccess(object):
     @staticmethod
     def parse(data):
         team_names = set(data.get("teams", []))
-        team_categories = set(TeamCategory.parse(name) for name in data.get("categories", []))
+        team_categories = set(
+            TeamCategory.parse(name) for name in data.get("categories", [])
+        )
         return ContestAccess(team_names=team_names, team_categories=team_categories)
 
     def serialize(self):
@@ -116,7 +118,10 @@ class Contest(object):
     @staticmethod
     def parse(data, problem_loader: ProblemLoader):
         public_scoreboard = data.get("public_scoreboard", False)
-        problems = [ContestProblem.parse(problem, problem_loader) for problem in data["problems"]]
+        problems = [
+            ContestProblem.parse(problem, problem_loader)
+            for problem in data["problems"]
+        ]
 
         activate = Contest._parse_datetime(data["activate"])
         start = Contest._parse_datetime(data["start"])
@@ -127,7 +132,11 @@ class Contest(object):
         deactivation = data.get("deactivate", None)
         if deactivation is not None:
             deactivation = Contest._parse_datetime(deactivation)
-        access = ContestAccess.parse(data["access"]) if data.get("access", None) is not None else None
+        access = (
+            ContestAccess.parse(data["access"])
+            if data.get("access", None) is not None
+            else None
+        )
 
         return Contest(
             key=data["key"],
@@ -150,7 +159,9 @@ class Contest(object):
             "activate": Contest._format_datetime(self.activation_time),
             "start": Contest._format_datetime(self.start_time),
             "end": Contest._format_datetime(self.end_time),
-            "problems": [problem.serialize(problem_loader) for problem in self.problems],
+            "problems": [
+                problem.serialize(problem_loader) for problem in self.problems
+            ],
         }
         if self.access is not None:
             data["access"] = self.access.serialize()

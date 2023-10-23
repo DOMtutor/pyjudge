@@ -45,7 +45,10 @@ def _find_contest_with_problems_by_key(
     )
     problems = {
         problem_id: ContestProblemDto(
-            problem_key=problem_key, contest_problem_key=contest_name, points=points, color=color
+            problem_key=problem_key,
+            contest_problem_key=contest_name,
+            points=points,
+            color=color,
         )
         for (contest_name, points, problem_id, color, problem_key) in cursor
     }
@@ -53,27 +56,41 @@ def _find_contest_with_problems_by_key(
 
 
 def _find_contest_end(cursor: MySQLCursor, contest_key: str) -> Tuple[str, float]:
-    cursor.execute("SELECT cid, endtime FROM contest WHERE shortname = ?", (contest_key,))
+    cursor.execute(
+        "SELECT cid, endtime FROM contest WHERE shortname = ?", (contest_key,)
+    )
     contest_id, contest_end = get_unique(cursor)
     return contest_id, float(contest_end)
 
 
-def find_contest_problems(database: Database, contest_key: str) -> List[ContestProblemDto]:
+def find_contest_problems(
+    database: Database, contest_key: str
+) -> List[ContestProblemDto]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
         return list(problems.values())
 
 
-def find_contest_description(database: Database, contest_key: str) -> ContestDescriptionDto:
+def find_contest_description(
+    database: Database, contest_key: str
+) -> ContestDescriptionDto:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
-        cursor.execute("SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,))
+        cursor.execute(
+            "SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,)
+        )
         start_time, end_time = get_unique(cursor)
-        return ContestDescriptionDto(contest_key=contest_key, start=float(start_time), end=float(end_time))
+        return ContestDescriptionDto(
+            contest_key=contest_key, start=float(start_time), end=float(end_time)
+        )
 
 
-def find_submissions(database: Database, contest_key: str, only_valid=True) -> Generator[SubmissionDto, None, None]:
+def find_submissions(
+    database: Database, contest_key: str, only_valid=True
+) -> Generator[SubmissionDto, None, None]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
-        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
+        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
+            cursor, contest_key
+        )
         _, contest_end = _find_contest_end(cursor, contest_key)
 
         cursor.execute(
@@ -88,12 +105,23 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             (contest_id, *contest_problems_by_id.keys()),
         )
         submission_data = {}
-        for submission_id, problem_id, submission_time, language_key, team_key in cursor:
+        for (
+            submission_id,
+            problem_id,
+            submission_time,
+            language_key,
+            team_key,
+        ) in cursor:
             if submission_id in submission_data:
                 logging.warning("Multiple results for submission %s", submission_id)
                 continue
             contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
-            submission_data[submission_id] = (float(submission_time), contest_problem_key, language_key, team_key)
+            submission_data[submission_id] = (
+                float(submission_time),
+                contest_problem_key,
+                language_key,
+                team_key,
+            )
 
         if only_valid:
             cursor.execute(
@@ -126,7 +154,10 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
                 logging.warning("Multiple judging ids for submission %s", submission_id)
                 continue
             judging_ids.add(judging_id)
-            judging_data[submission_id] = (judging_id, parse_judging_verdict(judging_result))
+            judging_data[submission_id] = (
+                judging_id,
+                parse_judging_verdict(judging_result),
+            )
 
         cursor.execute(
             f"SELECT "
@@ -160,9 +191,16 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
         )
         judging_runtime = {judging_id: float(runtime) for judging_id, runtime in cursor}
 
-    for submission_id, (submission_time, contest_problem_key, language_key, team_key) in submission_data.items():
+    for submission_id, (
+        submission_time,
+        contest_problem_key,
+        language_key,
+        team_key,
+    ) in submission_data.items():
         if submission_id not in judging_data:
-            logging.warning("No judging for submission %s by team %s", submission_id, team_key)
+            logging.warning(
+                "No judging for submission %s by team %s", submission_id, team_key
+            )
             continue
         judging_id, judging_result = judging_data[submission_id]
         runtime = judging_runtime.get(judging_id, None)
@@ -183,15 +221,22 @@ def find_submissions(database: Database, contest_key: str, only_valid=True) -> G
             language_key=language_key,
             verdict=judging_result,
             submission_time=submission_time,
-            files=[SubmissionFileDto(filename, content) for (filename, content) in source_data[submission_id].items()],
+            files=[
+                SubmissionFileDto(filename, content)
+                for (filename, content) in source_data[submission_id].items()
+            ],
             too_late=contest_end < submission_time,
             maximum_runtime=runtime,
         )
 
 
-def find_clarifications(database: Database, contest_key: str) -> Collection[ClarificationDto]:
+def find_clarifications(
+    database: Database, contest_key: str
+) -> Collection[ClarificationDto]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
-        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(cursor, contest_key)
+        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
+            cursor, contest_key
+        )
         cursor.execute(
             f"SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
             f"FROM problem p, clarification c, team t "
@@ -202,7 +247,14 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
         )
 
         clarification_data = {
-            clarification_id: (problem_id, team_key, bool(from_jury), body, response_id, float(submit_time))
+            clarification_id: (
+                problem_id,
+                team_key,
+                bool(from_jury),
+                body,
+                response_id,
+                float(submit_time),
+            )
             for clarification_id, problem_id, team_key, from_jury, body, response_id, submit_time in cursor
         }
         clarifications_by_id = {}
@@ -216,16 +268,31 @@ def find_clarifications(database: Database, contest_key: str) -> Collection[Clar
         ) in clarification_data.items():
             if response_id is not None:
                 if response_id not in clarification_data:
-                    raise ValueError(f"Inconsistent clarification {clarification_id} (response not in list)")
-                _, response_team_key, response_from_jury, _, _, response_submit_time = clarification_data[response_id]
+                    raise ValueError(
+                        f"Inconsistent clarification {clarification_id} (response not in list)"
+                    )
+                (
+                    _,
+                    response_team_key,
+                    response_from_jury,
+                    _,
+                    _,
+                    response_submit_time,
+                ) = clarification_data[response_id]
                 if (team_key, not from_jury) != (response_team_key, response_from_jury):
-                    raise ValueError(f"Inconsistent clarification {clarification_id} (invalid response)")
+                    raise ValueError(
+                        f"Inconsistent clarification {clarification_id} (invalid response)"
+                    )
                 if submit_time < response_submit_time:
-                    raise ValueError(f"Response {clarification_id} to {response_id} sent before")
+                    raise ValueError(
+                        f"Response {clarification_id} to {response_id} sent before"
+                    )
             if problem_id is None:
                 contest_problem_key = None
             else:
-                contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
+                contest_problem_key = contest_problems_by_id[
+                    problem_id
+                ].contest_problem_key
 
             clarification = ClarificationDto(
                 key=str(clarification_id),
@@ -253,7 +320,9 @@ def find_teams(database: Database, categories: List[TeamCategory]) -> List[TeamD
             f"  tc.name IN {list_param(categories)} ",
             tuple(category_to_database[category] for category in categories),
         )
-        team_data = {team_id: (key, name, category) for team_id, key, name, category in cursor}
+        team_data = {
+            team_id: (key, name, category) for team_id, key, name, category in cursor
+        }
         cursor.execute(
             f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
             f"WHERE "
@@ -262,7 +331,9 @@ def find_teams(database: Database, categories: List[TeamCategory]) -> List[TeamD
         )
         team_users = {team_id: [] for team_id in team_data.keys()}
         for name, username, email, team_id in cursor:
-            team_users[team_id].append(UserDto(login_name=username, display_name=name, email=email))
+            team_users[team_id].append(
+                UserDto(login_name=username, display_name=name, email=email)
+            )
         return [
             TeamDto(team_key, team_name, category, team_users[team_id])
             for team_id, (team_key, team_name, category) in team_data.items()

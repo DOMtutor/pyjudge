@@ -12,9 +12,13 @@ from pyjudge.data.submission import ContestDataDto
 from pyjudge.scripts.db import Database
 
 
-def write_contest(database: Database, contest_key: str, destination: Optional[pathlib.Path]):
+def write_contest(
+    database: Database, contest_key: str, destination: Optional[pathlib.Path]
+):
     with database as connection:
-        teams = query.find_teams(connection, [TeamCategory.Participants, TeamCategory.Hidden])
+        teams = query.find_teams(
+            connection, [TeamCategory.Participants, TeamCategory.Hidden]
+        )
         teams_by_key = {team.key: team for team in teams}
         language_name_by_key = query.find_languages(connection)
 
@@ -22,7 +26,8 @@ def write_contest(database: Database, contest_key: str, destination: Optional[pa
 
         contest_problems = query.find_contest_problems(connection, contest_key)
         problem_key_by_contest_problem_key = {
-            problem.contest_problem_key: problem.problem_key for problem in contest_problems
+            problem.contest_problem_key: problem.problem_key
+            for problem in contest_problems
         }
 
         logging.info("Fetching submissions")
@@ -57,9 +62,13 @@ def write_contest(database: Database, contest_key: str, destination: Optional[pa
                 json.dump(data, f)
 
 
-def write_submission_files(database: Database, contest_key: str, destination: Optional[pathlib.Path]):
+def write_submission_files(
+    database: Database, contest_key: str, destination: Optional[pathlib.Path]
+):
     with database as connection:
-        teams = query.find_teams(connection, [TeamCategory.Participants, TeamCategory.Hidden])
+        teams = query.find_teams(
+            connection, [TeamCategory.Participants, TeamCategory.Hidden]
+        )
         team_keys = {team.key for team in teams}
         submissions = [
             submission
@@ -87,14 +96,22 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db", type=pathlib.Path, required=True, help="Path to database config")
-    parser.add_argument("-d", "--destination", help="Destination file", type=pathlib.Path, default=None)
+    parser.add_argument(
+        "--db", type=pathlib.Path, required=True, help="Path to database config"
+    )
+    parser.add_argument(
+        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
+    )
 
     subparsers = parser.add_subparsers(help="Help for commands")
-    contest_data_parser = subparsers.add_parser("contest", help="Relevant data of a contest")
+    contest_data_parser = subparsers.add_parser(
+        "contest", help="Relevant data of a contest"
+    )
     contest_data_parser.add_argument("contest", help="The contest key")
     contest_data_parser.set_defaults(func=command_contest)
-    submission_files_parser = subparsers.add_parser("files", help="Submissions files of a contest")
+    submission_files_parser = subparsers.add_parser(
+        "files", help="Submissions files of a contest"
+    )
     submission_files_parser.add_argument("contest", help="The contest key")
     submission_files_parser.set_defaults(func=command_submission_files)
 

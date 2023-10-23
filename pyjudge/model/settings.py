@@ -25,21 +25,30 @@ class ScoringSettings(object):
 
     def __post_init__(self):
         if not self.result_priority.keys() == set(Verdict):
-            missing_verdicts = (str(verdict) for verdict in Verdict if verdict not in self.result_priority)
-            raise ValueError(f"Missing priorities for verdicts {','.join(missing_verdicts)}")
+            missing_verdicts = (
+                str(verdict)
+                for verdict in Verdict
+                if verdict not in self.result_priority
+            )
+            raise ValueError(
+                f"Missing priorities for verdicts {','.join(missing_verdicts)}"
+            )
 
     @staticmethod
     def parse_scoring(data) -> "ScoringSettings":
         if "result_priority" in data:
             data["result_priority"] = {
-                Verdict.parse(key): priority for key, priority in data["result_priority"].items()
+                Verdict.parse(key): priority
+                for key, priority in data["result_priority"].items()
             }
         return ScoringSettings(**data)
 
     def serialize(self):
         return {
             "penalty_time": self.penalty_time,
-            "result_priority": {key.serialize(): value for key, value in self.result_priority.items()},
+            "result_priority": {
+                key.serialize(): value for key, value in self.result_priority.items()
+            },
         }
 
 
@@ -107,8 +116,15 @@ class JudgeSettings(object):
         scoring = ScoringSettings.parse_scoring(data.get("score", {}))
         judging = JudgingSettings.parse_judging(data.get("judging", {}))
         display = DisplaySettings.parse_display(data.get("display", {}))
-        clarification = ClarificationSettings.parse_clarification(data.get("clarification", {}))
-        return JudgeSettings(judging=judging, scoring=scoring, display=display, clarification=clarification)
+        clarification = ClarificationSettings.parse_clarification(
+            data.get("clarification", {})
+        )
+        return JudgeSettings(
+            judging=judging,
+            scoring=scoring,
+            display=display,
+            clarification=clarification,
+        )
 
     def serialize(self):
         return {
@@ -134,14 +150,18 @@ class JudgeInstance(object):
             settings=JudgeSettings.parse_settings(data["settings"]),
             base_time=data["base_time"],
             user_whitelist=set(data["user_whitelist"]),
-            allowed_language_keys=set(data["language_keys"]) if "language_keys" in data else None
+            allowed_language_keys=set(data["language_keys"])
+            if "language_keys" in data
+            else None,
         )
 
     def serialize(self):
-        return filter_none({
-            "id": self.identifier,
-            "settings": self.settings.serialize(),
-            "base_time": self.base_time,
-            "user_whitelist": list(self.user_whitelist),
-            "language_keys": list_if_not_none(self.allowed_language_keys)
-        })
+        return filter_none(
+            {
+                "id": self.identifier,
+                "settings": self.settings.serialize(),
+                "base_time": self.base_time,
+                "user_whitelist": list(self.user_whitelist),
+                "language_keys": list_if_not_none(self.allowed_language_keys),
+            }
+        )
