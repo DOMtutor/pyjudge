@@ -33,7 +33,11 @@ class Affiliation(object):
 
     @staticmethod
     def parse(key, data):
-        return Affiliation(data["short_name"], data["name"], data.get("country", None))
+        return Affiliation(key, data["name"], data.get("country", None))
+
+    @property
+    def json_ref(self):
+        return self.short_name
 
     def serialize(self):
         data = {"short_name": self.short_name, "name": self.name}
@@ -77,6 +81,10 @@ class Team(object):
             affiliation=affiliation,
         )
 
+    @property
+    def json_ref(self):
+        return self.name
+
     def serialize(self):
         data = {
             "name": self.name,
@@ -87,10 +95,6 @@ class Team(object):
         if self.affiliation:
             data["affiliation"] = self.affiliation.short_name
         return data
-
-    @property
-    def json_ref(self):
-        return self.name
 
     def __str__(self):
         return f"Team({self.name})"

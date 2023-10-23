@@ -1,8 +1,9 @@
 import dataclasses
 from dataclasses import field
-from typing import Dict, Sequence, Set
+from typing import Dict, Sequence, Set, Optional
 
 from .submission import Verdict
+from ..util import list_if_not_none, filter_none
 
 
 @dataclasses.dataclass
@@ -124,6 +125,7 @@ class JudgeInstance(object):
     settings: JudgeSettings
     base_time: float
     user_whitelist: Set[str]
+    allowed_language_keys: Optional[Set[str]]
 
     @staticmethod
     def parse_instance(data):
@@ -132,12 +134,14 @@ class JudgeInstance(object):
             settings=JudgeSettings.parse_settings(data["settings"]),
             base_time=data["base_time"],
             user_whitelist=set(data["user_whitelist"]),
+            allowed_language_keys=set(data["language_keys"]) if "language_keys" in data else None
         )
 
     def serialize(self):
-        return {
+        return filter_none({
             "id": self.identifier,
             "settings": self.settings.serialize(),
             "base_time": self.base_time,
             "user_whitelist": list(self.user_whitelist),
-        }
+            "language_keys": list_if_not_none(self.allowed_language_keys)
+        })

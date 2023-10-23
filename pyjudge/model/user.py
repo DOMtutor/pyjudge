@@ -2,6 +2,8 @@ import dataclasses
 import enum
 from typing import Optional
 
+from pyjudge.util import filter_none
+
 
 class UserRole(enum.Enum):
     Participant = "participant"
@@ -28,6 +30,10 @@ class User(object):
     password_hash: Optional[str]
     role: UserRole
 
+    @property
+    def json_ref(self):
+        return self.login_name
+
     @staticmethod
     def parse(key, data):
         return User(
@@ -39,16 +45,12 @@ class User(object):
         )
 
     def serialize(self):
-        return filter_if_none({
+        return filter_none({
             "display_name": self.display_name,
             "email": self.email,
             "role": self.role.serialize(),
             "password_hash": self.password_hash
         })
-
-    @property
-    def json_ref(self):
-        return self.login_name
 
     def __hash__(self):
         return hash(self.login_name)
