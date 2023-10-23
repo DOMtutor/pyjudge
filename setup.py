@@ -17,7 +17,11 @@ setup(
   include_package_data=True,
   license="GPLv3",
   install_requires=[
-    'mysql-connector-python>=8.0'
+    'mysql-connector-python>=8.0',
+    'PyYAML>=6.0',
+    'Pillow>=9.0',
+    'dateutils>=0.6',
+    'problemtools'
   ],
   description='A library to ease interaction with DOMjudge',
 )
