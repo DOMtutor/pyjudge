@@ -32,7 +32,7 @@ class Affiliation(object):
     country: Optional[str]
 
     @staticmethod
-    def parse(data):
+    def parse(key, data):
         return Affiliation(data["short_name"], data["name"], data.get("country", None))
 
     def serialize(self):

@@ -106,7 +106,7 @@ class RepositoryAuthor(object):
     key: str
     name: str
     patterns: List[re.Pattern]
-    affiliation: Affiliation
+    affiliation_key: Optional[str]
 
     @staticmethod
     def parse(key, data):
@@ -124,7 +124,7 @@ class RepositoryAuthor(object):
             key=key,
             name=data["name"],
             patterns=patterns,
-            affiliation=Affiliation(short_name="tum", name="TUM", country="DEU"),
+            affiliation_key=data.get("affiliation", None),
         )
 
 
@@ -555,6 +555,10 @@ class Repository(object):
             raise ValueError(f"Directory {base_path} does not seem to be a Kattis repository")
         with config_path.open(mode="rt") as f:
             configuration = yaml.safe_load(f)
+
+        self.affiliations: List[Affiliation] = [
+            Affiliation.parse()
+        ]
         self.authors: List[RepositoryAuthor] = [
             RepositoryAuthor.parse(author, data) for author, data in configuration.get("authors", {}).items()
         ]

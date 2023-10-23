@@ -29,9 +29,9 @@ class User(object):
     role: UserRole
 
     @staticmethod
-    def parse(data):
+    def parse(key, data):
         return User(
-            data["login"],
+            key,
             data["display_name"],
             data["email"],
             password_hash=data.get("password_hash", None),
@@ -39,15 +39,16 @@ class User(object):
         )
 
     def serialize(self):
-        data = {
-            "login": self.login_name,
+        return filter_if_none({
             "display_name": self.display_name,
             "email": self.email,
             "role": self.role.serialize(),
-        }
-        if self.password_hash is not None:
-            data["password_hash"] = self.password_hash
-        return data
+            "password_hash": self.password_hash
+        })
+
+    @property
+    def json_ref(self):
+        return self.login_name
 
     def __hash__(self):
         return hash(self.login_name)
