@@ -1,9 +1,10 @@
 import dataclasses
 from dataclasses import field
-from typing import Dict, Sequence, Set, Optional
+from typing import Dict, Sequence, Set, Optional, List
 
+from .team import TeamCategory
 from .submission import Verdict
-from ..util import list_if_not_none, filter_none
+from pyjudge.util import list_if_not_none, filter_none
 
 
 @dataclasses.dataclass
@@ -142,6 +143,7 @@ class JudgeInstance(object):
     base_time: float
     user_whitelist: Set[str]
     allowed_language_keys: Optional[Set[str]]
+    team_categories: List[TeamCategory]
 
     @staticmethod
     def parse_instance(data):
@@ -153,6 +155,8 @@ class JudgeInstance(object):
             allowed_language_keys=set(data["language_keys"])
             if "language_keys" in data
             else None,
+            team_categories=list(
+                TeamCategory.parse(key, value) for key, value in data.get("team_categories", {}).items())
         )
 
     def serialize(self):
@@ -163,5 +167,6 @@ class JudgeInstance(object):
                 "base_time": self.base_time,
                 "user_whitelist": list(self.user_whitelist),
                 "language_keys": list_if_not_none(self.allowed_language_keys),
+                "team_categories": {category.json_ref: category.serialize() for category in self.team_categories}
             }
         )

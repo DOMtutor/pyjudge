@@ -1,28 +1,58 @@
 import dataclasses
-import enum
+import typing
 from typing import List, Optional, Dict
 
 from .user import User
 
 
-class TeamCategory(enum.Enum):
-    # TODO This currently is hardcoded - but should be sufficient for any kind of course?
-    # TODO However this could be used to manage access permissions on a multi-course instance
-    Jury = "jury"
-    Solution = "solution"
-    Author = "author"
-    Participants = "participants"
-    Hidden = "hidden"
+@dataclasses.dataclass
+class TeamCategory(object):
+    key: str
+    database_name: str
+    color: str
+    visible: bool
+    order: int
+    self_registration: bool
 
     @staticmethod
-    def parse(data):
-        for category in TeamCategory:
-            if category.value == data:
-                return category
-        raise KeyError(data)
+    def parse(key, data):
+        return TeamCategory(key,
+                            data["name"],
+                            data["color"],
+                            data["visible"],
+                            data["order"],
+                            data["self_registration"])
+
+    @property
+    def json_ref(self):
+        return self.key
 
     def serialize(self):
-        return self.value
+        return {
+            "name": self.database_name,
+            "color": self.color,
+            "visible": self.visible,
+            "order": self.order,
+            "self_registration": self.self_registration
+        }
+
+    def __hash__(self):
+        return hash(self.key)
+
+    def __eq__(self, other):
+        return isinstance(other, TeamCategory) and self.key == other.key
+
+
+class _SystemMeta(type, typing.Iterable[TeamCategory]):
+    def __iter__(self):
+        return iter(c for c in self.__dict__.values() if isinstance(c, TeamCategory))
+
+
+class SystemCategory(metaclass=_SystemMeta):
+    Jury = TeamCategory("jury", "Jury", "lightgreen", False, 10, False)
+    Solution = TeamCategory("solution", "Solutions", "green", False, 20, False)
+    Author = TeamCategory("author", "Authors", "green", False, 30, False)
+    System = TeamCategory("system", "System", "purple", False, 40, False)
 
 
 @dataclasses.dataclass
@@ -62,9 +92,9 @@ class Team(object):
 
     @staticmethod
     def parse(
-        data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation]
+            name, data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation], category_by_name: Dict[str, TeamCategory]
     ):
-        category = TeamCategory.parse(data["category"]) if "category" in data else None
+        category = category_by_name[data["category"]] if "category" in data else None
         affiliation = (
             affiliation_by_name[data["affiliation"]] if "affiliation" in data else None
         )
@@ -78,7 +108,7 @@ class Team(object):
             members.append(user_by_name[member_name])
 
         return Team(
-            name=data["name"],
+            name=name,
             display_name=data["display_name"],
             members=members,
             category=category,
@@ -93,7 +123,7 @@ class Team(object):
         data = {
             "name": self.name,
             "display_name": self.display_name,
-            "category": self.category.serialize(),
+            "category": self.category.json_ref,
             "members": [user.login_name for user in self.members],
         }
         if self.affiliation:

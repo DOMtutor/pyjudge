@@ -4,7 +4,6 @@ from typing import List, Collection, Tuple, Dict, Generator
 
 from mysql.connector.cursor import MySQLCursor
 
-from pyjudge.action.update import category_to_database
 from pyjudge.data.submission import (
     SubmissionDto,
     SubmissionFileDto,
@@ -13,8 +12,9 @@ from pyjudge.data.submission import (
     ContestDescriptionDto,
 )
 from pyjudge.data.teams import UserDto, TeamDto
+from pyjudge.model import Verdict
+from pyjudge.model.team import SystemCategory
 from pyjudge.scripts.db import Database, list_param, get_unique
-from pyjudge.model import Verdict, TeamCategory
 
 
 def parse_judging_verdict(key):
@@ -309,16 +309,16 @@ def find_clarifications(
         return clarifications_by_id.values()
 
 
-def find_teams(database: Database, categories: List[TeamCategory]) -> List[TeamDto]:
-    if not categories:
-        return []
+def find_non_system_teams(database: Database) -> List[TeamDto]:
+    system_categories = {category.name for category in SystemCategory}
+
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         cursor.execute(
             f"SELECT t.teamid, t.name, t.display_name, tc.name FROM team t "
             f"  JOIN team_category tc on t.categoryid = tc.categoryid "
             f"WHERE "
-            f"  tc.name IN {list_param(categories)} ",
-            tuple(category_to_database[category] for category in categories),
+            f"  tc.name NOT IN {list_param(system_categories)} ",
+            tuple(system_categories),
         )
         team_data = {
             team_id: (key, name, category) for team_id, key, name, category in cursor

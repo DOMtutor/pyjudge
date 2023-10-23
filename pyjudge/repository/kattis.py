@@ -23,9 +23,9 @@ from pyjudge.model import (
     Executable,
     ProblemLoader,
     ExecutableType,
-    Team,
-    TeamCategory,
+    Team
 )
+from pyjudge.model.team import SystemCategory
 from pyjudge.model.util import get_md5
 
 log = logging.getLogger(__name__)
@@ -108,10 +108,10 @@ class RepositoryAuthor(object):
     key: str
     name: str
     patterns: List[re.Pattern]
-    affiliation_key: Optional[str]
+    affiliation: Optional[Affiliation]
 
     @staticmethod
-    def parse(key, data):
+    def parse(key, data, affiliations: Dict[str, Affiliation]):
         if "regex" in data:
             regexes = data["regex"]
             if isinstance(regexes, str):
@@ -128,7 +128,7 @@ class RepositoryAuthor(object):
             key=key,
             name=data["name"],
             patterns=patterns,
-            affiliation_key=data.get("affiliation", None),
+            affiliation=affiliations[data["affiliation"]] if "affiliation" in data else None,
         )
 
 
@@ -643,9 +643,13 @@ class Repository(object):
         with config_path.open(mode="rt") as f:
             configuration = yaml.safe_load(f)
 
-        self.affiliations: List[Affiliation] = [Affiliation.parse()]
+        affiliations_by_key: Dict[str, Affiliation] = {
+            key: Affiliation.parse(key, data)
+            for key, data in configuration.get("affiliations", {}).items()
+        }
+        self.affiliations: List[Affiliation] = list(affiliations_by_key.values())
         self.authors: List[RepositoryAuthor] = [
-            RepositoryAuthor.parse(author, data)
+            RepositoryAuthor.parse(author, data, affiliations_by_key)
             for author, data in configuration.get("authors", {}).items()
         ]
 
@@ -728,7 +732,7 @@ class Repository(object):
         return Team(
             name=f"sol_lang_{language.key}",
             display_name=f"Sample Solution {language.name}",
-            category=TeamCategory.Solution,
+            category=SystemCategory.Solution,
             affiliation=None,
             members=[],
         )
@@ -739,14 +743,15 @@ class Repository(object):
             return Team(
                 name="sol_author_unknown",
                 display_name="Author Unknown",
-                category=TeamCategory.Author,
+                category=SystemCategory.Author,
                 affiliation=None,
                 members=[],
             )
+
         return Team(
             name=f"sol_author_{author.key}",
             display_name=f"Author {author.name}",
-            category=TeamCategory.Author,
+            category=SystemCategory.Author,
             affiliation=author.affiliation,
             members=[],
         )

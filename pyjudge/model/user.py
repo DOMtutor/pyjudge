@@ -27,8 +27,8 @@ class User(object):
     login_name: str
     display_name: str
     email: Optional[str]
-    password_hash: Optional[str]
     role: UserRole
+    password_hash: Optional[str] = None
 
     @property
     def json_ref(self):
@@ -39,7 +39,7 @@ class User(object):
         return User(
             key,
             data["display_name"],
-            data["email"],
+            email=data.get("email", None),
             password_hash=data.get("password_hash", None),
             role=UserRole.parse(data["role"]),
         )
@@ -53,6 +53,16 @@ class User(object):
                 "password_hash": self.password_hash,
             }
         )
+
+    @staticmethod
+    def generate_salt() -> bytes:
+        import bcrypt
+        return bcrypt.gensalt()
+
+    @staticmethod
+    def hash_password(password: str, salt: bytes) -> str:
+        import bcrypt
+        return bcrypt.hashpw(password.encode(), salt).decode()
 
     def __hash__(self):
         return hash(self.login_name)

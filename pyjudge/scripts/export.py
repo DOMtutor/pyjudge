@@ -7,7 +7,6 @@ import gzip
 from typing import Optional
 
 from pyjudge.action import query
-from pyjudge.model import TeamCategory
 from pyjudge.data.submission import ContestDataDto
 from pyjudge.scripts.db import Database
 
@@ -16,9 +15,7 @@ def write_contest(
     database: Database, contest_key: str, destination: Optional[pathlib.Path]
 ):
     with database as connection:
-        teams = query.find_teams(
-            connection, [TeamCategory.Participants, TeamCategory.Hidden]
-        )
+        teams = query.find_non_system_teams(connection)
         teams_by_key = {team.key: team for team in teams}
         language_name_by_key = query.find_languages(connection)
 
@@ -66,9 +63,7 @@ def write_submission_files(
     database: Database, contest_key: str, destination: Optional[pathlib.Path]
 ):
     with database as connection:
-        teams = query.find_teams(
-            connection, [TeamCategory.Participants, TeamCategory.Hidden]
-        )
+        teams = query.find_non_system_teams(connection)
         team_keys = {team.key for team in teams}
         submissions = [
             submission

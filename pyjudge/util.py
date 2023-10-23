@@ -8,6 +8,8 @@ def list_if_not_none(iterable: Optional[Iterable[Any]]):
 
 
 def filter_none(data: Dict[str, Any], except_keys: Optional[Set[str]] = None):
+    if except_keys is None:
+        except_keys = {}
     return {
         key: value
         for key, value in data.items()

@@ -22,9 +22,10 @@ from pyjudge.model import (
     ProblemSubmission,
     Team,
     User,
-    Affiliation,
+    Affiliation, TeamCategory,
 )
 from pyjudge.model.settings import JudgeInstance
+from pyjudge.model.team import SystemCategory
 from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
 from pyjudge.scripts.db import Database
 
@@ -181,7 +182,7 @@ class UsersDescription(object):
     teams: List[Team]
 
     @staticmethod
-    def parse(data):
+    def parse(data, category_by_name: Dict[str, TeamCategory]):
         users: List[User] = [
             User.parse(key, value) for key, value in data["users"].items()
         ]
@@ -192,9 +193,11 @@ class UsersDescription(object):
         affiliation_by_name: Dict[str, Affiliation] = {
             affiliation.short_name: affiliation for affiliation in affiliations
         }
+
+        categories = dict(category_by_name)
         teams = [
-            Team.parse(team, user_by_login, affiliation_by_name)
-            for team in data["teams"]
+            Team.parse(key, value, user_by_login, affiliation_by_name, category_by_name)
+            for key, value in data["teams"].items()
         ]
         return UsersDescription(users, affiliations, teams)
 
@@ -248,7 +251,7 @@ def update_settings(config: PyjudgeConfig):
     with config.database as connection:
         with connection.transaction_cursor(prepared_cursor=True) as cursor:
             update.update_settings(cursor, config.judge.settings)
-            update.update_categories(cursor, lazy=False)
+            update.update_categories(cursor, config.judge.team_categories, lazy=False)
             update.set_languages(
                 cursor,
                 config.repository.get_languages(config.judge.allowed_language_keys),
@@ -307,9 +310,9 @@ def command_users(config: PyjudgeConfig, args):
         user_data = json.load(file)
     upload_users(
         config,
-        UsersDescription.parse(user_data),
+        UsersDescription.parse(user_data, {category.key: category for category in config.judge.team_categories + [SystemCategory.Jury]}),
         disable_unknown=args.disable,
-        overwrite_passwords=args.passwords,
+        overwrite_passwords=args.overwrite_passwords,
     )
 
 
@@ -326,7 +329,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--db", type=pathlib.Path, required=True, help="Path to database config"
+        "--db", type=pathlib.Path, default="db.yml", help="Path to database config"
     )
     parser.add_argument(
         "--repository",
@@ -338,7 +341,7 @@ def main():
     parser.add_argument(
         "--instance",
         type=pathlib.Path,
-        required=True,
+        default="instance.json",
         help="Path to instance specification",
     )
     parser.add_argument("--debug", help="Enable debug messages", action="store_true")
@@ -424,7 +427,7 @@ def main():
         "--disable", action="store_true", help="Disable unknown users"
     )
     users_parser.add_argument(
-        "--passwords", action="store_true", help="Overwrite passwords of existing users"
+        "--overwrite-passwords", action="store_true", help="Overwrite given passwords of existing users"
     )
     users_parser.set_defaults(func=command_users)
 
@@ -442,6 +445,12 @@ def main():
     with arguments.instance.open(mode="rt") as f:
         instance_data = json.load(f)
     instance = JudgeInstance.parse_instance(instance_data)
+    if not instance.team_categories:
+        raise ValueError("Instance has no defined categories, this is very likely not what you want")
+    category_keys = set(category.key for category in instance.team_categories)
+    for system_category in SystemCategory:
+        if system_category.key in category_keys:
+            raise ValueError(f"Reserved system category {system_category.key} declared!")
 
     arguments.func(
         PyjudgeConfig(
