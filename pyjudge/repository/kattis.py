@@ -5,7 +5,7 @@ import pathlib
 import re
 import stat
 import subprocess
-from typing import Optional, List, Dict, Tuple, Collection
+from typing import Optional, List, Dict, Tuple, Collection, Set
 
 import yaml
 
@@ -125,6 +125,7 @@ class RepositoryAuthor(object):
             name=data["name"],
             patterns=patterns,
             affiliation=Affiliation(short_name="tum", name="TUM", country="DEU"),
+            # TODO Specify affiliations in repo (and judge config?)
         )
 
 
@@ -349,28 +350,53 @@ class RepositoryProblem(Problem):
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 
-    def generate_input_if_required(self, seed, input_=None):
+    def _find_generator_process(self):
         generator_dir = self.directory / "generators"
-        generator_files = list(generator_dir.glob("*.java"))
-        generators = [file for file in generator_files if file.stem.endswith("Generator")]
-        if len(generators) != 1:
-            # noinspection PyUnusedLocal
-            def generate(s, a, b):
-                raise ValueError(f"Generators for {s} ill-configured, require exactly one *Generator.java")
 
+        generator_process: List[str]
+
+        python_files = list(generator_dir.glob("*.py"))
+        python_generator: Optional[pathlib.Path] = None
+        if len(python_files) == 1:
+            python_generator = python_files[0]
         else:
-            generator_classes = [file.name for file in generator_files]
-            self.log.debug("Compiling generator files %s", " ".join(generator_classes))
-            subprocess.run(
-                ["javac"] + generator_classes,
-                cwd=generator_dir.absolute(),
-                timeout=30,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-            )
-            generator_name = generators[0].with_suffix("").name
+            for file in python_files:
+                if file.stem.lower() in {"generator", "generate"}:
+                    if python_generator is not None:
+                        raise ValueError("Multiple python generators")
+                    python_generator = file
+
+        if python_generator is not None:
+            logging.debug("Using python generator %s", python_generator.name)
+            return ["python", python_generator]
+
+        java_files = list(generator_dir.glob("*.java"))
+        generators = [file for file in java_files if file.stem.endswith("Generator")]
+        if len(generators) > 1:
+            raise ValueError("Multiple *Generator.java files")
+
+        if not generators:
+            raise ValueError("No generators found")
+
+        generator_classes = [file.name for file in java_files]
+        self.log.debug("Compiling generator files %s", " ".join(generator_classes))
+        subprocess.run(
+            ["javac"] + generator_classes,
+            cwd=generator_dir.absolute(),
+            timeout=30,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+        generator_name = generators[0].with_suffix("").name
+
+        return ["java", generator_name]
+
+    def generate_input_if_required(self, seed, input_=None):
+        try:
+            generator_dir = self.directory / "generators"
+            generator = self._find_generator_process()
 
             def generate(s, seed_file: pathlib.Path, input_file: Optional[pathlib.Path] = None):
                 if input_file is None:
@@ -393,7 +419,7 @@ class RepositoryProblem(Problem):
                 s.log.debug("Generating input %s from seed file %s", input_file.name, seed_file.name)
                 with input_file.open(mode="wt") as f:
                     subprocess.run(
-                        ["java", generator_name],
+                        generator,
                         cwd=generator_dir.absolute(),
                         timeout=20,
                         check=True,
@@ -402,6 +428,11 @@ class RepositoryProblem(Problem):
                         stderr=subprocess.PIPE,
                         universal_newlines=True,
                     )
+        except ValueError as e:
+            message = str(e)
+
+            def generate(s, f, i):
+                raise ValueError(f"Generator error for {s}: {message}", e)
 
         # noinspection PyAttributeOutsideInit
         self.generate_input_if_required = generate.__get__(self, RepositoryProblem)
@@ -566,6 +597,7 @@ class Repository(object):
 
         with (data_directory / "languages.yml").open(mode="rt") as f:
             language_configuration = yaml.safe_load(f)
+
         self.languages: List[Language] = [
             Repository.parse_language(self.language_base_directory, lang, data)
             for lang, data in language_configuration.items()
@@ -670,3 +702,17 @@ class Repository(object):
 
     def find_language_of_submission(self, submission: JurySubmission) -> Optional[Language]:
         return self.languages_by_extension.get(submission.extension, None)
+
+    def get_languages(self, allowed_keys: Optional[Set[str]]):
+        if allowed_keys is None:
+            return self.languages
+
+        language_by_key = {language.key: language for language in self.languages}
+        filtered_languages = []
+        for key in allowed_keys:
+            if key not in language_by_key:
+                raise ValueError("Unknown language ")
+            filtered_languages.append(language_by_key[key])
+        if not filtered_languages:
+            raise ValueError("No languages configured")
+        return self.languages

@@ -184,7 +184,7 @@ def update_settings(config: PyjudgeConfig):
         with connection.transaction_cursor(prepared_cursor=True) as cursor:
             update.update_settings(cursor, config.judge.settings)
             update.update_categories(cursor, lazy=False)
-            update.set_languages(cursor, config.repository.languages)  # TODO Awkward
+            update.set_languages(cursor, config.repository.get_languages(config.judge.allowed_language_keys))
 
 
 def check_database(config: PyjudgeConfig):
