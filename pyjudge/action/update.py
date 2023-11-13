@@ -70,7 +70,7 @@ def find_system_categories(cursor: MySQLCursor) -> Dict[TeamCategory, int]:
 
 def update_categories(cursor: MySQLCursor, categories: List[TeamCategory], lazy=False) -> Dict[TeamCategory, int]:
     expected_category_names = {category.database_name for category in categories}
-    expected_category_names.update({category.name for category in SystemCategory})
+    expected_category_names.update({category.database_name for category in SystemCategory})
     category_ids = find_all_categories(cursor, categories)
     category_ids_by_name = {category.database_name: category for category in category_ids.keys()}
 
@@ -608,7 +608,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 
 def set_languages(cursor: MySQLCursor, languages: List[Language]):
-    log.info("Setting the list of languages")
+    log.info("Setting the list of languages to %s", [language.name for language in languages])
     cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
         create_or_update_language(cursor, language)

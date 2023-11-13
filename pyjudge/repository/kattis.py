@@ -783,4 +783,5 @@ class Repository(object):
             filtered_languages.append(language_by_key[key])
         if not filtered_languages:
             raise ValueError("No languages configured")
-        return self.languages
+        return filtered_languages
+
