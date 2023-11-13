@@ -23,7 +23,7 @@ from pyjudge.model import (
     Executable,
     ProblemLoader,
     ExecutableType,
-    Team
+    Team,
 )
 from pyjudge.model.team import SystemCategory
 from pyjudge.model.util import get_md5
@@ -128,7 +128,9 @@ class RepositoryAuthor(object):
             key=key,
             name=data["name"],
             patterns=patterns,
-            affiliation=affiliations[data["affiliation"]] if "affiliation" in data else None,
+            affiliation=affiliations[data["affiliation"]]
+            if "affiliation" in data
+            else None,
         )
 
 
@@ -784,4 +786,3 @@ class Repository(object):
         if not filtered_languages:
             raise ValueError("No languages configured")
         return filtered_languages
-

@@ -156,7 +156,9 @@ class JudgeInstance(object):
             if "language_keys" in data
             else None,
             team_categories=list(
-                TeamCategory.parse(key, value) for key, value in data.get("team_categories", {}).items())
+                TeamCategory.parse(key, value)
+                for key, value in data.get("team_categories", {}).items()
+            ),
         )
 
     def serialize(self):
@@ -167,6 +169,9 @@ class JudgeInstance(object):
                 "base_time": self.base_time,
                 "user_whitelist": list(self.user_whitelist),
                 "language_keys": list_if_not_none(self.allowed_language_keys),
-                "team_categories": {category.json_ref: category.serialize() for category in self.team_categories}
+                "team_categories": {
+                    category.json_ref: category.serialize()
+                    for category in self.team_categories
+                },
             }
         )

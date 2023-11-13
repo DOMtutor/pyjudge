@@ -16,12 +16,14 @@ class TeamCategory(object):
 
     @staticmethod
     def parse(key, data):
-        return TeamCategory(key,
-                            data["name"],
-                            data["color"],
-                            data["visible"],
-                            data["order"],
-                            data["self_registration"])
+        return TeamCategory(
+            key,
+            data["name"],
+            data["color"],
+            data["visible"],
+            data["order"],
+            data["self_registration"],
+        )
 
     @property
     def json_ref(self):
@@ -33,7 +35,7 @@ class TeamCategory(object):
             "color": self.color,
             "visible": self.visible,
             "order": self.order,
-            "self_registration": self.self_registration
+            "self_registration": self.self_registration,
         }
 
     def __hash__(self):
@@ -92,7 +94,11 @@ class Team(object):
 
     @staticmethod
     def parse(
-            name, data, user_by_name: Dict[str, User], affiliation_by_name: Dict[str, Affiliation], category_by_name: Dict[str, TeamCategory]
+        name,
+        data,
+        user_by_name: Dict[str, User],
+        affiliation_by_name: Dict[str, Affiliation],
+        category_by_name: Dict[str, TeamCategory],
     ):
         category = category_by_name[data["category"]] if "category" in data else None
         affiliation = (

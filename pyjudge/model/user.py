@@ -57,11 +57,13 @@ class User(object):
     @staticmethod
     def generate_salt() -> bytes:
         import bcrypt
+
         return bcrypt.gensalt()
 
     @staticmethod
     def hash_password(password: str, salt: bytes) -> str:
         import bcrypt
+
         return bcrypt.hashpw(password.encode(), salt).decode()
 
     def __hash__(self):

@@ -22,7 +22,8 @@ from pyjudge.model import (
     ProblemSubmission,
     Team,
     User,
-    Affiliation, TeamCategory,
+    Affiliation,
+    TeamCategory,
 )
 from pyjudge.model.settings import JudgeInstance
 from pyjudge.model.team import SystemCategory
@@ -310,7 +311,13 @@ def command_users(config: PyjudgeConfig, args):
         user_data = json.load(file)
     upload_users(
         config,
-        UsersDescription.parse(user_data, {category.key: category for category in config.judge.team_categories + [SystemCategory.Jury]}),
+        UsersDescription.parse(
+            user_data,
+            {
+                category.key: category
+                for category in config.judge.team_categories + [SystemCategory.Jury]
+            },
+        ),
         disable_unknown=args.disable,
         overwrite_passwords=args.overwrite_passwords,
     )
@@ -427,7 +434,9 @@ def main():
         "--disable", action="store_true", help="Disable unknown users"
     )
     users_parser.add_argument(
-        "--overwrite-passwords", action="store_true", help="Overwrite given passwords of existing users"
+        "--overwrite-passwords",
+        action="store_true",
+        help="Overwrite given passwords of existing users",
     )
     users_parser.set_defaults(func=command_users)
 
@@ -446,11 +455,15 @@ def main():
         instance_data = json.load(f)
     instance = JudgeInstance.parse_instance(instance_data)
     if not instance.team_categories:
-        raise ValueError("Instance has no defined categories, this is very likely not what you want")
+        raise ValueError(
+            "Instance has no defined categories, this is very likely not what you want"
+        )
     category_keys = set(category.key for category in instance.team_categories)
     for system_category in SystemCategory:
         if system_category.key in category_keys:
-            raise ValueError(f"Reserved system category {system_category.key} declared!")
+            raise ValueError(
+                f"Reserved system category {system_category.key} declared!"
+            )
 
     arguments.func(
         PyjudgeConfig(

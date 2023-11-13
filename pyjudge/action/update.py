@@ -44,7 +44,9 @@ user_role_to_database = {
 }
 
 
-def find_all_categories(cursor: MySQLCursor, categories: List[TeamCategory]) -> Dict[TeamCategory, int]:
+def find_all_categories(
+    cursor: MySQLCursor, categories: List[TeamCategory]
+) -> Dict[TeamCategory, int]:
     cursor.execute("SELECT categoryid, name FROM team_category")
 
     all_categories = list(categories) + list(SystemCategory)
@@ -68,11 +70,17 @@ def find_system_categories(cursor: MySQLCursor) -> Dict[TeamCategory, int]:
     return find_all_categories(cursor, [])
 
 
-def update_categories(cursor: MySQLCursor, categories: List[TeamCategory], lazy=False) -> Dict[TeamCategory, int]:
+def update_categories(
+    cursor: MySQLCursor, categories: List[TeamCategory], lazy=False
+) -> Dict[TeamCategory, int]:
     expected_category_names = {category.database_name for category in categories}
-    expected_category_names.update({category.database_name for category in SystemCategory})
+    expected_category_names.update(
+        {category.database_name for category in SystemCategory}
+    )
     category_ids = find_all_categories(cursor, categories)
-    category_ids_by_name = {category.database_name: category for category in category_ids.keys()}
+    category_ids_by_name = {
+        category.database_name: category for category in category_ids.keys()
+    }
 
     if lazy and category_ids_by_name.keys() == expected_category_names:
         assert category_ids.keys() == set(categories)
@@ -103,7 +111,13 @@ def update_categories(cursor: MySQLCursor, categories: List[TeamCategory], lazy=
             "UPDATE team_category "
             "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = ? "
             "WHERE categoryid = ?",
-            (category.order, category.color, category.visible, category.self_registration, category_id),
+            (
+                category.order,
+                category.color,
+                category.visible,
+                category.self_registration,
+                category_id,
+            ),
         )
 
     if category_ids_to_delete:
@@ -121,10 +135,10 @@ def update_categories(cursor: MySQLCursor, categories: List[TeamCategory], lazy=
 
 
 def create_or_update_teams(
-        cursor: MySQLCursor,
-        teams: Collection[Team],
-        affiliation_ids: Dict[Affiliation, int],
-        user_ids: Dict[User, int]
+    cursor: MySQLCursor,
+    teams: Collection[Team],
+    affiliation_ids: Dict[Affiliation, int],
+    user_ids: Dict[User, int],
 ) -> Dict[Team, int]:
     log.info("Updating %d teams", len(teams))
     if not teams:
@@ -248,7 +262,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
 
 
 def create_or_update_problem_data(
-        cursor: MySQLCursor, instance: JudgeInstance, problem: Problem
+    cursor: MySQLCursor, instance: JudgeInstance, problem: Problem
 ) -> int:
     log.debug("Updating problem %s", problem)
 
@@ -384,8 +398,8 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         )
         if cursor.fetchone()[0]:
             if (
-                    problem_testcase.input_md5 != database_case.input_md5
-                    or problem_testcase.output_md5 != database_case.output_md5
+                problem_testcase.input_md5 != database_case.input_md5
+                or problem_testcase.output_md5 != database_case.output_md5
             ):
                 update_testcase_content.append((problem_testcase, database_case))
                 cursor.execute(
@@ -493,7 +507,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         log.debug("Updating ranks of %d elements", len(rank_update))
         # Ugly hack
         maximal_rank = (
-                max(database_case.rank for _, database_case in existing_cases) + 1
+            max(database_case.rank for _, database_case in existing_cases) + 1
         )
         for _, case in rank_update:
             maximal_rank += 1
@@ -608,7 +622,9 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 
 def set_languages(cursor: MySQLCursor, languages: List[Language]):
-    log.info("Setting the list of languages to %s", [language.name for language in languages])
+    log.info(
+        "Setting the list of languages to %s", [language.name for language in languages]
+    )
     cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
         create_or_update_language(cursor, language)
@@ -680,11 +696,11 @@ def clear_invalid_submissions(cursor):
 
 
 def create_problem_submissions(
-        cursor: MySQLCursor,
-        problem: Problem,
-        existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
-        team_ids: Dict[Team, int],
-        contest_ids: Optional[List[int]] = None,
+    cursor: MySQLCursor,
+    problem: Problem,
+    existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
+    team_ids: Dict[Team, int],
+    contest_ids: Optional[List[int]] = None,
 ):
     log.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
@@ -750,12 +766,12 @@ def create_problem_submissions(
     existing_submissions: Dict[int, Tuple[int, int, int, int, Tuple[Verdict, ...]]] = {}
     submission_successor: Dict[int, int] = {}
     for (
-            submission_id,
-            original_submission_id,
-            team_id,
-            contest_id,
-            expected_results_string,
-            language_id,
+        submission_id,
+        original_submission_id,
+        team_id,
+        contest_id,
+        expected_results_string,
+        language_id,
     ) in cursor:
         expected_results_list = (
             json.loads(expected_results_string) if expected_results_string else []
@@ -820,18 +836,18 @@ def create_problem_submissions(
     }
 
     for submission_id, (
-            _,
-            team_id,
-            contest_id,
-            expected_results,
-            language_id,
+        _,
+        team_id,
+        contest_id,
+        expected_results,
+        language_id,
     ) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
             log.warning("No files for submission %d", submission_id)
 
         assert (
-                team_id in used_team_ids
+            team_id in used_team_ids
         ), f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
         submissions_by_contest_and_team[contest_id][team_id][file_names].append(
             submission_id
@@ -839,11 +855,11 @@ def create_problem_submissions(
 
     for contest_id, team_id in invalid_submissions_groups:
         if (
-                contest_id in submissions_by_contest_and_team
-                and team_id in submissions_by_contest_and_team[contest_id]
+            contest_id in submissions_by_contest_and_team
+            and team_id in submissions_by_contest_and_team[contest_id]
         ):
             for submission_ids in (
-                    submissions_by_contest_and_team[contest_id].pop(team_id).values()
+                submissions_by_contest_and_team[contest_id].pop(team_id).values()
             ):
                 invalid_submission_ids.update(set(submission_ids))
 
@@ -909,8 +925,8 @@ def create_problem_submissions(
                     # TODO Multiple file submissions
                     assert len(file_names) == 1
                     if (
-                            submission.source_md5()
-                            != existing_file_hashes[submission.file_name]
+                        submission.source_md5()
+                        != existing_file_hashes[submission.file_name]
                     ):
                         log.debug("%s changed hash", submission)
                         insert = True
@@ -997,10 +1013,10 @@ def create_problem_submissions(
 
 
 def create_or_update_contest_problems(
-        cursor: MySQLCursor,
-        contest: Contest,
-        contest_id: int,
-        problem_ids: Dict[Problem, int],
+    cursor: MySQLCursor,
+    contest: Contest,
+    contest_id: int,
+    problem_ids: Dict[Problem, int],
 ):
     # TODO Does not yet handle the case when contest problem is changed
 
@@ -1167,7 +1183,7 @@ def fetch_user_roles(cursor: MySQLCursor) -> Dict[str, int]:
 
 
 def create_or_update_affiliations(
-        cursor: MySQLCursor, affiliations: Collection[Affiliation]
+    cursor: MySQLCursor, affiliations: Collection[Affiliation]
 ) -> Dict[Affiliation, int]:
     log.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
@@ -1214,7 +1230,7 @@ def create_or_update_affiliations(
 
 
 def create_or_update_users(
-        cursor: MySQLCursor, users: Collection[User], overwrite_passwords=False
+    cursor: MySQLCursor, users: Collection[User], overwrite_passwords=False
 ) -> Dict[User, int]:
     log.info("Updating %d users", len(users))
     if not users:
