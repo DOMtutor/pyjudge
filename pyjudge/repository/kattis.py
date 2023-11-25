@@ -355,8 +355,8 @@ class RepositoryProblem(Problem):
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
         if (
-                not problem_pdf.exists()
-                or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
+            not problem_pdf.exists()
+            or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
         ):
             problem_pdf.parent.mkdir(exist_ok=True, parents=True)
             self.log.debug("Building problem pdf for language %s", lang)
@@ -440,9 +440,9 @@ class RepositoryProblem(Problem):
                     seed_change_time = seed_file.stat().st_mtime
                     input_change_time = in_stat.st_mtime
                     if (
-                            in_stat.st_size > 0
-                            and generator_change_time <= input_change_time
-                            and seed_change_time <= input_change_time
+                        in_stat.st_size > 0
+                        and generator_change_time <= input_change_time
+                        and seed_change_time <= input_change_time
                     ):
                         return
 

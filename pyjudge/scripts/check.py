@@ -17,7 +17,11 @@ def main():
     parser.add_argument("--statement", type=str)
     args = parser.parse_args()
 
-    candidates: List[pathlib.Path] = [args.repository, args.repository / "repository", args.repository.parent]
+    candidates: List[pathlib.Path] = [
+        args.repository,
+        args.repository / "repository",
+        args.repository.parent,
+    ]
     repository = None
     for path in candidates:
         if path.exists() and Repository.is_repository(path):
