@@ -35,12 +35,18 @@ class ExecutionError(Exception):
     def __init__(self, err):
         self.err = err
 
+    def __str__(self):
+        return f"{self.err}"
+
 
 class StatusExecutionError(ExecutionError):
     def __init__(self, code, out, err):
-        super.__init__(err)
+        super().__init__(err)
         self.code = code
         self.out = out
+
+    def __str__(self):
+        return f"Exit with {self.code}\n{self.out}\n{self.err}"
 
 
 class RepositoryTestCase(ProblemTestCase):
@@ -338,8 +344,7 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    @property
-    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+    def generate_problem_text_if_required(self, lang="en"):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -349,11 +354,11 @@ class RepositoryProblem(Problem):
             )
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
-        problem_pdf.parent.mkdir(exist_ok=True, parents=True)
         if (
-            not problem_pdf.exists()
-            or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
+                not problem_pdf.exists()
+                or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
         ):
+            problem_pdf.parent.mkdir(exist_ok=True, parents=True)
             self.log.debug("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
             options.language = lang
@@ -363,8 +368,16 @@ class RepositoryProblem(Problem):
 
             problemtools.problem2pdf.convert(str(self.directory.absolute()), options)
 
+            # TODO Wait till problemtools allows extracting the output
             if not problem_pdf.exists():
-                raise ValueError(f"Missing problem pdf")
+                raise ValueError(
+                    f"Missing problem pdf for {self.name} -- probably a LaTeX error"
+                )
+        return problem_pdf
+
+    @property
+    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+        problem_pdf = self.generate_problem_text_if_required(lang)
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 
@@ -386,7 +399,7 @@ class RepositoryProblem(Problem):
 
         if python_generator is not None:
             logging.debug("Using python generator %s", python_generator.name)
-            return ["python", python_generator]
+            return python_generator.stat().st_mtime, ["python", python_generator]
 
         java_files = list(generator_dir.glob("*.java"))
         generators = [file for file in java_files if file.stem.endswith("Generator")]
@@ -408,13 +421,14 @@ class RepositoryProblem(Problem):
             universal_newlines=True,
         )
         generator_name = generators[0].with_suffix("").name
+        change_time = max(file.stat().st_mtime for file in java_files)
 
-        return ["java", generator_name]
+        return change_time, ["java", generator_name]
 
     def generate_input_if_required(self, seed, input_=None):
         try:
             generator_dir = self.directory / "generators"
-            generator = self._find_generator_process()
+            generator_change_time, generator = self._find_generator_process()
 
             def generate(
                 s, seed_file: pathlib.Path, input_file: Optional[pathlib.Path] = None
@@ -423,9 +437,12 @@ class RepositoryProblem(Problem):
                     input_file = seed_file.with_suffix(".in")
                 if input_file.exists():
                     in_stat = input_file.stat()
+                    seed_change_time = seed_file.stat().st_mtime
+                    input_change_time = in_stat.st_mtime
                     if (
-                        in_stat.st_size > 0
-                        and seed_file.stat().st_mtime <= in_stat.st_mtime
+                            in_stat.st_size > 0
+                            and generator_change_time <= input_change_time
+                            and seed_change_time <= input_change_time
                     ):
                         return
 
@@ -471,9 +488,9 @@ class RepositoryProblem(Problem):
     ):
         if answer_file is None:
             answer_file = input_file.with_suffix(".ans")
-        if (
-            answer_file.is_file()
-            and answer_file.stat().st_mtime >= input_file.stat().st_mtime
+        if answer_file.is_file() and (
+            answer_file.stat().st_mtime >= input_file.stat().st_mtime
+            or input_file.parent.name == "sample"
         ):
             return
         assert self._problemtools_loaded
@@ -504,7 +521,7 @@ class RepositoryProblem(Problem):
                 with error_file.open(mode="rb") as f:
                     error = f.read().decode("utf-8", "replace")
                 error_file.unlink(missing_ok=True)
-            raise StatusExecutionError(stat, "", error)
+            raise StatusExecutionError(status, "", error)
 
     def _generate_testcases(self):
         if self._test_cases is None:
@@ -583,7 +600,7 @@ class RepositoryProblems(ProblemLoader[RepositoryProblem]):
             return self._problems[name]
         path = self.base_path / name
         if not path.is_dir() or not (path / "problem.yaml").exists():
-            raise KeyError
+            raise KeyError(f"Problem {name} not found")
         problem = RepositoryProblem(path, self.repository)
         self._problems[path.name] = problem
         return problem

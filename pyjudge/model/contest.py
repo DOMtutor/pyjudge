@@ -108,7 +108,7 @@ class Contest(object):
 
     @staticmethod
     def _format_datetime(dt: datetime):
-        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo}"
+        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
 
     @staticmethod
     def _parse_datetime(string: str):
