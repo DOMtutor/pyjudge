@@ -651,14 +651,19 @@ class Repository(object):
             compile_script=compile_script,
         )
 
-    def __init__(self, base_path: pathlib.Path):
-        self.base_directory = base_path
+    @staticmethod
+    def is_repository(directory: pathlib.Path):
+        return (directory / "config.yaml").is_file()
 
-        config_path = base_path / "config.yaml"
-        if not config_path.is_file():
+    def __init__(self, base_path: pathlib.Path):
+        if not Repository.is_repository(base_path):
             raise ValueError(
                 f"Directory {base_path} does not seem to be a Kattis repository"
             )
+
+        self.base_directory = base_path
+
+        config_path = base_path / "config.yaml"
         with config_path.open(mode="rt") as f:
             configuration = yaml.safe_load(f)
 
