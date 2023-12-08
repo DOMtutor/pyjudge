@@ -5,7 +5,7 @@ import pathlib
 import re
 import stat
 import subprocess
-from typing import Optional, List, Dict, Tuple, Collection, Set
+from typing import Optional, List, Dict, Tuple, Collection
 
 import yaml
 
@@ -384,8 +384,6 @@ class RepositoryProblem(Problem):
     def _find_generator_process(self):
         generator_dir = self.directory / "generators"
 
-        generator_process: List[str]
-
         python_files = list(generator_dir.glob("*.py"))
         python_generator: Optional[pathlib.Path] = None
         if len(python_files) == 1:
@@ -475,9 +473,10 @@ class RepositoryProblem(Problem):
 
         except ValueError as e:
             message = str(e)
+            error = e
 
             def generate(s, f, i):
-                raise ValueError(f"Generator error for {s}: {message}", e)
+                raise ValueError(f"Generator error for {s}: {message}", error)
 
         # noinspection PyAttributeOutsideInit
         self.generate_input_if_required = generate.__get__(self, RepositoryProblem)
@@ -714,29 +713,61 @@ class Repository(object):
         return match
 
     def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:
-        problem_checkers = {
-            "java": [(problem.directory / "output_validators" / "checker")],
-            "cpp": [(problem.directory / "output_validators" / "validate")],
-            "python": [(problem.directory / "output_validators" / "checker_py")],
-        }
+        base_directory = problem.directory / "output_validators"
 
         checker_directory = None
         checker_base = None
-        for key, directories in problem_checkers.items():
-            for directory in directories:
-                if directory.is_dir():
-                    if checker_directory is not None:
-                        raise ValueError("Found multiple checkers")
-                    checker_directory = directory
-                    checker_base = self.checkers_base_directory / key
+
+        if base_directory.exists():
+            files = list(base_directory.iterdir())
+            if len(files) > 1:
+                raise ValueError(f"Found multiple checkers for {problem}")
+            if files:
+                file: pathlib.Path = files[0]
+                if file.is_file():
+                    suffix_to_language = {
+                        ".py": "python",
+                        ".c": "c",
+                        ".cpp": "cpp",
+                        ".java": "java",
+                    }
+                    if file.suffix not in suffix_to_language:
+                        raise ValueError(
+                            f"Checker file {file.name} for {problem} not understood"
+                        )
+
+                    checker_directory = base_directory
+                    checker_base = (
+                        self.checkers_base_directory / suffix_to_language[file.suffix]
+                    )
+                elif file.is_dir():
+                    directory_to_language = {
+                        "checker": "java",
+                        "validate": "cpp",
+                        "checker_py": "python",
+                    }
+                    if file.name not in directory_to_language:
+                        raise ValueError(
+                            f"Checker directory {file.name} for {problem} not understood"
+                        )
+                    checker_directory = file
+                    checker_base = (
+                        self.checkers_base_directory / directory_to_language[file.name]
+                    )
+                else:
+                    raise ValueError(
+                        f"Checker for {problem} contains weird file {file.name}"
+                    )
 
         if checker_directory is None:
             if problem.validation == "custom":
-                raise ValueError(f"Found no checker for custom validation")
+                raise ValueError(
+                    f"Found no checker for custom validation for {problem}"
+                )
             return None
 
         if problem.validation != "custom":
-            raise ValueError("Found checkers for non-custom validation")
+            raise ValueError(f"Found checkers for non-custom validation for {problem}")
 
         files = {}
         files.update(Executable.get_directory_contents(checker_base))
@@ -795,16 +826,5 @@ class Repository(object):
     ) -> Optional[Language]:
         return self.languages_by_extension.get(submission.extension, None)
 
-    def get_languages(self, allowed_keys: Optional[Set[str]]):
-        if allowed_keys is None:
-            return self.languages
-
-        language_by_key = {language.key: language for language in self.languages}
-        filtered_languages = []
-        for key in allowed_keys:
-            if key not in language_by_key:
-                raise ValueError("Unknown language ")
-            filtered_languages.append(language_by_key[key])
-        if not filtered_languages:
-            raise ValueError("No languages configured")
-        return filtered_languages
+    def __str__(self):
+        return f"KattisRepository[{self.base_directory}]"

@@ -4,4 +4,4 @@ destination="$1"
 # memory_limit="$2"
 shift 2
 
-exec g++ -DDOMJUDGE -x c++ -std=gnu++17 -Wall -O2 -static -pipe -o "$destination" "$@"
+exec g++ -DNDEBUG -DDOMJUDGE -x c++ -std=gnu++17 -Wall -O2 -static -pipe -o "$destination" "$@"

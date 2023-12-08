@@ -194,8 +194,6 @@ class UsersDescription(object):
         affiliation_by_name: Dict[str, Affiliation] = {
             affiliation.short_name: affiliation for affiliation in affiliations
         }
-
-        categories = dict(category_by_name)
         teams = [
             Team.parse(key, value, user_by_login, affiliation_by_name, category_by_name)
             for key, value in data["teams"].items()
@@ -254,8 +252,7 @@ def update_settings(config: PyjudgeConfig):
             update.update_settings(cursor, config.judge.settings)
             update.update_categories(cursor, config.judge.team_categories, lazy=False)
             update.set_languages(
-                cursor,
-                config.repository.get_languages(config.judge.allowed_language_keys),
+                cursor, config.repository.languages, config.judge.allowed_language_keys
             )
 
 
@@ -281,7 +278,7 @@ def command_problem(config: PyjudgeConfig, args):
         problems.extend(contest_problem.problem for contest_problem in contest.problems)
 
     if not problems:
-        sys.exit(f"No problems found")
+        sys.exit("No problems found")
     logging.info("Found problems %s", " ".join(problem.name for problem in problems))
 
     upload_problems(
