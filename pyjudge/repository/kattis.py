@@ -460,16 +460,20 @@ class RepositoryProblem(Problem):
                     seed_file.name,
                 )
                 with input_file.open(mode="wt") as f:
-                    subprocess.run(
-                        generator,
-                        cwd=generator_dir.absolute(),
-                        timeout=20,
-                        check=True,
-                        input="\n".join(lines),
-                        stdout=f,
-                        stderr=subprocess.PIPE,
-                        universal_newlines=True,
-                    )
+                    try:
+                        process = subprocess.run(
+                            generator,
+                            cwd=generator_dir.absolute(),
+                            timeout=20,
+                            check=True,
+                            input="\n".join(lines),
+                            stdout=f,
+                            stderr=subprocess.PIPE,
+                            universal_newlines=True,
+                        )
+                    except subprocess.CalledProcessError as e:
+                        log.error("Generator process failed. Stderr:\n%s", e.stderr)
+                        raise e
 
         except ValueError as e:
             message = str(e)
