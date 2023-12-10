@@ -2,7 +2,6 @@ import dataclasses
 from datetime import datetime
 from typing import Optional, List, Set
 
-import dateutil.parser
 import pytz
 
 from .problem import Problem, ProblemLoader

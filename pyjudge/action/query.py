@@ -238,11 +238,11 @@ def find_clarifications(
             cursor, contest_key
         )
         cursor.execute(
-            f"SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
-            f"FROM problem p, clarification c, team t "
-            f"WHERE "
-            f"  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
-            f"  c.cid = ? ",
+            "SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
+            "FROM problem p, clarification c, team t "
+            "WHERE "
+            "  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
+            "  c.cid = ? ",
             (contest_id,),
         )
 
@@ -342,5 +342,5 @@ def find_non_system_teams(database: Database) -> List[TeamDto]:
 
 def find_languages(database: Database) -> Dict[str, str]:
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
-        cursor.execute(f"SELECT langid, name FROM language")
+        cursor.execute("SELECT langid, name FROM language")
         return {language_key: name for language_key, name in cursor}

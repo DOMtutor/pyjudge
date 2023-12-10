@@ -1,10 +1,10 @@
 #!/bin/sh
 
 path=$(dirname "$(readlink -f "$0")")
-checker="${path}/"*.py
+checker=$(find "${path}" -name "*.py" -print)
 
-if [ ! -x "$checker" ]; then
-	echo "Error: '$checker' not found or executable." >&2
+if [ ! -f "$checker" ]; then
+	echo "Error: '$checker' not found." >&2
 	echo "Internal error"
 	exit 1
 fi
@@ -15,18 +15,13 @@ feedback_dir="$3"
 message_file="${feedback_dir}/judgemessage.txt"
 
 # Run the program:
-"$checker" "$test_input" "$test_output" < /dev/stdin > "$message_file"
+python3 "$checker" "$test_input" "$test_output" "$feedback_dir" < /dev/stdin > "$message_file"
 exit_code=$?
 
-# Exit with failure, when non-zero exitcode found:
-if [ $exit_code -ne 0 ]; then
-	echo "Error: '$checker' exited with exitcode $exit_code." >&2
-	echo "Internal error"
-	exit 1
+if [ $exit_code -eq 42 ] || [ $exit_code -eq 43 ]; then
+  exit $exit_code
 fi
 
-# Check result and write result file:
-if [ -s "$message_file" ]; then
-	exit 43 # Wrong answer
-fi
-exit 42 # Correct
+echo "Error: '$checker' exited with unexpected exitcode $exit_code." >&2
+echo "Internal error"
+exit 1

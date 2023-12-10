@@ -207,7 +207,9 @@ def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
     )
 
 
-def create_or_update_language(cursor: MySQLCursor, language: Language):
+def create_or_update_language(
+    cursor: MySQLCursor, language: Language, allow_submit: bool = True
+):
     create_or_update_executable(cursor, language.compile_script)
     log.debug("Updating language %s", language)
     cursor.execute(
@@ -215,11 +217,11 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
         "externalid, compile_script, name, extensions, "
         "time_factor, entry_point_description, require_entry_point, "
         "allow_submit, allow_judge) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE) "
         "ON DUPLICATE KEY UPDATE "
         "externalid = ?, compile_script = ?, name = ?, extensions = ?, "
         "time_factor = ?, entry_point_description = ?, require_entry_point = ?,"
-        "allow_submit = TRUE, allow_judge = TRUE",
+        "allow_submit = ?, allow_judge = TRUE",
         (
             language.key,
             language.key,
@@ -229,6 +231,7 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
             language.time_factor,
             language.entry_point_description,
             language.entry_point_required,
+            allow_submit,
             language.key,
             language.compile_script.key,
             language.name,
@@ -236,6 +239,7 @@ def create_or_update_language(cursor: MySQLCursor, language: Language):
             language.time_factor,
             language.entry_point_description,
             language.entry_point_required,
+            allow_submit,
         ),
     )
 
@@ -621,13 +625,29 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
     write("clar_answers", json.dumps(clarification.answers))
 
 
-def set_languages(cursor: MySQLCursor, languages: List[Language]):
+def set_languages(
+    cursor: MySQLCursor,
+    languages: List[Language],
+    allowed_for_submission: Optional[Set[str]],
+):
+    if allowed_for_submission is None:
+        allowed_keys = {language.key for language in languages}
+    else:
+        allowed_keys = set()
+        language_by_key = {language.key: language for language in languages}
+        for key in allowed_for_submission:
+            if key not in language_by_key:
+                raise ValueError(f"Unknown language {key}")
+            allowed_keys.add(key)
+
     log.info(
         "Setting the list of languages to %s", [language.name for language in languages]
     )
     cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
-        create_or_update_language(cursor, language)
+        create_or_update_language(
+            cursor, language, allow_submit=language.key in allowed_keys
+        )
 
     cursor.execute(
         "SELECT langid, compile_script, EXISTS(SELECT * FROM submission "
@@ -671,21 +691,21 @@ def set_languages(cursor: MySQLCursor, languages: List[Language]):
 def clear_invalid_submissions(cursor):
     cursor.execute(
         "DELETE FROM submission_file "
-        f"WHERE LENGTH(submission_file.sourcecode) = '' OR LOCATE('\\0', submission_file.sourcecode) > 0"
+        "WHERE LENGTH(submission_file.sourcecode) = '' OR LOCATE('\\0', submission_file.sourcecode) > 0"
     )
     if cursor.rowcount:
         log.warning("Dropped %d invalid submission files", cursor.rowcount)
 
     cursor.execute(
         "DELETE FROM submission "
-        f"WHERE NOT EXISTS(SELECT * FROM submission_file WHERE submitid = submission.submitid)"
+        "WHERE NOT EXISTS(SELECT * FROM submission_file WHERE submitid = submission.submitid)"
     )
     if cursor.rowcount:
         log.warning("Dropped %d invalid submissions without files", cursor.rowcount)
 
     cursor.execute(
         "DELETE FROM submission "
-        f"WHERE NOT EXISTS(SELECT * FROM domjudge.judging WHERE submission.submitid = judging.submitid)"
+        "WHERE NOT EXISTS(SELECT * FROM domjudge.judging WHERE submission.submitid = judging.submitid)"
     )
     if cursor.rowcount:
         log.warning("Dropped %d submissions without judging", cursor.rowcount)
@@ -1283,7 +1303,7 @@ def create_or_update_users(
         missing_roles = user_roles - current_roles
         for role_id in missing_roles:
             cursor.execute(
-                f"INSERT INTO userrole (userid, roleid) VALUES (?, ?)",
+                "INSERT INTO userrole (userid, roleid) VALUES (?, ?)",
                 (user_id, role_id),
             )
 
