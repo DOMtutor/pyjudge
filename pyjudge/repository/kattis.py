@@ -461,7 +461,7 @@ class RepositoryProblem(Problem):
                 )
                 with input_file.open(mode="wt") as f:
                     try:
-                        process = subprocess.run(
+                        subprocess.run(
                             generator,
                             cwd=generator_dir.absolute(),
                             timeout=20,
@@ -491,22 +491,32 @@ class RepositoryProblem(Problem):
     ):
         if answer_file is None:
             answer_file = input_file.with_suffix(".ans")
-        if answer_file.is_file() and (
-            answer_file.stat().st_mtime >= input_file.stat().st_mtime
-            or input_file.parent.name == "sample"
-        ):
-            return
+        if answer_file.is_file():
+            answer_mtime = answer_file.stat().st_mtime
+            input_mtime = input_file.stat().st_mtime
+            if answer_mtime >= input_mtime or input_file.parent.name == "sample":
+                return
+            self.log.debug(
+                "Need to re-generate answer %s for %s, since input was recently changed (%s < %s)",
+                answer_file.name,
+                input_file.name,
+                answer_mtime,
+                input_mtime,
+            )
+
         assert self._problemtools_loaded
 
         # noinspection PyProtectedMember
         submission: run.SourceCode = self._problemtools.submissions._submissions["AC"][
             0
         ]
+
         self.log.debug(
             "Generating answer for %s using submission %s",
             answer_file.name,
             submission.name,
         )
+
         result, error = submission.compile()
         if not result:
             raise ExecutionError(error)
