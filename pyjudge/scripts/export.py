@@ -8,6 +8,7 @@ from typing import Optional
 
 from pyjudge.action import query
 from pyjudge.data.submission import ContestDataDto
+import pyjudge.scripts.db as db
 from pyjudge.scripts.db import Database
 
 
@@ -91,9 +92,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--db", type=pathlib.Path, required=True, help="Path to database config"
-    )
+    db.make_argparse(parser)
     parser.add_argument(
         "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
     )
@@ -111,4 +110,4 @@ def main():
     submission_files_parser.set_defaults(func=command_submission_files)
 
     arguments = parser.parse_args()
-    arguments.func(Database(arguments.db), arguments)
+    arguments.func(db.from_args(arguments.db), arguments)

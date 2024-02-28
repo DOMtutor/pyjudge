@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import logging
 import mimetypes
@@ -359,7 +360,7 @@ class RepositoryProblem(Problem):
             or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
         ):
             problem_pdf.parent.mkdir(exist_ok=True, parents=True)
-            self.log.debug("Building problem pdf for language %s", lang)
+            self.log.info("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
             options.language = lang
             # noinspection SpellCheckingInspection
@@ -842,3 +843,20 @@ class Repository(object):
 
     def __str__(self):
         return f"KattisRepository[{self.base_directory}]"
+
+
+def add_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument("--repository", type=pathlib.Path, default=pathlib.Path.cwd())
+
+
+def from_args(args: argparse.Namespace) -> Repository:
+    candidates: List[pathlib.Path] = [
+        args.repository,
+        args.repository / "repository",
+        args.repository.parent,
+    ]
+    for path in candidates:
+        if path.exists() and Repository.is_repository(path):
+            return Repository(path)
+
+    raise FileNotFoundError(f"No repository at path {args.repository}")

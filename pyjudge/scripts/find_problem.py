@@ -1,16 +1,16 @@
+import argparse
 import pathlib
 import re
-import sys
-import argparse
-import logging
+import json
+from typing import List
 
-from pyjudge.repository.kattis import RepositoryProblem, Repository
+import pyjudge.repository.kattis as kattis
+import pyjudge.scripts.util as script_util
+from pyjudge.model import Contest
+from pyjudge.repository.kattis import RepositoryProblem
 
 
-def main():
-    logging.basicConfig(level=logging.DEBUG)
-
-    parser = argparse.ArgumentParser()
+def add_arguments(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--keyword",
         required=False,
@@ -28,20 +28,35 @@ def main():
         help="Names to exclude",
         default=[],
     )
-    parser.add_argument("--repository", type=pathlib.Path, default=pathlib.Path.cwd())
-    args = parser.parse_args()
+    parser.add_argument(
+        "--contest",
+        required=False,
+        action="append",
+        type=pathlib.Path,
+        help="Contests to include",
+    )
 
+
+def find_problems(
+    repository: kattis.Repository, args: argparse.Namespace
+) -> List[RepositoryProblem]:
     name_patterns = [re.compile(pattern) for pattern in args.name]
     keyword_patterns = [re.compile(pattern) for pattern in args.keyword]
     exclude_patterns = [re.compile(pattern) for pattern in args.exclude]
 
-    if not name_patterns and not keyword_patterns:
-        print("No patterns given")
-        sys.exit()
+    problem_candidates = set()
+    if args.contest:
+        for contest_file in args.contest:
+            with contest_file.open(mode="rt") as f:
+                contest_data = json.load(f)
+            contest = Contest.parse(contest_data, problem_loader=repository.problems)
+            for contest_problem in contest.problems:
+                problem_candidates.add(contest_problem.problem)
+    else:
+        problem_candidates = repository.problems.load_all_problems()
 
-    repository = Repository(args.repository)
     filtered_problems = []
-    for problem in repository.problems.load_all_problems():
+    for problem in problem_candidates:
         if keyword_patterns and not any(
             any(pattern.search(keyword) for keyword in problem.keywords)
             for pattern in keyword_patterns
@@ -54,6 +69,18 @@ def main():
         if any(pattern.match(problem.repository_key) for pattern in exclude_patterns):
             continue
         filtered_problems.append(problem)
+    return filtered_problems
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    script_util.add_logging(parser)
+    kattis.add_arguments(parser)
+
+    args = parser.parse_args()
+    script_util.apply_logging(args)
+    repository = kattis.from_args(args)
+    filtered_problems = find_problems(repository, args)
 
     print(f"Found {len(filtered_problems)} problems")
     for problem in sorted(

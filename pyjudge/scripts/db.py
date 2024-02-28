@@ -1,3 +1,4 @@
+import argparse
 import pathlib
 import yaml
 from typing import Optional, Union
@@ -137,3 +138,13 @@ def get_unique(cursor: MySQLCursor):
     if len(result) > 1:
         raise ValueError("Multiple results found")
     return result[0]
+
+
+def make_argparse(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--db", type=pathlib.Path, required=True, help="Path to database config"
+    )
+
+
+def from_args(args: argparse.Namespace) -> Database:
+    return Database(args.db)

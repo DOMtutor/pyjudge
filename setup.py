@@ -19,6 +19,7 @@ setup(
             "find_problem=pyjudge.scripts.find_problem:main",
             "check_problem=pyjudge.scripts.check:main",
             "generate_seed=pyjudge.scripts.generate_seed:main",
+            "get_statements=pyjudge.scripts.get_statements:main",
         ],
     },
     include_package_data=True,

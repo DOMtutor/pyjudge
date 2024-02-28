@@ -1,10 +1,11 @@
 import argparse
-import logging
 import pathlib
 import sys
 
 import jinja2
 import random
+
+import pyjudge.scripts.util as script_util
 
 
 def render_content(
@@ -17,9 +18,8 @@ def render_content(
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-
     parser = argparse.ArgumentParser()
+    script_util.add_logging(parser)
     parser.add_argument(
         "content",
         action="append",
@@ -36,6 +36,7 @@ def main():
         "--count", required=True, type=int, help="How many files to generate"
     )
     args = parser.parse_args()
+    script_util.apply_logging(args)
 
     if args.count <= 0:
         sys.exit("Need a positive count")

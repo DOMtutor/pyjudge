@@ -28,7 +28,10 @@ from pyjudge.model import (
 from pyjudge.model.settings import JudgeInstance
 from pyjudge.model.team import SystemCategory
 from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
+import pyjudge.scripts.db as db
+import pyjudge.repository.kattis as kattis
 from pyjudge.scripts.db import Database
+import pyjudge.scripts.util as script_util
 
 
 @dataclasses.dataclass
@@ -332,23 +335,15 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--db", type=pathlib.Path, default="db.yml", help="Path to database config"
-    )
-    parser.add_argument(
-        "--repository",
-        "-r",
-        type=pathlib.Path,
-        default=pathlib.Path.cwd() / "repository",
-        help="Path to repository",
-    )
+    script_util.add_logging(parser)
+    db.make_argparse(parser)
+    kattis.add_arguments(parser)
     parser.add_argument(
         "--instance",
         type=pathlib.Path,
         default="instance.json",
         help="Path to instance specification",
     )
-    parser.add_argument("--debug", help="Enable debug messages", action="store_true")
 
     subparsers = parser.add_subparsers(help="Help for commands")
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
@@ -444,9 +439,7 @@ def main():
     check_parser.set_defaults(func=command_check)
 
     arguments = parser.parse_args()
-
-    if arguments.debug:
-        logging.getLogger("pyjudge").setLevel(level=logging.DEBUG)
+    script_util.apply_logging(arguments)
 
     with arguments.instance.open(mode="rt") as f:
         instance_data = json.load(f)
@@ -462,11 +455,9 @@ def main():
                 f"Reserved system category {system_category.key} declared!"
             )
 
-    arguments.func(
-        PyjudgeConfig(
-            repository=Repository(arguments.repository),
-            judge=instance,
-            database=Database(arguments.db),
-        ),
-        arguments,
+    config = PyjudgeConfig(
+        repository=kattis.from_args(arguments),
+        judge=instance,
+        database=db.from_args(arguments),
     )
+    arguments.func(config, arguments)
