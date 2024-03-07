@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="PyDOMjudge",
-    # version='0.1.0',
+    version='0.1.0',
     author="Tobias Meggendorfer",
     author_email="tobias@meggendorfer",
     packages=[
@@ -11,14 +11,15 @@ setup(
         "pyjudge.data",
         "pyjudge.model",
         "pyjudge.repository",
+        "pyjudge.scripts"
     ],
     entry_points={
         "console_scripts": [
-            "judge_upload=pyjudge.scripts.upload:main",
-            "judge_export=pyjudge.scripts.export:main",
-            "find_problem=pyjudge.scripts.find_problem:main",
-            "check_problem=pyjudge.scripts.check:main",
-            "generate_seed=pyjudge.scripts.generate_seed:main",
+            "dt_judge_upload=pyjudge.scripts.upload:main",
+            "dt_judge_export=pyjudge.scripts.export:main",
+            "dt_find=pyjudge.scripts.find_problem:main",
+            "dt_check=pyjudge.scripts.check:main",
+            "dt_generate_seed=pyjudge.scripts.generate_seed:main",
         ],
     },
     include_package_data=True,

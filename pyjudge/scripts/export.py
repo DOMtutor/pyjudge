@@ -4,11 +4,25 @@ import logging
 import pathlib
 import sys
 import gzip
+from collections import defaultdict
 from typing import Optional
 
 from pyjudge.action import query
 from pyjudge.data.submission import ContestDataDto
 from pyjudge.scripts.db import Database
+
+log = logging.getLogger(__name__)
+
+def _write_to(data, destination: Optional[pathlib.Path]):
+    if destination is None:
+        json.dump(data, sys.stdout)
+    else:
+        if destination.suffix in {".gz", ".gzip"}:
+            with gzip.open(str(destination), mode="wt") as f:
+                json.dump(data, f)
+        else:
+            with destination.open(mode="wt") as f:
+                json.dump(data, f)
 
 
 def write_contest(
@@ -48,16 +62,7 @@ def write_contest(
         submissions=submissions,
         clarifications=clarifications,
     ).serialize()
-    if destination is None:
-        json.dump(data, sys.stdout)
-    else:
-        if destination.suffix in {".gz", ".gzip"}:
-            with gzip.open(str(destination), mode="wt") as f:
-                json.dump(data, f)
-        else:
-            with destination.open(mode="wt") as f:
-                json.dump(data, f)
-
+    _write_to(data, destination)
 
 def write_submission_files(
     database: Database, contest_key: str, destination: Optional[pathlib.Path]
@@ -72,19 +77,45 @@ def write_submission_files(
         ]
 
     data = [submission.serialize() for submission in submissions]
-    if destination is None:
-        json.dump(data, sys.stdout)
-    else:
-        with destination.open(mode="wt") as f:
-            json.dump(data, f)
+    _write_to(data, destination)
+
+def write_submissions_folder(
+    database: Database, contest_key: str, destination: pathlib.Path
+):
+    if destination.exists():
+        sys.exit("Destination already exists, refusing to export")
+
+    with database as connection:
+        teams = query.find_non_system_teams(connection)
+        team_keys = {team.key for team in teams}
+        submissions = [
+            submission
+            for submission in query.find_submissions(connection, contest_key)
+            if submission.team_key in team_keys
+        ]
+
+    log.info("Found %d submissions", len(submissions))
+    grouped_submissions = defaultdict(list)
+    for submission in submissions:
+        grouped_submissions[(submission.contest_problem_key, submission.team_key)].append(submission)
+
+    for (problem_key, team_key), submissions in grouped_submissions.items():
+        path = destination / problem_key / team_key
+        path.mkdir(exist_ok=True, parents=True)
+        for i, submission in enumerate(sorted(submissions, key=lambda s: s.submission_time)):
+            for file in submission.files:
+                (path / f"{i:03d}_{file.filename}").write_bytes(file.content)
 
 
 def command_contest(database: Database, args):
     write_contest(database, args.contest, args.destination)
 
 
-def command_submission_files(database: Database, args):
+def command_submissions(database: Database, args):
     write_submission_files(database, args.contest, args.destination)
+
+def command_files(database: Database, args):
+    write_submissions_folder(database, args.contest, args.destination)
 
 
 def main():
@@ -92,10 +123,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--db", type=pathlib.Path, required=True, help="Path to database config"
-    )
-    parser.add_argument(
-        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
+        "--db", type=pathlib.Path, default="db.yml", help="Path to database config"
     )
 
     subparsers = parser.add_subparsers(help="Help for commands")
@@ -103,12 +131,26 @@ def main():
         "contest", help="Relevant data of a contest"
     )
     contest_data_parser.add_argument("contest", help="The contest key")
-    contest_data_parser.set_defaults(func=command_contest)
-    submission_files_parser = subparsers.add_parser(
-        "files", help="Submissions files of a contest"
+    contest_data_parser.add_argument(
+        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
     )
-    submission_files_parser.add_argument("contest", help="The contest key")
-    submission_files_parser.set_defaults(func=command_submission_files)
+    contest_data_parser.set_defaults(func=command_contest)
+    submissions_parser = subparsers.add_parser(
+        "submissions", help="Submissions of a contest"
+    )
+    submissions_parser.add_argument("contest", help="The contest key")
+    submissions_parser.set_defaults(func=command_submissions)
+    submissions_parser.add_argument(
+        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
+    )
+    file_export_parser = subparsers.add_parser(
+        "files", help="All submitted files of a contest, written to disk"
+    )
+    file_export_parser.add_argument("contest", help="The contest key")
+    file_export_parser.add_argument(
+        "-d", "--destination", help="Destination base folder", type=pathlib.Path, required=True
+    )
+    file_export_parser.set_defaults(func=command_files)
 
     arguments = parser.parse_args()
     arguments.func(Database(arguments.db), arguments)

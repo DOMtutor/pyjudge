@@ -1084,7 +1084,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
         return f"{dt.strftime(date_format)} {dt.tzinfo}"
 
     cursor.execute(
-        "SELECT cid, starttime, endtime FROM contest WHERE externalid = ?",
+        "SELECT cid, starttime, endtime FROM contest WHERE shortname = ?",
         (contest.key,),
     )
     id_query = cursor.fetchone()

@@ -310,7 +310,7 @@ def find_clarifications(
 
 
 def find_non_system_teams(database: Database) -> List[TeamDto]:
-    system_categories = {category.name for category in SystemCategory}
+    system_categories = {category.database_name for category in SystemCategory}
 
     with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
         cursor.execute(

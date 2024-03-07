@@ -135,10 +135,10 @@ def upload_contest(
 
         if update_submissions:
             for contest_problem in contest.problems:
+                assert isinstance(contest_problem.problem, RepositoryProblem)
                 with connection.transaction_cursor(
                     isolation_level="SERIALIZABLE", prepared_cursor=True
                 ) as cursor:
-                    assert isinstance(contest_problem.problem, RepositoryProblem)
                     _update_problem_submissions(
                         cursor, contest_problem.problem, config.repository, [contest_id]
                     )
