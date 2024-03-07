@@ -142,7 +142,7 @@ def get_unique(cursor: MySQLCursor):
 
 def make_argparse(parser: argparse.ArgumentParser):
     parser.add_argument(
-        "--db", type=pathlib.Path, required=True, help="Path to database config"
+        "--db", type=pathlib.Path, default="db.yml", help="Path to database config"
     )
 
 
