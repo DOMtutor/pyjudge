@@ -2,12 +2,14 @@ import dataclasses
 import base64
 from typing import Optional, List, Dict
 
+from pyjudge import util
 from pyjudge.data.teams import TeamDto
 from pyjudge.model import Verdict
+from pyjudge.model.submission import TestcaseVerdict
 
 
 @dataclasses.dataclass
-class SubmissionFileDto(object):
+class SubmissionFileDto:
     filename: str
     content: bytes
 
@@ -51,15 +53,42 @@ class SubmissionFileDto(object):
 
 
 @dataclasses.dataclass
-class SubmissionDto(object):
+class TestcaseResultDto:
+    runtime: float
+    verdict: TestcaseVerdict
+    is_sample: bool
+    test_name: str
+
+    def serialize(self):
+        return util.filter_none(
+            {
+                "time": self.runtime,
+                "verdict": self.verdict.serialize(),
+                "sample": self.is_sample,
+                "name": self.test_name,
+            }
+        )
+
+    @staticmethod
+    def parse(data):
+        return TestcaseResultDto(
+            runtime=data["time"],
+            verdict=TestcaseVerdict.parse(data["verdict"]),
+            is_sample=data["sample"],
+            test_name=data["name"],
+        )
+
+
+@dataclasses.dataclass
+class SubmissionDto:
     team_key: str
     contest_key: str
     contest_problem_key: str
     language_key: str
     submission_time: float
 
-    maximum_runtime: Optional[float]
     verdict: Optional[Verdict]
+    case_result: List[TestcaseResultDto]
     too_late: bool
 
     files: List[SubmissionFileDto]
@@ -68,6 +97,13 @@ class SubmissionDto(object):
     def line_count(self):
         return sum(
             file.line_count for file in self.files if file.line_count is not None
+        )
+
+    @property
+    def maximum_runtime(self) -> Optional[float]:
+        return max(
+            (res.runtime for res in self.case_result if res.runtime is not None),
+            default=None,
         )
 
     @property
@@ -86,6 +122,7 @@ class SubmissionDto(object):
             "language": self.language_key,
             "time": self.submission_time,
             "too_late": self.too_late,
+            "results": [c.serialize() for c in self.case_result],
         }
         if self.maximum_runtime is not None:
             data["runtime"] = self.maximum_runtime
@@ -103,17 +140,17 @@ class SubmissionDto(object):
             contest_problem_key=data["problem"],
             language_key=data["language"],
             submission_time=data["time"],
-            maximum_runtime=data.get("runtime", None),
             verdict=Verdict.parse(data["verdict"])
             if data.get("verdict", None) is not None
             else None,
             too_late=data["too_late"],
             files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
+            case_result=[TestcaseResultDto.parse(result) for result in data["results"]],
         )
 
 
 @dataclasses.dataclass
-class ContestProblemDto(object):
+class ContestProblemDto:
     problem_key: str
     contest_problem_key: str
     points: int
@@ -121,7 +158,7 @@ class ContestProblemDto(object):
 
 
 @dataclasses.dataclass
-class ClarificationDto(object):
+class ClarificationDto:
     key: str
     team_key: str
     contest_key: str
@@ -165,7 +202,7 @@ class ClarificationDto(object):
 
 
 @dataclasses.dataclass
-class ContestDescriptionDto(object):
+class ContestDescriptionDto:
     contest_key: str
     start: Optional[float]
     end: Optional[float]
@@ -190,7 +227,7 @@ class ContestDescriptionDto(object):
 
 
 @dataclasses.dataclass
-class ContestDataDto(object):
+class ContestDataDto:
     description: ContestDescriptionDto
     teams: Dict[str, TeamDto]
     languages: Dict[str, str]

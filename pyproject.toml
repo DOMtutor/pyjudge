@@ -1,2 +1,38 @@
+[project]
+name = "PyDOMjudge"
+version = "0.2"
+description = "A library to ease interaction with DOMjudge"
+authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python :: 3"
+]
+
+dependencies = [
+    "mysql-connector-python>=8.0",
+    "PyYAML>=6.0",
+    "Pillow>=9.0",
+    "dateutils>=0.6",
+    "problemtools",
+]
+
+[project.scripts]
+dt_judge_upload = "pyjudge.scripts.upload:main"
+dt_judge_export = "pyjudge.scripts.export:main"
+dt_kattis_find = "pyjudge.scripts.find_problem:main"
+dt_kattis_check = "pyjudge.scripts.check:main"
+dt_kattis_get = "pyjudge.scripts.get_statements:main"
+dt_generate_seed = "pyjudge.scripts.generate_seed:main"
+
+[tool.setuptools.packages.find]
+include = ["pyjudge*"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [tool.ruff]
 ignore-init-module-imports = true

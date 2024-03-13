@@ -42,6 +42,40 @@ class Verdict(enum.Enum):
         return self.serialize()
 
 
+class TestcaseVerdict(enum.Enum):
+    PRESENTATION_ERROR = "PRESENTATION_ERROR", "presentation_error"
+    CORRECT = "CORRECT", "correct"
+    TIME_LIMIT = "TIMELIMIT", "timelimit"
+    MEMORY_LIMIT = "MEMORY_LIMIT", "memory-limit"
+    OUTPUT_LIMIT = "OUTPUT_LIMIT", "output-limit"
+    RUN_ERROR = "RUN_ERROR", "run-error"
+    WRONG_ANSWER = "WRONG-ANSWER", "wrong-answer"
+    NO_OUTPUT = "NO_OUTPUT", "no-output"
+
+    @staticmethod
+    def parse_from_judge(key):
+        for verdict in TestcaseVerdict:
+            if verdict.judge_key() == key:
+                return verdict
+        raise KeyError(key)
+
+    @staticmethod
+    def parse(key):
+        for verdict in TestcaseVerdict:
+            if verdict.value[1] == key:
+                return verdict
+        raise KeyError(key)
+
+    def judge_key(self):
+        return self.value[0]
+
+    def serialize(self):
+        return self.value[1]
+
+    def __str__(self):
+        return self.serialize()
+
+
 class ProblemSubmission(abc.ABC):
     # TODO support multiple files?
 
