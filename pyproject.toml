@@ -30,6 +30,9 @@ dt_generate_seed = "pyjudge.scripts.generate_seed:main"
 [tool.setuptools.packages.find]
 include = ["pyjudge*"]
 
+[tool.setuptools.package-data]
+"pyjudge.repository" = ["*.*"]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"

@@ -117,10 +117,11 @@ def find_submissions(
             if submission_id in submission_data:
                 logging.warning("Multiple results for submission %s", submission_id)
                 continue
-            contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
+            contest_problem = contest_problems_by_id[problem_id]
             submission_data[submission_id] = (
                 float(submission_time),
-                contest_problem_key,
+                contest_problem.contest_problem_key,
+                contest_problem.problem_key,
                 language_key,
                 team_key,
             )
@@ -227,6 +228,7 @@ def find_submissions(
     for submission_id, (
         submission_time,
         contest_problem_key,
+        problem_key,
         language_key,
         team_key,
     ) in submission_data.items():
@@ -249,6 +251,7 @@ def find_submissions(
             team_key=team_key,
             contest_key=contest_key,
             contest_problem_key=contest_problem_key,
+            problem_key=problem_key,
             language_key=language_key,
             verdict=judging_result,
             submission_time=submission_time,

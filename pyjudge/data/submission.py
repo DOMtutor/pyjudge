@@ -84,6 +84,7 @@ class SubmissionDto:
     team_key: str
     contest_key: str
     contest_problem_key: str
+    problem_key: str
     language_key: str
     submission_time: float
 
@@ -118,7 +119,8 @@ class SubmissionDto:
         data = {
             "team": self.team_key,
             "contest": self.contest_key,
-            "problem": self.contest_problem_key,
+            "contest_problem": self.contest_problem_key,
+            "problem": self.problem_key,
             "language": self.language_key,
             "time": self.submission_time,
             "too_late": self.too_late,
@@ -137,7 +139,8 @@ class SubmissionDto:
         return SubmissionDto(
             team_key=data["team"],
             contest_key=data["contest"],
-            contest_problem_key=data["problem"],
+            contest_problem_key=data["contest_problem"],
+            problem_key=data["problem"],
             language_key=data["language"],
             submission_time=data["time"],
             verdict=Verdict.parse(data["verdict"])
