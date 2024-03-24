@@ -345,7 +345,7 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(self, lang="en"):
+    def generate_problem_text_if_required(self, lang="en", force=False):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -355,10 +355,19 @@ class RepositoryProblem(Problem):
             )
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
-        if (
-            not problem_pdf.exists()
-            or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
-        ):
+        regenerate = force or not problem_pdf.exists()
+        if not regenerate:
+            pdf_mtime = problem_pdf.stat().st_mtime
+            regenerate = pdf_mtime < source_file.stat().st_mtime
+            if not regenerate:
+                for case in self.testcases:
+                    if not case.is_sample():
+                        continue
+                    if pdf_mtime < case.input_file.stat().st_mtime or pdf_mtime < case.output_file.stat().st_mtime:
+                        regenerate = True
+                        break
+
+        if regenerate:
             problem_pdf.parent.mkdir(exist_ok=True, parents=True)
             self.log.info("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()

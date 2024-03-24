@@ -17,9 +17,9 @@ setup(
         "console_scripts": [
             "dt_judge_upload=pyjudge.scripts.upload:main",
             "dt_judge_export=pyjudge.scripts.export:main",
-            "dt_kattis_find=pyjudge.scripts.find_problem:main",
-            "dt_kattis_check=pyjudge.scripts.check:main",
-            "dt_kattis_get=pyjudge.scripts.get_statements:main",
+            "dt_find=pyjudge.scripts.find_problem:main",
+            "dt_check=pyjudge.scripts.check:main",
+            "dt_get=pyjudge.scripts.get:main",
             "dt_generate_seed=pyjudge.scripts.generate_seed:main",
         ],
     },
