@@ -10,9 +10,11 @@ from pyjudge.data.submission import (
     ClarificationDto,
     ContestProblemDto,
     ContestDescriptionDto,
+    TestcaseResultDto,
 )
 from pyjudge.data.teams import UserDto, TeamDto
 from pyjudge.model import Verdict
+from pyjudge.model.submission import TestcaseVerdict
 from pyjudge.model.team import SystemCategory
 from pyjudge.scripts.db import Database, list_param, get_unique
 
@@ -115,10 +117,11 @@ def find_submissions(
             if submission_id in submission_data:
                 logging.warning("Multiple results for submission %s", submission_id)
                 continue
-            contest_problem_key = contest_problems_by_id[problem_id].contest_problem_key
+            contest_problem = contest_problems_by_id[problem_id]
             submission_data[submission_id] = (
                 float(submission_time),
-                contest_problem_key,
+                contest_problem.contest_problem_key,
+                contest_problem.problem_key,
                 language_key,
                 team_key,
             )
@@ -181,19 +184,51 @@ def find_submissions(
 
         cursor.execute(
             f"SELECT "
-            f"  j.judgingid, MAX(jr.runtime) "
+            f"  j.judgingid, jr.runtime, jr.testcaseid, jr.runresult "
             f"FROM judging j "
             f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
             f"WHERE "
-            f"  j.judgingid IN {list_param(judging_ids)} "
-            f"GROUP BY j.judgingid",
+            f"  j.judgingid IN {list_param(judging_ids)}",
             tuple(judging_ids),
         )
-        judging_runtime = {judging_id: float(runtime) for judging_id, runtime in cursor}
+        judging_testcases_db = defaultdict(list)
+        testcase_ids = set()
+        for judging_id, runtime, testcase_id, result in cursor:
+            judging_testcases_db[judging_id].append(
+                (testcase_id, round(float(runtime), 3), TestcaseVerdict.parse(result))
+            )
+            testcase_ids.add(testcase_id)
+
+        cursor.execute(
+            f"SELECT "
+            f"  t.testcaseid, t.orig_input_filename, t.sample "
+            f"FROM testcase t "
+            f"WHERE NOT t.deleted AND t.testcaseid IN {list_param(testcase_ids)}",
+            tuple(testcase_ids),
+        )
+        testcases = {}
+        for testcase_id, name, is_sample in cursor:
+            testcases[testcase_id] = (name, bool(is_sample))
+
+        judging_testcases = {}
+        for judging_id, judging_cases in judging_testcases_db.items():
+            cases = []
+            for test_id, runtime, result in judging_cases:
+                test_name, test_sample = testcases[test_id]
+                cases.append(
+                    TestcaseResultDto(
+                        runtime=runtime,
+                        verdict=result,
+                        is_sample=test_sample,
+                        test_name=test_name,
+                    )
+                )
+            judging_testcases[judging_id] = cases
 
     for submission_id, (
         submission_time,
         contest_problem_key,
+        problem_key,
         language_key,
         team_key,
     ) in submission_data.items():
@@ -203,21 +238,20 @@ def find_submissions(
             )
             continue
         judging_id, judging_result = judging_data[submission_id]
-        runtime = judging_runtime.get(judging_id, None)
-        if runtime is None and judging_result != Verdict.COMPILER_ERROR:
+        testcases = judging_testcases.get(judging_id, [])
+        if not testcases and judging_result != Verdict.COMPILER_ERROR:
             logging.warning(
-                "No runtime found for submission %s/judging %s with result %s",
+                "No testcases found for submission %s/judging %s with result %s",
                 submission_id,
                 judging_id,
                 judging_result,
             )
-        if runtime is not None:
-            runtime = round(runtime, 3)  # Round to milliseconds
 
         yield SubmissionDto(
             team_key=team_key,
             contest_key=contest_key,
             contest_problem_key=contest_problem_key,
+            problem_key=problem_key,
             language_key=language_key,
             verdict=judging_result,
             submission_time=submission_time,
@@ -226,7 +260,7 @@ def find_submissions(
                 for (filename, content) in source_data[submission_id].items()
             ],
             too_late=contest_end < submission_time,
-            maximum_runtime=runtime,
+            case_result=testcases,
         )
 
 

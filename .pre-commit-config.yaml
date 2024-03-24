@@ -10,4 +10,4 @@ repos:
     rev: v3.0.3
     hooks:
       - id: prettier
-        types: [yaml]
+        types: [yaml, toml]

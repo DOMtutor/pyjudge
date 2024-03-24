@@ -1,11 +1,13 @@
 import argparse
 import dataclasses
+import filecmp
 import logging
 import mimetypes
 import pathlib
 import re
 import stat
 import subprocess
+import tempfile
 from typing import Optional, List, Dict, Tuple, Collection
 
 import yaml
@@ -469,21 +471,35 @@ class RepositoryProblem(Problem):
                     input_file.name,
                     seed_file.name,
                 )
-                with input_file.open(mode="wt") as f:
-                    try:
-                        subprocess.run(
-                            generator,
-                            cwd=generator_dir.absolute(),
-                            timeout=20,
-                            check=True,
-                            input="\n".join(lines),
-                            stdout=f,
-                            stderr=subprocess.PIPE,
-                            universal_newlines=True,
-                        )
-                    except subprocess.CalledProcessError as e:
-                        log.error("Generator process failed. Stderr:\n%s", e.stderr)
-                        raise e
+
+                def run_generator(output):
+                    return subprocess.run(
+                        generator,
+                        cwd=generator_dir.absolute(),
+                        timeout=20,
+                        check=True,
+                        input="\n".join(lines),
+                        stdout=output,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+
+                try:
+                    with input_file.open(mode="wt") as f:
+                        run_generator(f)
+
+                    with tempfile.NamedTemporaryFile(mode="r+t") as t:
+                        run_generator(t)
+
+                        if not filecmp.cmp(input_file, pathlib.Path(t.name)):
+                            raise ExecutionError(
+                                f"Generator produces different outputs for seed {seed_file.name}"
+                            )
+
+                except subprocess.CalledProcessError as exc:
+                    raise ExecutionError(
+                        f"Generator process failed on {seed_file.name}"
+                    ) from exc
 
         except ValueError as e:
             message = str(e)
@@ -560,6 +576,24 @@ class RepositoryProblem(Problem):
                     for input_file in category_directory.glob("*.in"):
                         if not input_file.is_file():
                             continue
+                        if (
+                            any(
+                                input_file.name.startswith(s)
+                                for s in [
+                                    "small_",
+                                    "medium_",
+                                    "large_",
+                                    "huge_",
+                                    "tiny_",
+                                ]
+                            )
+                            and not input_file.with_suffix(".seed").exists()
+                        ):
+                            log.warning(
+                                "Input file %s has reserved name but no matching seed file",
+                                input_file,
+                            )
+
                         answer_file = input_file.with_suffix(".ans")
                         self.generate_answer_if_required(input_file, answer_file)
                         if not answer_file.stat().st_size:
