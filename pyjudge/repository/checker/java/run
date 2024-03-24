@@ -18,7 +18,7 @@ feedback_dir="$3"
 message_file="${feedback_dir}/judgemessage.txt"
 
 # Run the program:
-java -Xlog:all=error -cp "$path" framework.CheckerLauncher "$checker_name" "$test_input" "$test_output" < /dev/stdin > "$message_file"
+java -Xlog:all=error -cp "$path" "$checker_name" "$test_input" "$test_output" < /dev/stdin > "$message_file"
 exit_code=$?
 
 # Exit with failure, when non-zero exitcode found:

@@ -25,7 +25,7 @@ def func_samples(args, problems, add_entry):
             if case.is_sample():
                 name = case.unique_name
                 if name.startswith("sample/"):
-                    name = name[len("sample/"):]
+                    name = name[len("sample/") :]
 
                 add_entry(case.input, f"{problem.key}/{name}.in")
                 add_entry(case.output, f"{problem.key}/{name}.ans")
@@ -67,6 +67,7 @@ def main():
 
         with destination.open("wb") as f:
             with tarfile.open(mode="w", fileobj=f) as tar:
+
                 def add_file(data, name):
                     tar.add(data, name, recursive=False)
 
@@ -76,6 +77,7 @@ def main():
 
         with destination.open("wb") as f:
             with zipfile.ZipFile(f, mode="w") as z:
+
                 def add_file(data, name):
                     if isinstance(data, bytes):
                         with z.open(name, mode="w") as d:

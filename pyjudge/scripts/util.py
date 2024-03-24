@@ -19,7 +19,6 @@ def add_logging(parser: argparse.ArgumentParser):
 
 
 def apply_logging(args: argparse.Namespace):
-
     if args.debug or args.log == "DEBUG":
         logging.basicConfig(level=logging.DEBUG)
         logging.getLogger("pyjudge").setLevel(level=logging.DEBUG)
