@@ -5,12 +5,16 @@ import logging
 import mimetypes
 import pathlib
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
-from typing import Optional, List, Dict, Tuple, Collection
+import importlib.resources as res
+from importlib.abc import Traversable
+from typing import Optional, List, Dict, Tuple, Collection, Any, Mapping, Callable
 
 import yaml
+from pyjudge.model.language import FileData
 
 import problemtools.run as run
 import problemtools.verifyproblem
@@ -30,6 +34,8 @@ from pyjudge.model import (
 )
 from pyjudge.model.team import SystemCategory
 from pyjudge.model.util import get_md5
+
+from problemtools.run import BuildRun
 
 log = logging.getLogger(__name__)
 
@@ -296,20 +302,54 @@ class RepositoryProblem(Problem):
 
     def __enter__(self) -> problemtools.verifyproblem.Problem:
         p = self._problemtools.__enter__()
-        if p.output_validators._validators:
+
+        self._validator_temporary_directory = None
+        if self.validation == "custom":
             # Add the checkers support data as include directory
-            validators = run.find_programs(
-                str(self.directory / "output_validators"),
-                include_dir=str(self.repository.checkers_base_directory),
-                language_config=p.language_config,
-                work_dir=p.tmpdir,
+            checker_language, checker_directory = Repository.get_checker_data_of(self)
+            checker_directory: pathlib.Path
+
+            repository_directory = (
+                self.repository.base_directory / "checker" / checker_language
             )
-            p.output_validators._validators = validators
+            if repository_directory.exists():
+                include_dir = repository_directory
+            else:
+                default_directory = res.files(
+                    f"pyjudge.repository.checker.{checker_language}"
+                )
+                if default_directory.is_dir():
+                    include_dir = pathlib.Path(
+                        tempfile.mkdtemp(prefix=f"pyjudge_checker_{checker_language}")
+                    )
+
+                    def action(traversable: Traversable, components: Collection[str]):
+                        path = include_dir / pathlib.Path(*components)
+                        path.parent.mkdir(exist_ok=True, parents=True)
+                        with path.open("wt") as f_o:
+                            with traversable.open("rt") as f_i:
+                                shutil.copyfileobj(f_i, f_o)
+                        if path.name in {"build", "run"}:
+                            path.chmod(path.stat().st_mode | stat.S_IEXEC)
+
+                    recurse_traversable(default_directory, action)
+                    self._validator_temporary_directory = include_dir
+                else:
+                    include_dir = None
+
+            # noinspection PyTestUnpassedFixture
+            validator = BuildRun(
+                str(checker_directory), work_dir=p.tmpdir, include_dir=include_dir
+            )
+            p.output_validators._validators = [validator]
         self._problemtools_loaded = True
         return p
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._problemtools_loaded = False
+        if self._validator_temporary_directory is not None:
+            shutil.rmtree(self._validator_temporary_directory)
+
         self._problemtools.__exit__(exc_type, exc_val, exc_tb)
 
     @property
@@ -347,7 +387,7 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(self, lang="en"):
+    def generate_problem_text_if_required(self, lang="en", force=False):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -357,10 +397,22 @@ class RepositoryProblem(Problem):
             )
         problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
-        if (
-            not problem_pdf.exists()
-            or problem_pdf.stat().st_mtime < source_file.stat().st_mtime
-        ):
+        regenerate = force or not problem_pdf.exists()
+        if not regenerate:
+            pdf_mtime = problem_pdf.stat().st_mtime
+            regenerate = pdf_mtime < source_file.stat().st_mtime
+            if not regenerate:
+                for case in self.testcases:
+                    if not case.is_sample():
+                        continue
+                    if (
+                        pdf_mtime < case.input_file.stat().st_mtime
+                        or pdf_mtime < case.output_file.stat().st_mtime
+                    ):
+                        regenerate = True
+                        break
+
+        if regenerate:
             problem_pdf.parent.mkdir(exist_ok=True, parents=True)
             self.log.info("Building problem pdf for language %s", lang)
             options = problemtools.problem2pdf.ConvertOptions()
@@ -508,9 +560,11 @@ class RepositoryProblem(Problem):
     ):
         if answer_file is None:
             answer_file = input_file.with_suffix(".ans")
+
         if answer_file.is_file():
             answer_mtime = answer_file.stat().st_mtime
             input_mtime = input_file.stat().st_mtime
+
             if answer_mtime >= input_mtime or input_file.parent.name == "sample":
                 return
             self.log.debug(
@@ -538,6 +592,7 @@ class RepositoryProblem(Problem):
         if not result:
             raise ExecutionError(error)
 
+        # noinspection PyTestUnpassedFixture
         error_file = pathlib.Path(self._problemtools.tmpdir) / "submission_ans_error"
         status, _ = submission.run(
             infile=str(input_file), outfile=str(answer_file), errfile=str(error_file)
@@ -553,7 +608,7 @@ class RepositoryProblem(Problem):
                 error_file.unlink(missing_ok=True)
             raise StatusExecutionError(status, "", error)
 
-    def _generate_testcases(self):
+    def _generate_testcases(self) -> Collection[RepositoryTestCase]:
         if self._test_cases is None:
             self._test_cases = []
 
@@ -597,7 +652,7 @@ class RepositoryProblem(Problem):
         return self._test_cases
 
     @property
-    def testcases(self):
+    def testcases(self) -> Collection[RepositoryTestCase]:
         return self._generate_testcases()
 
     @property
@@ -674,29 +729,115 @@ class RepositoryProblems(ProblemLoader[RepositoryProblem]):
         return self.load_problem(item)
 
 
+def recurse_traversable(
+    traversable: Traversable,
+    action: Callable[[Traversable, list[str]], None],
+):
+    def _recurse(
+        traversable: Traversable,
+        action: Callable[[Traversable, list[str]], None],
+        components: list[str],
+    ):
+        for child in traversable.iterdir():
+            components.append(child.name)
+            if child.is_file():
+                action(child, components)
+            else:
+                _recurse(child, action, components)
+            components.pop()
+
+    _recurse(traversable, action, [])
+
+
+@dataclasses.dataclass
+class TraversableFile(FileData):
+    traversable: Traversable
+    path: list[str]
+
+    def open(self):
+        return self.traversable.open(mode="rb")
+
+    @property
+    def relative_path(self) -> list[str]:
+        return self.path
+
+
+def get_components_of_traversable(traversable: Traversable) -> Collection[FileData]:
+    files = []
+
+    def action(child: Traversable, path: list[str]):
+        files.append(TraversableFile(child, path))
+
+    recurse_traversable(traversable, action)
+    return files
+
+
 class Repository(object):
     @staticmethod
-    def parse_language(base_directory, key: str, data) -> Language:
-        language_directory = base_directory / key
-        if not language_directory.is_dir():
-            raise ValueError(
-                f"No language data found for {key} (at {language_directory})"
-            )
+    def _default_checker_files() -> Mapping[str, Collection[FileData]]:
+        standard_checkers = res.files("pyjudge.repository.checker")
+        by_key = {
+            checker.name: get_components_of_traversable(checker)
+            for checker in standard_checkers.iterdir()
+        }
+        Repository._default_checker_files = lambda: by_key
+        return by_key
 
+    @staticmethod
+    def _get_files_for_default_language(language_key):
+        return get_components_of_traversable(
+            res.files(f"pyjudge.repository.compiler.{language_key}")
+        )
+
+    @staticmethod
+    def _default_languages() -> Mapping[str, Language]:
+        standard_languages = res.files("pyjudge.repository").joinpath("languages.yml")
+        with standard_languages.open(mode="rt") as f:
+            language_configuration = yaml.safe_load(f)
+
+        languages = []
+        for language, data in language_configuration.items():
+            files = Repository._get_files_for_default_language(language)
+            languages.append(Repository._make_language(language, data, files))
+        by_key = {language.key: language for language in languages}
+        Repository._default_languages = lambda: by_key
+        return by_key
+
+    @staticmethod
+    def _make_language(
+        language_key: str,
+        language_data: Mapping[str, Any],
+        executable_contents: Collection[FileData],
+    ):
         compile_script = Executable(
-            key=f"compile_{key}",
-            description=f"compile {data['name']}",
+            key=f"compile_{language_key}",
+            description=f"compile {language_data['name']}",
             executable_type=ExecutableType.Compile,
-            contents=Executable.get_directory_contents(language_directory),
+            contents=executable_contents,
         )
         return Language(
-            key=key,
-            name=data["name"],
-            time_factor=data.get("time_factor", 1.0),
-            extensions=set(data["extensions"]),
-            entry_point_required=data.get("entry_point_required", False),
-            entry_point_description=data.get("entry_point_description", None),
+            key=language_key,
+            name=language_data["name"],
+            time_factor=language_data.get("time_factor", 1.0),
+            extensions=set(language_data["extensions"]),
+            entry_point_required=language_data.get("entry_point_required", False),
+            entry_point_description=language_data.get("entry_point_description", None),
             compile_script=compile_script,
+        )
+
+    @staticmethod
+    def parse_language(
+        base_directory: pathlib.Path, language_key: str, language_data: dict[str, Any]
+    ) -> Language:
+        language_directory = base_directory / language_key
+        if not language_directory.is_dir():
+            raise ValueError(
+                f"No language data found for {language_key} (at {language_directory})"
+            )
+        return Repository._make_language(
+            language_key,
+            language_data,
+            Executable.get_directory_contents(base_directory),
         )
 
     @staticmethod
@@ -725,18 +866,43 @@ class Repository(object):
             for author, data in configuration.get("authors", {}).items()
         ]
 
-        data_directory = pathlib.Path(__file__).parent
-        self.checkers_base_directory = data_directory / "checker"
-        self.language_base_directory = data_directory / "compiler"
-        self.runscript_directory = data_directory / "runscript"
+        self.repository_runscript_directory = base_path / "runscript"
 
-        with (data_directory / "languages.yml").open(mode="rt") as f:
-            language_configuration = yaml.safe_load(f)
+        # TODO Allow to just change the config of the language without providing the files
+        repository_languages_directory = base_path / "compiler"
 
-        self.languages: List[Language] = [
-            Repository.parse_language(self.language_base_directory, lang, data)
-            for lang, data in language_configuration.items()
-        ]
+        language_settings = configuration.get("languages", [])
+        if isinstance(language_settings, dict):
+            language_keys = language_settings.keys()
+        else:
+            language_keys = language_settings
+
+        languages: List[Language] = []
+        default_languages = Repository._default_languages()
+        for language_key in language_keys:
+            if (repository_languages_directory / language_key).exists():
+                languages.append(
+                    RepositoryLanguage.parse(repository_languages_directory)
+                )
+            elif language_key in default_languages:
+                language = default_languages[language_key]
+                if (
+                    isinstance(language_settings, dict)
+                    and language_settings[language_key]
+                ):
+                    files = Repository._get_files_for_default_language(language_key)
+                    language = Repository._make_language(
+                        language_key, language_settings[language_key], files
+                    )
+                else:
+                    languages.append(default_languages[language_key])
+
+        language_keys: set(language.key)
+        for key, language in default_languages.items():
+            if key not in language_keys:
+                languages.append(language)
+
+        self.languages: Collection[Language] = tuple(languages)
         self.languages_by_extension: Dict[str, Language] = dict()
         for lang in self.languages:
             for extension in lang.extensions:
@@ -748,6 +914,15 @@ class Repository(object):
                 self.languages_by_extension[extension] = lang
 
         self.problems = RepositoryProblems(self, base_path / "problems")
+
+    def _find_checker_include_data(self, language: str) -> Collection[FileData]:
+        repository_directory = self.base_directory / "checker" / language
+        if repository_directory.exists():
+            return Executable.get_directory_contents(repository_directory)
+        default_directory = res.files(f"pyjudge.repository.checker.{language}")
+        if default_directory.is_dir():
+            return get_components_of_traversable(default_directory)
+        return []
 
     def find_author_of(self, submission: JurySubmission) -> Optional[RepositoryAuthor]:
         match = None
@@ -761,18 +936,20 @@ class Repository(object):
                     match = author
         return match
 
-    def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:
-        base_directory = problem.directory / "output_validators"
+    @staticmethod
+    def get_checker_data_of(
+        problem: RepositoryProblem,
+    ) -> Optional[tuple[str, pathlib.Path]]:
+        validation_directory = problem.directory / "output_validators"
+        checker_directory: Optional[pathlib.Path] = None
+        checker_language: Optional[str] = None
 
-        checker_directory = None
-        checker_base = None
-
-        if base_directory.exists():
-            files = list(base_directory.iterdir())
-            if len(files) > 1:
+        if validation_directory.exists():
+            checker_files = list(validation_directory.iterdir())
+            if len(checker_files) > 1:
                 raise ValueError(f"Found multiple checkers for {problem}")
-            if files:
-                file: pathlib.Path = files[0]
+            if checker_files:
+                file: pathlib.Path = checker_files[0]
                 if file.is_file():
                     suffix_to_language = {
                         ".py": "python",
@@ -785,10 +962,8 @@ class Repository(object):
                             f"Checker file {file.name} for {problem} not understood"
                         )
 
-                    checker_directory = base_directory
-                    checker_base = (
-                        self.checkers_base_directory / suffix_to_language[file.suffix]
-                    )
+                    checker_directory = validation_directory
+                    checker_language = suffix_to_language[file.suffix]
                 elif file.is_dir():
                     directory_to_language = {
                         "checker": "java",
@@ -800,9 +975,7 @@ class Repository(object):
                             f"Checker directory {file.name} for {problem} not understood"
                         )
                     checker_directory = file
-                    checker_base = (
-                        self.checkers_base_directory / directory_to_language[file.name]
-                    )
+                    checker_language = directory_to_language[file.name]
                 else:
                     raise ValueError(
                         f"Checker for {problem} contains weird file {file.name}"
@@ -817,18 +990,23 @@ class Repository(object):
 
         if problem.validation != "custom":
             raise ValueError(f"Found checkers for non-custom validation for {problem}")
+        return checker_language, checker_directory
 
-        files = {}
-        files.update(Executable.get_directory_contents(checker_base))
-        files.update(Executable.get_directory_contents(checker_directory))
+    def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:
+        checker_data = self.get_checker_data_of(problem)
+        if checker_data is None:
+            return None
+        checker_language, checker_directory = checker_data
+        checker_files = list(self._find_checker_include_data(checker_language))
+        checker_files.extend(Executable.get_directory_contents(checker_directory))
 
-        if not files:
+        if not checker_files:
             raise ValueError("Empty checker")
         return Executable(
             f"cmp_{problem.repository_key}",
             f"checker for {problem.repository_key}",
             executable_type=ExecutableType.Compare,
-            contents=files,
+            contents=checker_files,
         )
 
     # noinspection PyMethodMayBeStatic
@@ -859,16 +1037,6 @@ class Repository(object):
             affiliation=author.affiliation,
             members=[],
         )
-
-    def get_default_runscript(self) -> Dict[str, pathlib.Path]:
-        if not self.runscript_directory.is_dir():
-            raise ValueError(f"No runscript found at {self.runscript_directory}")
-
-        return {
-            path.relative_to(self.runscript_directory): path
-            for path in self.runscript_directory.rglob("*")
-            if path.is_file()
-        }
 
     def find_language_of_submission(
         self, submission: JurySubmission

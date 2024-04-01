@@ -2,7 +2,7 @@ import abc
 import dataclasses
 import enum
 import pathlib
-from typing import Dict, Tuple, Collection, Optional
+from typing import Tuple, Collection, Optional
 
 
 class ExecutableType(enum.Enum):
@@ -14,20 +14,51 @@ class ExecutableType(enum.Enum):
         return self.value
 
 
+class FileData(abc.ABC):
+    @abc.abstractmethod
+    def open(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def relative_path(self) -> list[str]:
+        pass
+
+    def __lt__(self, other):
+        return self.relative_path < other.relative_path
+
+
+@dataclasses.dataclass
+class PathFile(FileData):
+    content: pathlib.Path
+    path_components: list[str]
+
+    @staticmethod
+    def from_path(file: pathlib.Path, base_directory: pathlib.Path) -> "PathFile":
+        return PathFile(file, list(map(str, file.relative_to(base_directory).parts)))
+
+    def open(self):
+        return self.content.open(mode="rb")
+
+    @property
+    def relative_path(self) -> list[str]:
+        return self.path_components
+
+
 @dataclasses.dataclass
 class Executable(abc.ABC):
     @staticmethod
-    def get_directory_contents(directory: pathlib.Path) -> Dict[str, pathlib.Path]:
-        return {
-            path.relative_to(directory): path
-            for path in directory.rglob("*")
+    def get_directory_contents(directory: pathlib.Path) -> Collection[PathFile]:
+        return [
+            PathFile.from_path(path, directory)
+            for path in directory.glob("*")
             if path.is_file() and not path.name.endswith(".class")
-        }  # Exclude java compilation artifacts
+        ]  # Exclude java compilation artifacts
 
     key: str
     description: str
     executable_type: ExecutableType
-    contents: Dict[str, pathlib.Path]  # Currently need path :(
+    contents: Collection[FileData]
 
     def make_zip(self) -> Tuple[bytes, str]:
         import io
@@ -39,15 +70,14 @@ class Executable(abc.ABC):
         with zipfile.ZipFile(
             zip_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=False
         ) as z:
-            for name, path in sorted(self.contents.items()):
-                if path.is_file():
-                    info = zipfile.ZipInfo.from_file(path, str(name))
-                    if str(name) in {"build", "run"}:
-                        info.external_attr |= 0o100 << 16
+            for file in sorted(self.contents):
+                info = zipfile.ZipInfo(filename="/".join(file.relative_path))
+                if file.relative_path[:-1] in {"build", "run"}:
+                    info.external_attr |= 0o100 << 16
 
-                    with path.open(mode="rb") as f:
-                        with z.open(info, mode="w") as d:
-                            shutil.copyfileobj(f, d)
+                with file.open() as f:
+                    with z.open(info, mode="w") as d:
+                        shutil.copyfileobj(f, d)
 
         byte_value = zip_file.getvalue()
         return byte_value, hashlib.md5(byte_value).hexdigest()

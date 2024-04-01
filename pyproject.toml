@@ -31,7 +31,9 @@ dt_generate_seed = "pyjudge.scripts.generate_seed:main"
 include = ["pyjudge*"]
 
 [tool.setuptools.package-data]
-"pyjudge.repository" = ["*.*"]
+"pyjudge.repository.runscript" = ["**"]
+"pyjudge.repository.compiler" = ["*/**"]
+"pyjudge.repository.checker" = ["*/**"]
 
 [build-system]
 requires = ["setuptools"]
