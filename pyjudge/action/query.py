@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import List, Collection, Tuple, Dict, Generator
+from typing import List, Collection, Tuple, Dict, Generator, Optional
 
 from mysql.connector.cursor import MySQLCursor
 
@@ -20,6 +20,8 @@ from pyjudge.scripts.db import Database, list_param, get_unique
 
 
 def parse_judging_verdict(key):
+    if key is None:
+        return None
     # noinspection SpellCheckingInspection
     return {
         "correct": Verdict.CORRECT,
@@ -148,7 +150,7 @@ def find_submissions(
                 tuple(submission_data.keys()),
             )
         judging_ids = set()
-        judging_data = {}
+        judging_data: dict[int, tuple[int, Optional[Verdict]]] = {}
         for submission_id, judging_id, judging_result in cursor:
             if submission_id in judging_data:
                 logging.warning("Multiple runs for submission %s", submission_id)
@@ -239,7 +241,9 @@ def find_submissions(
             continue
         judging_id, judging_result = judging_data[submission_id]
         testcases = judging_testcases.get(judging_id, [])
-        if not testcases and judging_result != Verdict.COMPILER_ERROR:
+        if not testcases and (
+            judging_result != Verdict.COMPILER_ERROR and judging_result is not None
+        ):
             logging.warning(
                 "No testcases found for submission %s/judging %s with result %s",
                 submission_id,
