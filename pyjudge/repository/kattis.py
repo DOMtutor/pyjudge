@@ -741,9 +741,9 @@ def recurse_traversable(
         for child in traversable.iterdir():
             components.append(child.name)
             if child.is_file():
-                action(child, components)
+                action(child, list(components))
             else:
-                _recurse(child, action, components)
+                _recurse(child, action, list(components))
             components.pop()
 
     _recurse(traversable, action, [])
@@ -753,6 +753,9 @@ def recurse_traversable(
 class TraversableFile(FileData):
     traversable: Traversable
     path: list[str]
+
+    def __post_init__(self):
+        assert self.path and all(component for component in self.path)
 
     def open(self):
         return self.traversable.open(mode="rb")
@@ -790,18 +793,12 @@ class Repository(object):
         )
 
     @staticmethod
-    def _default_languages() -> Mapping[str, Language]:
+    def _default_language_settings() -> Mapping[str, Mapping[str, Any]]:
         standard_languages = res.files("pyjudge.repository").joinpath("languages.yml")
         with standard_languages.open(mode="rt") as f:
             language_configuration = yaml.safe_load(f)
-
-        languages = []
-        for language, data in language_configuration.items():
-            files = Repository._get_files_for_default_language(language)
-            languages.append(Repository._make_language(language, data, files))
-        by_key = {language.key: language for language in languages}
-        Repository._default_languages = lambda: by_key
-        return by_key
+        assert isinstance(language_configuration, dict)
+        return language_configuration
 
     @staticmethod
     def _make_language(
@@ -871,36 +868,39 @@ class Repository(object):
         # TODO Allow to just change the config of the language without providing the files
         repository_languages_directory = base_path / "compiler"
 
-        language_settings = configuration.get("languages", [])
+        language_settings: dict[str, Any] | list[str] = configuration.get(
+            "languages", []
+        )
+        language_keys: set[str]
         if isinstance(language_settings, dict):
-            language_keys = language_settings.keys()
+            language_keys = set(language_settings.keys())
         else:
-            language_keys = language_settings
+            language_keys = set(language_settings)
 
         languages: List[Language] = []
-        default_languages = Repository._default_languages()
-        for language_key in language_keys:
-            if (repository_languages_directory / language_key).exists():
-                languages.append(
-                    RepositoryLanguage.parse(repository_languages_directory)
-                )
-            elif language_key in default_languages:
-                language = default_languages[language_key]
-                if (
-                    isinstance(language_settings, dict)
-                    and language_settings[language_key]
-                ):
-                    files = Repository._get_files_for_default_language(language_key)
-                    language = Repository._make_language(
-                        language_key, language_settings[language_key], files
-                    )
-                else:
-                    languages.append(default_languages[language_key])
+        default_language_settings: Mapping[
+            str, Mapping[str, Any]
+        ] = Repository._default_language_settings()
 
-        language_keys: set(language.key)
-        for key, language in default_languages.items():
-            if key not in language_keys:
-                languages.append(language)
+        for language_key in language_keys:
+            if (
+                isinstance(language_settings, Mapping)
+                and language_key in language_settings
+            ):
+                settings = language_settings[language_key]
+            elif language_key in default_language_settings:
+                settings = default_language_settings[language_key]
+            else:
+                raise KeyError(f"Unknown language {language_key}")
+
+            if (repository_languages_directory / language_key).exists():
+                language = Repository.parse_language(
+                    repository_languages_directory, language_key, settings
+                )
+            else:
+                files = Repository._get_files_for_default_language(language_key)
+                language = Repository._make_language(language_key, settings, files)
+            languages.append(language)
 
         self.languages: Collection[Language] = tuple(languages)
         self.languages_by_extension: Dict[str, Language] = dict()

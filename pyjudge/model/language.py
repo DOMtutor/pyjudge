@@ -33,6 +33,11 @@ class PathFile(FileData):
     content: pathlib.Path
     path_components: list[str]
 
+    def __post_init__(self):
+        assert self.path_components and all(
+            component for component in self.path_components
+        )
+
     @staticmethod
     def from_path(file: pathlib.Path, base_directory: pathlib.Path) -> "PathFile":
         return PathFile(file, list(map(str, file.relative_to(base_directory).parts)))
@@ -72,8 +77,9 @@ class Executable(abc.ABC):
         ) as z:
             for file in sorted(self.contents):
                 info = zipfile.ZipInfo(filename="/".join(file.relative_path))
-                if file.relative_path[:-1] in {"build", "run"}:
-                    info.external_attr |= 0o100 << 16
+                info.external_attr = 0o100444 << 16
+                if file.relative_path[-1] in {"build", "run"}:
+                    info.external_attr |= 0o111 << 16
 
                 with file.open() as f:
                     with z.open(info, mode="w") as d:

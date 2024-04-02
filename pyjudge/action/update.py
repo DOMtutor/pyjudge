@@ -5,7 +5,7 @@ import time
 import faulthandler
 
 from collections import defaultdict
-from typing import Dict, Collection, Optional, List, Tuple, Set
+from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
 
 from mysql.connector.cursor import MySQLCursor
 
@@ -46,7 +46,7 @@ user_role_to_database = {
 
 def find_all_categories(
     cursor: MySQLCursor, categories: List[TeamCategory]
-) -> Dict[TeamCategory, int]:
+) -> Mapping[TeamCategory, int]:
     cursor.execute("SELECT categoryid, name FROM team_category")
 
     all_categories = list(categories) + list(SystemCategory)
@@ -54,10 +54,10 @@ def find_all_categories(
         category.database_name: category for category in all_categories
     }
 
-    category_ids_by_name: Dict[str, int] = {
+    category_ids_by_name: Mapping[str, int] = {
         name: category_id for category_id, name in cursor
     }
-    category_ids: Dict[TeamCategory, int] = {
+    category_ids: Mapping[TeamCategory, int] = {
         database_to_category[name]: category_id
         for name, category_id in category_ids_by_name.items()
         if name in database_to_category
@@ -66,13 +66,13 @@ def find_all_categories(
     return category_ids
 
 
-def find_system_categories(cursor: MySQLCursor) -> Dict[TeamCategory, int]:
+def find_system_categories(cursor: MySQLCursor) -> Mapping[TeamCategory, int]:
     return find_all_categories(cursor, [])
 
 
 def update_categories(
     cursor: MySQLCursor, categories: List[TeamCategory], lazy=False
-) -> Dict[TeamCategory, int]:
+) -> Mapping[TeamCategory, int]:
     expected_category_names = {category.database_name for category in categories}
     expected_category_names.update(
         {category.database_name for category in SystemCategory}
@@ -90,8 +90,8 @@ def update_categories(
 
     category_ids_to_delete: Collection[int] = {
         category_id
-        for name, category_id in category_ids_by_name.items()
-        if name not in expected_category_names
+        for category, category_id in category_ids.items()
+        if category.database_name not in expected_category_names
     }
 
     for category in categories:
@@ -627,7 +627,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 def set_languages(
     cursor: MySQLCursor,
-    languages: List[Language],
+    languages: Collection[Language],
     allowed_for_submission: Optional[Set[str]],
 ):
     if allowed_for_submission is None:
@@ -842,14 +842,14 @@ def create_problem_submissions(
             if file_name in files:
                 raise ValueError(f"Duplicate file names for submission {submission_id}")
             files[file_name] = file_md5
-    submission_file_names: Dict[int, Tuple[str]] = {
+    submission_file_names: dict[int, Collection[str]] = {
         submission_id: tuple(sorted(files.keys()))
         for submission_id, files in submission_files.items()
     }
 
     # contest -> team -> file name(s) -> submission ids
     submissions_by_contest_and_team: Dict[
-        int, Dict[int, Dict[Tuple[str, ...], List[int]]]
+        int, Dict[int, Dict[Collection[str], List[int]]]
     ] = {
         contest_id: {team_id: defaultdict(list) for team_id in used_team_ids.keys()}
         for contest_id in contest_ids
@@ -891,7 +891,7 @@ def create_problem_submissions(
     )
 
     old_submission_ids: List[int] = []
-    current_submissions: Dict[int, Dict[Tuple[int, Tuple[str, ...]], int]] = {
+    current_submissions: Dict[int, Dict[Tuple[int, Collection[str]], int]] = {
         contest_id: dict() for contest_id in contest_ids
     }
 
