@@ -548,7 +548,7 @@ class RepositoryProblem(Problem):
             message = str(e)
             error = e
 
-            def generate(s, f, i):
+            def generate(s, _, __):
                 raise ValueError(f"Generator error for {s}: {message}", error)
 
         # noinspection PyAttributeOutsideInit
@@ -734,19 +734,18 @@ def recurse_traversable(
     action: Callable[[Traversable, list[str]], None],
 ):
     def _recurse(
-        traversable: Traversable,
-        action: Callable[[Traversable, list[str]], None],
+        trv: Traversable,
         components: list[str],
     ):
-        for child in traversable.iterdir():
+        for child in trv.iterdir():
             components.append(child.name)
             if child.is_file():
                 action(child, list(components))
             else:
-                _recurse(child, action, list(components))
+                _recurse(child, list(components))
             components.pop()
 
-    _recurse(traversable, action, [])
+    _recurse(traversable, [])
 
 
 @dataclasses.dataclass
