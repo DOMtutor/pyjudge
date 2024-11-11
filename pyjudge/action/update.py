@@ -73,28 +73,33 @@ def find_system_categories(cursor: MySQLCursor) -> Mapping[TeamCategory, int]:
 def update_categories(
     cursor: MySQLCursor, categories: List[TeamCategory], lazy=False
 ) -> Mapping[TeamCategory, int]:
-    expected_category_names = {category.database_name for category in categories}
-    expected_category_names.update(
-        {category.database_name for category in SystemCategory}
-    )
-    category_ids = find_all_categories(cursor, categories)
-    category_ids_by_name = {
-        category.database_name: category for category in category_ids.keys()
+    expected_categories = set(categories) | set(SystemCategory)
+    expected_categories_by_name = {
+        category.database_name: category for category in expected_categories
     }
 
-    if lazy and category_ids_by_name.keys() == expected_category_names:
-        assert category_ids.keys() == set(categories)
-        return category_ids
+    cursor.execute("SELECT categoryid, name FROM team_category")
+    existing_ids_by_name: Mapping[str, int] = {
+        name: category_id for category_id, name in cursor
+    }
+
+    if lazy and existing_ids_by_name.keys() == expected_categories_by_name.keys():
+        return {
+            expected_categories_by_name[name]: category_id
+            for name, category_id in existing_ids_by_name.items()
+        }
 
     log.info("Updating judge categories")
 
     category_ids_to_delete: Collection[int] = {
         category_id
-        for category, category_id in category_ids.items()
-        if category.database_name not in expected_category_names
+        for category_name, category_id in existing_ids_by_name.items()
+        if category_name not in expected_categories_by_name
     }
 
-    for category in categories:
+    category_ids = {}
+
+    for category in expected_categories:
         name = category.database_name
         cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
         result = cursor.fetchall()
@@ -102,11 +107,13 @@ def update_categories(
             if len(result) > 1:
                 raise ValueError(f"Multiple categories with name {name}")
             category_id = result[0][0]
+            log.debug("Found category %s", name)
         else:
+            log.debug("Creating category %s", name)
             cursor.execute("INSERT INTO team_category (name) VALUES (?)", (name,))
             category_id = cursor.lastrowid
-            category_ids[category] = category_id
 
+        category_ids[category] = category_id
         cursor.execute(
             "UPDATE team_category "
             "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = ? "
@@ -149,7 +156,7 @@ def create_or_update_teams(
 
     teams_by_name: Dict[str, Team] = {team.name: team for team in teams}
     cursor.execute(
-        f"SELECT teamid, name FROM team " f"WHERE name IN {list_param(teams)}",
+        f"SELECT teamid, name FROM team WHERE name IN {list_param(teams)}",
         tuple(team.name for team in teams),
     )
     existing_teams: Dict[Team, int] = {
@@ -637,7 +644,9 @@ def set_languages(
         language_by_key = {language.key: language for language in languages}
         for key in allowed_for_submission:
             if key not in language_by_key:
-                raise ValueError(f"Unknown language {key}")
+                raise ValueError(
+                    f"Unknown language {key}, known languages are {' '.join(language_by_key.keys())}"
+                )
             allowed_keys.add(key)
 
     log.info(
@@ -1284,7 +1293,7 @@ def create_or_update_users(
         else:
             cursor.execute(
                 "INSERT INTO `user` (username, name, email, password, enabled) VALUES (?, ?, ?, ?, TRUE)",
-                (user.login_name, user.display_name, user.password_hash, user.email),
+                (user.login_name, user.display_name, user.email, user.password_hash),
             )
             user_id = cursor.lastrowid
             user_ids[user] = user_id

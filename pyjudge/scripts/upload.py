@@ -34,6 +34,9 @@ from pyjudge.scripts.db import Database
 import pyjudge.scripts.util as script_util
 
 
+log = logging.getLogger(__name__)
+
+
 @dataclasses.dataclass
 class PyjudgeConfig(object):
     repository: Repository
@@ -52,7 +55,7 @@ def _update_problem_submissions(
     for submission in sorted(problem_submissions, key=lambda s: s.path):
         language = submission.language
         if language is None:
-            logging.warning("Did not find a language for submission %s", submission)
+            log.warning("Did not find a language for submission %s", submission)
             continue
 
         submission_expected_results: Tuple[Verdict] = tuple(submission.expected_results)
@@ -63,7 +66,7 @@ def _update_problem_submissions(
 
         author = submission.author
         if author is None:
-            logging.debug("No author found for submission %s", submission)
+            log.debug("No author found for submission %s", submission)
         submissions.append((config.get_team_of_author(author), submission))
 
     teams = set(team for team, _ in submissions)
@@ -97,15 +100,15 @@ def upload_contest(
 
     if update_problems:
         if verify_problems:
-            logging.info("Checking problems")
+            log.info("Checking problems")
             try:
                 for contest_problem in contest.problems:
                     contest_problem.problem.check()
             except VerifyError as e:
-                logging.error("Problem verification failed", exc_info=e)
+                log.error("Problem verification failed", exc_info=e)
                 return
         else:
-            logging.info("Skipping problem verification")
+            log.info("Skipping problem verification")
 
     with config.database as connection:
         with connection.transaction_cursor(
@@ -146,7 +149,7 @@ def upload_contest(
                         cursor, contest_problem.problem, config.repository, [contest_id]
                     )
 
-    logging.info("Updated contest %s", contest)
+    log.info("Updated contest %s", contest)
 
 
 def upload_problems(
@@ -157,16 +160,16 @@ def upload_problems(
 ):
     if update_submissions:
         if verify_problems:
-            logging.info("Checking problems")
+            log.info("Checking problems")
             try:
                 for problem in problems:
                     problem.check()
             except VerifyError as e:
-                logging.error("Problem verification failed", exc_info=e)
+                log.error("Problem verification failed", exc_info=e)
                 return
-            logging.info("All ok, uploading")
+            log.info("All ok, uploading")
         else:
-            logging.info("Skipping verification")
+            log.info("Skipping verification")
 
     with config.database as connection:
         for problem in problems:
@@ -282,7 +285,7 @@ def command_problem(config: PyjudgeConfig, args):
 
     if not problems:
         sys.exit("No problems found")
-    logging.info("Found problems %s", " ".join(problem.name for problem in problems))
+    log.info("Found problems %s", " ".join(problem.name for problem in problems))
 
     upload_problems(
         config,
@@ -309,15 +312,21 @@ def command_contest(config: PyjudgeConfig, args):
 def command_users(config: PyjudgeConfig, args):
     with args.users.open("rt") as file:
         user_data = json.load(file)
+    description = UsersDescription.parse(
+        user_data,
+        {
+            category.key: category
+            for category in config.judge.team_categories + [SystemCategory.Jury]
+        },
+    )
+
+    if not args.overwrite_passwords and any(
+        user.password_hash for user in description.users
+    ):
+        log.info("Password hashes specified but not instructed to overwrite passwords")
     upload_users(
         config,
-        UsersDescription.parse(
-            user_data,
-            {
-                category.key: category
-                for category in config.judge.team_categories + [SystemCategory.Jury]
-            },
-        ),
+        description,
         disable_unknown=args.disable,
         overwrite_passwords=args.overwrite_passwords,
     )
@@ -329,6 +338,10 @@ def command_settings(config: PyjudgeConfig, _):
 
 def command_check(config: PyjudgeConfig, _):
     check_database(config)
+
+
+def command_reset_password(config: PyjudgeConfig, _):
+    raise NotImplementedError()
 
 
 def main():
@@ -431,6 +444,11 @@ def main():
         help="Overwrite given passwords of existing users",
     )
     users_parser.set_defaults(func=command_users)
+
+    reset_password_parser = subparsers.add_parser(
+        "password", help="Reset a user's password"
+    )
+    reset_password_parser.set_defaults(func=command_reset_password)
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")
     settings_parser.set_defaults(func=command_settings)
