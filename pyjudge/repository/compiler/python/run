@@ -25,7 +25,7 @@ cat >"$destination" <<EOF
 if [ "\${0%/*}" != "\$0" ]; then
 	cd "\${0%/*}"
 fi
-exec pypy3 "$main_source" "\$@"
+exec pypy3 -O "$main_source" "\$@"
 EOF
 chmod a+x "$destination"
 exit 0

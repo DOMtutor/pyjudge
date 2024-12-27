@@ -6,7 +6,7 @@ shift 2
 
 export HOME=/
 
-ghc -DDOMJUDGE -x hs -ferror-spans -Wall -O -static -o "$destination" "$@"
+ghc -DDOMJUDGE -x hs -ferror-spans -Wall -O -static -optl-static -optl-pthread -o "$destination" "$@"
 exitcode=$?
 rm -f "$DEST.o" Main.hi
 exit $exitcode

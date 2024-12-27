@@ -1,5 +1,5 @@
 import dataclasses
-import typing
+import enum
 from typing import List, Optional, Dict
 
 from .user import User
@@ -45,16 +45,16 @@ class TeamCategory(object):
         return isinstance(other, TeamCategory) and self.key == other.key
 
 
-class _SystemMeta(type, typing.Iterable[TeamCategory]):
-    def __iter__(self):
-        return iter(c for c in self.__dict__.values() if isinstance(c, TeamCategory))
+class SystemCategory(TeamCategory, enum.Enum):
+    Jury = "jury", "Jury", "lightgreen", False, 10, False
+    Solution = "solution", "Solutions", "green", False, 20, False
+    Author = "author", "Authors", "green", False, 30, False
+    System = "system", "System", "purple", False, 40, False
 
 
-class SystemCategory(metaclass=_SystemMeta):
-    Jury = TeamCategory("jury", "Jury", "lightgreen", False, 10, False)
-    Solution = TeamCategory("solution", "Solutions", "green", False, 20, False)
-    Author = TeamCategory("author", "Authors", "green", False, 30, False)
-    System = TeamCategory("system", "System", "purple", False, 40, False)
+class DefaultCategory(TeamCategory, enum.Enum):
+    Participants = "participants", "Participants", "lightgray", True, 5, False
+    Hidden = "hidden", "Participants (hidden)", "gray", False, 5, False
 
 
 @dataclasses.dataclass
