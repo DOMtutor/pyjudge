@@ -63,20 +63,25 @@ def link_or_copy(from_path: pathlib.Path, to_path: pathlib.Path, force=False):
             shutil.copy(from_path, to_path)
 
 
-def compile_latex(latex_file: pathlib.Path):
-    process = subprocess.Popen(
-        ["latexmk", "-halt-on-error", "--lualatex", latex_file.name],
+def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
+    invocation = ["latexmk", "-halt-on-error", "-pdflatex=lualatex"]
+    if shell_escape:
+        invocation.append("-shell-escape")
+    invocation.append(latex_file.name)
+    logging.debug("Compiling latex file %s", latex_file)
+    process = subprocess.run(
+        invocation,
         cwd=latex_file.parent,
         stdin=None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        timeout=timeout,
+        universal_newlines=True,
     )
-    logging.debug("Compiling latex file %s", latex_file)
-    output, error = process.communicate()
     if process.returncode:
         logging.warning("Compilation of %s failed", latex_file.name)
-        logging.debug(output)
-        logging.debug(error)
+        logging.debug(process.stdout)
+        logging.debug(process.stderr)
         return None
     compiled_file = latex_file.parent / latex_file.with_suffix(".pdf")
     if not compiled_file.exists():
