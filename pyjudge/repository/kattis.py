@@ -838,7 +838,9 @@ class Repository(object):
 
     @staticmethod
     def is_repository(directory: pathlib.Path):
-        return (directory / "config.yaml").is_file()
+        return (directory / "config.yaml").is_file() and (
+            directory / "problems"
+        ).is_dir()
 
     def __init__(self, base_path: pathlib.Path):
         if not Repository.is_repository(base_path):
@@ -911,6 +913,8 @@ class Repository(object):
                         f"{lang} and {self.languages_by_extension[extension]}"
                     )
                 self.languages_by_extension[extension] = lang
+        if not self.languages:
+            log.warning("Repository at %s has no languages", base_path)
 
         self.problems = RepositoryProblems(self, base_path / "problems")
 
@@ -1052,8 +1056,8 @@ def add_arguments(parser: argparse.ArgumentParser):
 
 def from_args(args: argparse.Namespace) -> Repository:
     candidates: List[pathlib.Path] = [
-        args.repository,
         args.repository / "repository",
+        args.repository,
         args.repository.parent,
     ]
     for path in candidates:

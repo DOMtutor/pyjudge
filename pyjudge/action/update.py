@@ -9,7 +9,7 @@ from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
 
 from mysql.connector.cursor import MySQLCursor
 
-from pyjudge.scripts.db import list_param
+from pyjudge.scripts.db import list_param, field_not_in_list
 from pyjudge.model import (
     TeamCategory,
     Team,
@@ -638,6 +638,7 @@ def set_languages(
     allowed_for_submission: Optional[Set[str]],
 ):
     if allowed_for_submission is None:
+        log.debug("Using all available languages")
         allowed_keys = {language.key for language in languages}
     else:
         allowed_keys = set()
@@ -661,7 +662,7 @@ def set_languages(
     cursor.execute(
         "SELECT langid, compile_script, EXISTS(SELECT * FROM submission "
         "  WHERE submission.langid = language.langid) as has_submission "
-        f"FROM language WHERE langid NOT IN {list_param(languages)}",
+        f"FROM language WHERE {field_not_in_list("langid", languages)}",
         tuple(language.key for language in languages),
     )
     languages_to_delete = []

@@ -131,6 +131,18 @@ def list_param(data):
     return f"({','.join(['?'] * len(data))})"
 
 
+def field_in_list(field, allowed):
+    if allowed:
+        return f"{field} IN {list_param(allowed)}"
+    return "1 = 2"
+
+
+def field_not_in_list(field, allowed):
+    if allowed:
+        return f"{field} NOT IN {list_param(allowed)}"
+    return "1 = 1"
+
+
 def get_unique(cursor: MySQLCursor):
     result = cursor.fetchall()
     if not result:
