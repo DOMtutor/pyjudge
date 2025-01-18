@@ -1,4 +1,3 @@
-import datetime
 import logging
 from collections import defaultdict
 from typing import List, Collection, Tuple, Dict, Generator, Optional
@@ -17,7 +16,7 @@ from pyjudge.data.teams import UserDto, TeamDto
 from pyjudge.model import Verdict
 from pyjudge.model.submission import TestcaseVerdict
 from pyjudge.model.team import SystemCategory
-from pyjudge.scripts.db import Database, list_param, get_unique
+from pyjudge.scripts.db import Database, list_param, get_unique, field_in_list
 
 
 def parse_judging_verdict(key):
@@ -365,7 +364,7 @@ def find_non_system_teams(database: Database) -> List[TeamDto]:
         cursor.execute(
             f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
             f"WHERE "
-            f"  u.teamid IN {list_param(team_data)}",
+            f"  {field_in_list("u.teamid", team_data)}",
             tuple(team_data.keys()),
         )
         team_users = {team_id: [] for team_id in team_data.keys()}

@@ -164,4 +164,4 @@ def main():
     file_export_parser.set_defaults(func=command_files)
 
     arguments = parser.parse_args()
-    arguments.func(db.from_args(arguments.db), arguments)
+    arguments.func(db.from_args(arguments), arguments)
