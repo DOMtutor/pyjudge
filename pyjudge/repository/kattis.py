@@ -231,8 +231,8 @@ class JurySubmission(JuryProblemSubmission):
 
 
 class RepositoryProblem(Problem):
-    DIFFICULTIES = ["very easy", "easy", "medium", "hard", "very hard", "unknown"]
     UNKNOWN_DIFFICULTY = "unknown"
+    DIFFICULTIES = ["very easy", "easy", "medium", "hard", "very hard", "unknown"]
 
     def __init__(self, directory: pathlib.Path, repository: "Repository"):
         self.repository = repository
@@ -920,7 +920,8 @@ class Repository(object):
 
     def _find_checker_include_data(self, language: str) -> Collection[FileData]:
         repository_directory = self.base_directory / "checker" / language
-        if repository_directory.exists():
+        if repository_directory.is_dir():
+            log.debug("Using repository checker files from %s", repository_directory)
             return Executable.get_directory_contents(repository_directory)
         default_directory = res.files(f"pyjudge.repository.checker.{language}")
         if default_directory.is_dir():

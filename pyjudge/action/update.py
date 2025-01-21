@@ -715,7 +715,7 @@ def clear_invalid_submissions(cursor):
 
     cursor.execute(
         "DELETE FROM submission "
-        "WHERE NOT EXISTS(SELECT * FROM domjudge.judging WHERE submission.submitid = judging.submitid)"
+        "WHERE NOT EXISTS(SELECT * FROM judging WHERE submission.submitid = judging.submitid)"
     )
     if cursor.rowcount:
         log.warning("Dropped %d submissions without judging", cursor.rowcount)

@@ -56,7 +56,7 @@ class Executable(abc.ABC):
     def get_directory_contents(directory: pathlib.Path) -> Collection[PathFile]:
         return [
             PathFile.from_path(path, directory)
-            for path in directory.glob("*")
+            for path in directory.glob("**/*")
             if path.is_file() and not path.name.endswith(".class")
         ]  # Exclude java compilation artifacts
 

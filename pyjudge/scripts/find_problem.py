@@ -76,6 +76,7 @@ def main():
     parser = argparse.ArgumentParser()
     script_util.add_logging(parser)
     kattis.add_arguments(parser)
+    add_arguments(parser)
 
     args = parser.parse_args()
     script_util.apply_logging(args)

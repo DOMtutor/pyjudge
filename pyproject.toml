@@ -24,7 +24,6 @@ dt_judge_upload = "pyjudge.scripts.upload:main"
 dt_judge_export = "pyjudge.scripts.export:main"
 dt_kattis_find = "pyjudge.scripts.find_problem:main"
 dt_kattis_check = "pyjudge.scripts.check:main"
-dt_kattis_get = "pyjudge.scripts.get_statements:main"
 dt_generate_seed = "pyjudge.scripts.generate_seed:main"
 dt_make_admin_user = "pyjudge.scripts.make_admin:main"
 
