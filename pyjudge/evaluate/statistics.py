@@ -4,11 +4,12 @@ import itertools
 import math
 import statistics
 from collections import defaultdict
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Callable
 
 import pytz
 
 from pyjudge.data.submission import SubmissionDto, ContestDataDto
+from pyjudge.data.teams import TeamDto
 from pyjudge.model import Verdict
 
 
@@ -154,16 +155,23 @@ class ContestStatistics(object):
     problem_statistics_by_key: Dict[str, ProblemStatistics]
 
     @staticmethod
-    def of(contest_data: ContestDataDto):
+    def of(contest_data: ContestDataDto, team_filter: Callable[[TeamDto], bool] = None):
+        if team_filter is None:
+
+            def team_filter(_: TeamDto) -> bool:
+                return True
+
         team_name_by_key = {
-            team.key: team.display_name for team in contest_data.teams.values()
+            team.key: team.display_name
+            for team in contest_data.teams.values()
+            if team_filter(team)
         }
         language_name_by_key = contest_data.languages
 
         submissions = [
             submission
             for submission in contest_data.submissions
-            if not submission.too_late
+            if not submission.too_late and submission.team_key in team_name_by_key
         ]
         submissions_by_problem = defaultdict(list)
         for submission in submissions:
