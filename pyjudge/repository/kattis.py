@@ -916,6 +916,11 @@ class Repository(object):
         if not self.languages:
             log.warning("Repository at %s has no languages", base_path)
 
+        if (self.base_directory / "problemset.cls").exists():
+            self.problemset_class = self.base_directory / "problemset.cls"
+        else:
+            self.problemset_class = None
+
         self.problems = RepositoryProblems(self, base_path / "problems")
 
     def _find_checker_include_data(self, language: str) -> Collection[FileData]:
