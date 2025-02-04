@@ -992,19 +992,22 @@ def create_problem_submissions(
                     ),
                 )
                 new_submission_id = cursor.lastrowid
-                source_bytes = bytes(source_code.encode("utf-8"))
-                time.sleep(0.1)
+                source_bytes = source_code.encode("utf-8")
                 log.debug(
                     "Inserting file %s for submission %s",
                     submission.file_name,
                     new_submission_id,
                 )
+
+                time.sleep(
+                    0.2
+                )  # This is needed to prevent segfault of the mysql-connector?!
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
-                    "VALUES (?, ?, 1, ?)",
+                    "VALUES (?, ? , 1, ?)",
                     (new_submission_id, submission.file_name, source_bytes),
                 )
-                time.sleep(0.1)
+                time.sleep(0.2)
             else:
                 cursor.execute(
                     "UPDATE submission "
