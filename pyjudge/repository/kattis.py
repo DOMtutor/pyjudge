@@ -248,7 +248,11 @@ class RepositoryProblem(Problem):
 
         self._name = self.description["name"]
         if self.description and "keywords" in self.description:
-            keywords = re.split(" - |,", self.description["keywords"])
+            k = self.description["keywords"]
+            if isinstance(k, list):
+                keywords = k
+            else:
+                keywords = re.split(" - |,", k)
             self.keywords = list(
                 [x.strip().lower() for x in keywords]
             )  # replace("-", " ")?
@@ -387,7 +391,9 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(self, lang="en", force=False):
+    def generate_problem_text_if_required(
+        self, lang="en", force=False, problemset_options=None
+    ):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -420,6 +426,8 @@ class RepositoryProblem(Problem):
             # noinspection SpellCheckingInspection
             options.destfile = str(problem_pdf.absolute())
             options.quiet = not log.isEnabledFor(logging.DEBUG)
+            if problemset_options:
+                options.problemset_options = problemset_options
 
             problemtools.problem2pdf.convert(str(self.directory.absolute()), options)
 
