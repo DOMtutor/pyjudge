@@ -1,6 +1,5 @@
 import dataclasses
 import base64
-import datetime
 from typing import Optional, List, Dict
 
 from pyjudge import util
@@ -21,7 +20,8 @@ class SubmissionFileDto:
     @property
     def line_count(self) -> Optional[int]:
         try:
-            return self.content.decode("utf-8").count("\n") + 1
+            lines = [line.strip() for line in self.content.decode("utf-8").splitlines()]
+            return len([line for line in lines if line])
         except UnicodeDecodeError:
             return None
 

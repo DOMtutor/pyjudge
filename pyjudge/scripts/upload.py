@@ -58,7 +58,9 @@ def _update_problem_submissions(
             log.warning("Did not find a language for submission %s", submission)
             continue
 
-        submission_expected_results: Tuple[Verdict] = tuple(submission.expected_results)
+        submission_expected_results: Tuple[Verdict, ...] = tuple(
+            submission.expected_results
+        )
         if set(submission_expected_results) == {Verdict.CORRECT}:
             submissions.append(
                 ((config.get_solution_team_of_language(language)), submission)

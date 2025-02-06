@@ -39,5 +39,3 @@ include = ["pyjudge*"]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.ruff]
-ignore-init-module-imports = true

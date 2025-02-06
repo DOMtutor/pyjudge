@@ -285,6 +285,7 @@ class RepositoryProblem(Problem):
             memory_kib=limits.get("memory_limit", None),
             output_kib=limits.get("output_limit", None),
         )
+        self._assignment = self.description.get("x-assignment", False)
 
         self._test_cases = None
         self._submissions = None
@@ -330,8 +331,8 @@ class RepositoryProblem(Problem):
                     def action(traversable: Traversable, components: Collection[str]):
                         path = include_dir / pathlib.Path(*components)
                         path.parent.mkdir(exist_ok=True, parents=True)
-                        with path.open("wt") as f_o:
-                            with traversable.open("rt") as f_i:
+                        with path.open("wb") as f_o:
+                            with traversable.open("rb") as f_i:
                                 shutil.copyfileobj(f_i, f_o)
                         if path.name in {"build", "run"}:
                             path.chmod(path.stat().st_mode | stat.S_IEXEC)
@@ -391,9 +392,7 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(
-        self, lang="en", force=False, problemset_options=None
-    ):
+    def generate_problem_text_if_required(self, lang="en", force=False):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -401,11 +400,11 @@ class RepositoryProblem(Problem):
             raise ValueError(
                 f"Problem {self.name} does not have a statement in language {lang}"
             )
-        problem_pdf = self.directory / "build" / f"problem.{lang}.pdf"
+        destination_pdf = self.directory / "build" / f"problem.{lang}.pdf"
 
-        regenerate = force or not problem_pdf.exists()
+        regenerate = force or not destination_pdf.exists()
         if not regenerate:
-            pdf_mtime = problem_pdf.stat().st_mtime
+            pdf_mtime = destination_pdf.stat().st_mtime
             regenerate = pdf_mtime < source_file.stat().st_mtime
             if not regenerate:
                 for case in self.testcases:
@@ -419,24 +418,67 @@ class RepositoryProblem(Problem):
                         break
 
         if regenerate:
-            problem_pdf.parent.mkdir(exist_ok=True, parents=True)
-            self.log.info("Building problem pdf for language %s", lang)
-            options = problemtools.problem2pdf.ConvertOptions()
-            options.language = lang
-            # noinspection SpellCheckingInspection
-            options.destfile = str(problem_pdf.absolute())
-            options.quiet = not log.isEnabledFor(logging.DEBUG)
-            if problemset_options:
-                options.problemset_options = problemset_options
+            destination_pdf.parent.mkdir(exist_ok=True, parents=True)
 
-            problemtools.problem2pdf.convert(str(self.directory.absolute()), options)
+            with tempfile.TemporaryDirectory(prefix="dt") as t:
+                directory = pathlib.Path(t)
+                build_pdf = directory / f"{self.name}.build.pdf"
 
-            # TODO Wait till problemtools allows extracting the output
-            if not problem_pdf.exists():
-                raise ValueError(
-                    f"Missing problem pdf for {self.name} -- probably a LaTeX error"
+                self.log.info("Building problem pdf for language %s", lang)
+                options = problemtools.problem2pdf.ConvertOptions()
+                options.language = lang
+                # noinspection SpellCheckingInspection
+                options.destfile = str(build_pdf.absolute())
+                options.quiet = not log.isEnabledFor(logging.DEBUG)
+                if self._assignment:
+                    options.problemset_options = ["aiwatermark"]
+
+                problemtools.problem2pdf.convert(
+                    str(self.directory.absolute()), options
                 )
-        return problem_pdf
+
+                # TODO Wait till problemtools allows extracting the output
+                if not build_pdf.exists():
+                    raise ValueError(
+                        f"Missing problem pdf for {self.name} -- probably a LaTeX error"
+                    )
+                if self._assignment:
+                    # Rasterize and compress the PDF
+                    rasterized_pdf = directory / f"{self.name}.rasterized.pdf"
+                    final_pdf = directory / f"{self.name}.final.pdf"
+                    subprocess.run(
+                        [
+                            "convert",
+                            "-render",
+                            "-density",
+                            "150",
+                            build_pdf,
+                            rasterized_pdf,
+                        ],
+                        timeout=60,
+                        check=True,
+                        cwd=directory,
+                    )
+                    subprocess.run(
+                        [
+                            "gs",
+                            "-sDEVICE=pdfwrite",
+                            "-dCompatibilityLevel=1.4",
+                            "-dPDFSETTINGS=/ebook",
+                            "-dNOPAUSE",
+                            "-dQUIET",
+                            "-dBATCH",
+                            f"-sOutputFile={final_pdf.absolute()}",
+                            rasterized_pdf,
+                        ],
+                        timeout=60,
+                        check=True,
+                        cwd=directory,
+                    )
+                    shutil.copy(final_pdf, destination_pdf)
+                else:
+                    shutil.copy(build_pdf, destination_pdf)
+        return destination_pdf
 
     @property
     def problem_text(self, lang="en") -> Tuple[bytes, str]:

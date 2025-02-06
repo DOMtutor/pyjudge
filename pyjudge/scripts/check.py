@@ -22,6 +22,7 @@ def main():
         sys.exit("No problems found")
 
     for problem in problems:
-        problem.check()
         if args.statement:
             problem.generate_problem_text_if_required(args.statement)
+        else:
+            problem.check()
