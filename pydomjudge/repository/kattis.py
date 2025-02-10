@@ -439,10 +439,13 @@ class RepositoryProblem(Problem):
         if regenerate:
             destination_pdf.parent.mkdir(exist_ok=True, parents=True)
 
-            with tempfile.TemporaryDirectory(prefix=f"dt-{self.name}-") as t:
+            with tempfile.TemporaryDirectory(prefix=f"dt-{self.repository_key}-") as t:
                 directory = pathlib.Path(t)
-                RepositoryProblem.link_or_copy_problem_statement(self, directory)
-                build_pdf = directory / f"{self.name}.build.pdf"
+                problem_directory = directory / self.repository_key
+                RepositoryProblem.link_or_copy_problem_statement(
+                    self, problem_directory
+                )
+                build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
                 options = problemtools.problem2pdf.ConvertOptions()
@@ -453,7 +456,9 @@ class RepositoryProblem(Problem):
                 if assignment:
                     options.problemset_options = ["aiwatermark"]
 
-                problemtools.problem2pdf.convert(str(directory.absolute()), options)
+                problemtools.problem2pdf.convert(
+                    str(problem_directory.absolute()), options
+                )
 
                 # TODO Wait till problemtools allows extracting the output
                 if not build_pdf.exists():
@@ -925,9 +930,9 @@ class Repository(object):
             language_keys = set(language_settings)
 
         languages: List[Language] = []
-        default_language_settings: Mapping[
-            str, Mapping[str, Any]
-        ] = Repository._default_language_settings()
+        default_language_settings: Mapping[str, Mapping[str, Any]] = (
+            Repository._default_language_settings()
+        )
 
         for language_key in language_keys:
             if (
