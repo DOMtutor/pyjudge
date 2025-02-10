@@ -14,6 +14,8 @@ from importlib.abc import Traversable
 from typing import Optional, List, Dict, Tuple, Collection, Any, Mapping, Callable
 
 import yaml
+
+from pyjudge.util import link_or_copy
 from pyjudge.model.language import FileData
 
 import problemtools.run as run
@@ -36,6 +38,7 @@ from pyjudge.model.team import SystemCategory
 from pyjudge.model.util import get_md5
 
 from problemtools.run import BuildRun
+from pyjudge.util import rasterize_pdf
 
 log = logging.getLogger(__name__)
 
@@ -234,6 +237,20 @@ class RepositoryProblem(Problem):
     UNKNOWN_DIFFICULTY = "unknown"
     DIFFICULTIES = ["very easy", "easy", "medium", "hard", "very hard", "unknown"]
 
+    @staticmethod
+    def link_or_copy_problem_statement(
+        problem: "RepositoryProblem", destination: pathlib.Path, force=False
+    ):
+        problem_paths = ["problem_statement", "data/sample"]
+
+        repository_path = problem.directory
+        for sub_path in problem_paths:
+            link_or_copy(
+                repository_path / sub_path,
+                destination / sub_path,
+                force,
+            )
+
     def __init__(self, directory: pathlib.Path, repository: "Repository"):
         self.repository = repository
         self.repository_key: str = directory.name
@@ -285,7 +302,6 @@ class RepositoryProblem(Problem):
             memory_kib=limits.get("memory_limit", None),
             output_kib=limits.get("output_limit", None),
         )
-        self._assignment = self.description.get("x-assignment", False)
 
         self._test_cases = None
         self._submissions = None
@@ -331,8 +347,8 @@ class RepositoryProblem(Problem):
                     def action(traversable: Traversable, components: Collection[str]):
                         path = include_dir / pathlib.Path(*components)
                         path.parent.mkdir(exist_ok=True, parents=True)
-                        with path.open("wb") as f_o:
-                            with traversable.open("rb") as f_i:
+                        with traversable.open("rb") as f_i:
+                            with path.open("wb") as f_o:
                                 shutil.copyfileobj(f_i, f_o)
                         if path.name in {"build", "run"}:
                             path.chmod(path.stat().st_mode | stat.S_IEXEC)
@@ -392,7 +408,9 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(self, lang="en", force=False):
+    def generate_problem_text_if_required(
+        self, lang="en", force=False, assignment=False
+    ):  # TODO Assignment?
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -404,6 +422,7 @@ class RepositoryProblem(Problem):
 
         regenerate = force or not destination_pdf.exists()
         if not regenerate:
+            # TODO Check for every file in sample folder as well as all files in problem_statement
             pdf_mtime = destination_pdf.stat().st_mtime
             regenerate = pdf_mtime < source_file.stat().st_mtime
             if not regenerate:
@@ -420,8 +439,9 @@ class RepositoryProblem(Problem):
         if regenerate:
             destination_pdf.parent.mkdir(exist_ok=True, parents=True)
 
-            with tempfile.TemporaryDirectory(prefix="dt") as t:
+            with tempfile.TemporaryDirectory(prefix=f"dt-{self.name}-") as t:
                 directory = pathlib.Path(t)
+                RepositoryProblem.link_or_copy_problem_statement(self, directory)
                 build_pdf = directory / f"{self.name}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
@@ -430,59 +450,33 @@ class RepositoryProblem(Problem):
                 # noinspection SpellCheckingInspection
                 options.destfile = str(build_pdf.absolute())
                 options.quiet = not log.isEnabledFor(logging.DEBUG)
-                if self._assignment:
+                if assignment:
                     options.problemset_options = ["aiwatermark"]
 
-                problemtools.problem2pdf.convert(
-                    str(self.directory.absolute()), options
-                )
+                problemtools.problem2pdf.convert(str(directory.absolute()), options)
 
                 # TODO Wait till problemtools allows extracting the output
                 if not build_pdf.exists():
                     raise ValueError(
                         f"Missing problem pdf for {self.name} -- probably a LaTeX error"
                     )
-                if self._assignment:
-                    # Rasterize and compress the PDF
-                    rasterized_pdf = directory / f"{self.name}.rasterized.pdf"
+                if assignment:
                     final_pdf = directory / f"{self.name}.final.pdf"
-                    subprocess.run(
-                        [
-                            "convert",
-                            "-render",
-                            "-density",
-                            "150",
-                            build_pdf,
-                            rasterized_pdf,
-                        ],
-                        timeout=60,
-                        check=True,
-                        cwd=directory,
-                    )
-                    subprocess.run(
-                        [
-                            "gs",
-                            "-sDEVICE=pdfwrite",
-                            "-dCompatibilityLevel=1.4",
-                            "-dPDFSETTINGS=/ebook",
-                            "-dNOPAUSE",
-                            "-dQUIET",
-                            "-dBATCH",
-                            f"-sOutputFile={final_pdf.absolute()}",
-                            rasterized_pdf,
-                        ],
-                        timeout=60,
-                        check=True,
-                        cwd=directory,
-                    )
+                    rasterize_pdf(build_pdf, final_pdf)
                     shutil.copy(final_pdf, destination_pdf)
                 else:
                     shutil.copy(build_pdf, destination_pdf)
         return destination_pdf
 
-    @property
-    def problem_text(self, lang="en") -> Tuple[bytes, str]:
-        problem_pdf = self.generate_problem_text_if_required(lang)
+    def problem_text(
+        self, lang="en", assignment=False
+    ) -> Tuple[bytes, str]:  # TODO Assignment?
+        if assignment:
+            problem_pdf = self.generate_problem_text_if_required(
+                lang, force=True, assignment=True
+            )
+        else:
+            problem_pdf = self.generate_problem_text_if_required(lang)
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 

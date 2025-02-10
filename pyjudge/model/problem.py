@@ -103,9 +103,10 @@ class Problem(object):
     def checker_flags(self) -> Optional[str]:
         return None
 
-    @property
     @abc.abstractmethod
-    def problem_text(self) -> Tuple[bytes, str]:
+    def problem_text(
+        self, lang="en", assignment=False
+    ) -> Tuple[bytes, str]:  # TODO Assignment?
         pass
 
     @property

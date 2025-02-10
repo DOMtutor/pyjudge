@@ -127,7 +127,10 @@ def upload_contest(
                     problem_ids[
                         contest_problem.problem
                     ] = update.create_or_update_problem_data(
-                        cursor, config.judge, contest_problem.problem
+                        cursor,
+                        config.judge,
+                        contest_problem.problem,
+                        contest.assignment,
                     )
                     if update_test_cases:
                         update.create_or_update_problem_testcases(

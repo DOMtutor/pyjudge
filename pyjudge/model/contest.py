@@ -76,6 +76,7 @@ class Contest(object):
     access: Optional[ContestAccess]
 
     public_scoreboard: bool
+    assignment: bool
 
     def __post_init__(self):
         self.validate()
@@ -136,6 +137,7 @@ class Contest(object):
             if data.get("access", None) is not None
             else None
         )
+        assignment = data.get("assignment", False)
 
         return Contest(
             key=data["key"],
@@ -148,6 +150,7 @@ class Contest(object):
             access=access,
             public_scoreboard=public_scoreboard,
             problems=problems,
+            assignment=assignment,
         )
 
     def serialize(self, problem_loader: ProblemLoader):
@@ -162,6 +165,8 @@ class Contest(object):
                 problem.serialize(problem_loader) for problem in self.problems
             ],
         }
+        if self.assignment:
+            data["assignment"] = True
         if self.access is not None:
             data["access"] = self.access.serialize()
         if self.freeze_time is not None:
