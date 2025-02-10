@@ -35,6 +35,7 @@ include = ["pydomjudge*"]
 "pydomjudge.repository.runscript" = ["**"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
+"pydomjudge.repository" = ["languages.yml"]
 
 [build-system]
 requires = ["setuptools"]
