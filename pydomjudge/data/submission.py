@@ -2,10 +2,10 @@ import dataclasses
 import base64
 from typing import Optional, List, Dict
 
-from pyjudge import util
-from pyjudge.data.teams import TeamDto
-from pyjudge.model import Verdict
-from pyjudge.model.submission import TestcaseVerdict
+from pydomjudge import util
+from pydomjudge.data.teams import TeamDto
+from pydomjudge.model import Verdict
+from pydomjudge.model.submission import TestcaseVerdict
 
 
 @dataclasses.dataclass

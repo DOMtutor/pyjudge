@@ -9,8 +9,8 @@ from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
 
 from mysql.connector.cursor import MySQLCursor
 
-from pyjudge.scripts.db import list_param, field_not_in_list
-from pyjudge.model import (
+from pydomjudge.scripts.db import list_param, field_not_in_list
+from pydomjudge.model import (
     TeamCategory,
     Team,
     Executable,

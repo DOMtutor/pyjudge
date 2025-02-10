@@ -8,9 +8,9 @@ from typing import Set, Dict, List, Callable
 
 import pytz
 
-from pyjudge.data.submission import SubmissionDto, ContestDataDto
-from pyjudge.data.teams import TeamDto
-from pyjudge.model import Verdict
+from pydomjudge.data.submission import SubmissionDto, ContestDataDto
+from pydomjudge.data.teams import TeamDto
+from pydomjudge.model import Verdict
 
 
 @dataclasses.dataclass

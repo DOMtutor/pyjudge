@@ -2,7 +2,7 @@ import dataclasses
 import enum
 from typing import Optional
 
-from pyjudge.util import filter_none
+from pydomjudge.util import filter_none
 
 
 class UserRole(enum.Enum):

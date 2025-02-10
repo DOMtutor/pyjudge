@@ -15,13 +15,13 @@ from typing import Optional, List, Dict, Tuple, Collection, Any, Mapping, Callab
 
 import yaml
 
-from pyjudge.util import link_or_copy
-from pyjudge.model.language import FileData
+from pydomjudge.util import link_or_copy
+from pydomjudge.model.language import FileData
 
 import problemtools.run as run
 import problemtools.verifyproblem
 import problemtools.verifyproblem as verify
-from pyjudge.model import (
+from pydomjudge.model import (
     ProblemTestCase,
     Affiliation,
     JuryProblemSubmission,
@@ -34,11 +34,11 @@ from pyjudge.model import (
     ExecutableType,
     Team,
 )
-from pyjudge.model.team import SystemCategory
-from pyjudge.model.util import get_md5
+from pydomjudge.model.team import SystemCategory
+from pydomjudge.model.util import get_md5
 
 from problemtools.run import BuildRun
-from pyjudge.util import rasterize_pdf
+from pydomjudge.util import rasterize_pdf
 
 log = logging.getLogger(__name__)
 
@@ -337,7 +337,7 @@ class RepositoryProblem(Problem):
                 include_dir = repository_directory
             else:
                 default_directory = res.files(
-                    f"pyjudge.repository.checker.{checker_language}"
+                    f"pydomjudge.repository.checker.{checker_language}"
                 )
                 if default_directory.is_dir():
                     include_dir = pathlib.Path(
@@ -821,7 +821,7 @@ def get_components_of_traversable(traversable: Traversable) -> Collection[FileDa
 class Repository(object):
     @staticmethod
     def _default_checker_files() -> Mapping[str, Collection[FileData]]:
-        standard_checkers = res.files("pyjudge.repository.checker")
+        standard_checkers = res.files("pydomjudge.repository.checker")
         by_key = {
             checker.name: get_components_of_traversable(checker)
             for checker in standard_checkers.iterdir()
@@ -832,12 +832,14 @@ class Repository(object):
     @staticmethod
     def _get_files_for_default_language(language_key):
         return get_components_of_traversable(
-            res.files(f"pyjudge.repository.compiler.{language_key}")
+            res.files(f"pydomjudge.repository.compiler.{language_key}")
         )
 
     @staticmethod
     def _default_language_settings() -> Mapping[str, Mapping[str, Any]]:
-        standard_languages = res.files("pyjudge.repository").joinpath("languages.yml")
+        standard_languages = res.files("pydomjudge.repository").joinpath(
+            "languages.yml"
+        )
         with standard_languages.open(mode="rt") as f:
             language_configuration = yaml.safe_load(f)
         assert isinstance(language_configuration, dict)
@@ -972,7 +974,7 @@ class Repository(object):
         if repository_directory.is_dir():
             log.debug("Using repository checker files from %s", repository_directory)
             return Executable.get_directory_contents(repository_directory)
-        default_directory = res.files(f"pyjudge.repository.checker.{language}")
+        default_directory = res.files(f"pydomjudge.repository.checker.{language}")
         if default_directory.is_dir():
             return get_components_of_traversable(default_directory)
         return []

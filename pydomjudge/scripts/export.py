@@ -7,10 +7,10 @@ import gzip
 from collections import defaultdict
 from typing import Optional
 
-from pyjudge.action import query
-from pyjudge.data.submission import ContestDataDto
-import pyjudge.scripts.db as db
-from pyjudge.scripts.db import Database
+from pydomjudge.action import query
+from pydomjudge.data.submission import ContestDataDto
+import pydomjudge.scripts.db as db
+from pydomjudge.scripts.db import Database
 
 log = logging.getLogger(__name__)
 

@@ -1,1 +1,1 @@
-recursive-include pyjudge/repository/scripts/ *
+recursive-include pydomjudge/repository/scripts/ *

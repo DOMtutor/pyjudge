@@ -8,8 +8,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pyjudge.evaluate.statistics import ProblemStatistics, SummaryStatistics
-from pyjudge.model import Verdict
+from pydomjudge.evaluate.statistics import ProblemStatistics, SummaryStatistics
+from pydomjudge.model import Verdict
 
 verdict_formats = [
     ({Verdict.CORRECT}, {"label": "AC", "color": "green"}),

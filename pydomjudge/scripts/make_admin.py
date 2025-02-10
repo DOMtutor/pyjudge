@@ -2,8 +2,8 @@ import json
 import pathlib
 import sys
 
-from pyjudge.model import User, UserRole
-from pyjudge.scripts.upload import UsersDescription
+from pydomjudge.model import User, UserRole
+from pydomjudge.scripts.upload import UsersDescription
 
 
 def main():

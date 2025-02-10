@@ -21,20 +21,20 @@ dependencies = [
 ]
 
 [project.scripts]
-dt_judge_upload = "pyjudge.scripts.upload:main"
-dt_judge_export = "pyjudge.scripts.export:main"
-dt_kattis_find = "pyjudge.scripts.find_problem:main"
-dt_kattis_check = "pyjudge.scripts.check:main"
-dt_generate_seed = "pyjudge.scripts.generate_seed:main"
-dt_make_admin_user = "pyjudge.scripts.make_admin:main"
+dt_judge_upload = "pydomjudge.scripts.upload:main"
+dt_judge_export = "pydomjudge.scripts.export:main"
+dt_kattis_find = "pydomjudge.scripts.find_problem:main"
+dt_kattis_check = "pydomjudge.scripts.check:main"
+dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
+dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
 
 [tool.setuptools.packages.find]
-include = ["pyjudge*"]
+include = ["pydomjudge*"]
 
 [tool.setuptools.package-data]
-"pyjudge.repository.runscript" = ["**"]
-"pyjudge.repository.compiler" = ["*/**"]
-"pyjudge.repository.checker" = ["*/**"]
+"pydomjudge.repository.runscript" = ["**"]
+"pydomjudge.repository.compiler" = ["*/**"]
+"pydomjudge.repository.checker" = ["*/**"]
 
 [build-system]
 requires = ["setuptools"]

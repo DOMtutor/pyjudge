@@ -4,7 +4,7 @@ from typing import List, Collection, Tuple, Dict, Generator, Optional
 
 from mysql.connector.cursor import MySQLCursor
 
-from pyjudge.data.submission import (
+from pydomjudge.data.submission import (
     SubmissionDto,
     SubmissionFileDto,
     ClarificationDto,
@@ -12,11 +12,11 @@ from pyjudge.data.submission import (
     ContestDescriptionDto,
     TestcaseResultDto,
 )
-from pyjudge.data.teams import UserDto, TeamDto
-from pyjudge.model import Verdict
-from pyjudge.model.submission import TestcaseVerdict
-from pyjudge.model.team import SystemCategory
-from pyjudge.scripts.db import Database, list_param, get_unique, field_in_list
+from pydomjudge.data.teams import UserDto, TeamDto
+from pydomjudge.model import Verdict
+from pydomjudge.model.submission import TestcaseVerdict
+from pydomjudge.model.team import SystemCategory
+from pydomjudge.scripts.db import Database, list_param, get_unique, field_in_list
 
 
 def parse_judging_verdict(key):

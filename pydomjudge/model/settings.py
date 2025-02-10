@@ -4,7 +4,7 @@ from typing import Dict, Sequence, Set, Optional, List
 
 from .team import TeamCategory
 from .submission import Verdict
-from pyjudge.util import list_if_not_none, filter_none
+from pydomjudge.util import list_if_not_none, filter_none
 
 
 @dataclasses.dataclass

@@ -4,10 +4,10 @@ import re
 import json
 from typing import List
 
-import pyjudge.repository.kattis as kattis
-import pyjudge.scripts.util as script_util
-from pyjudge.model import Contest
-from pyjudge.repository.kattis import RepositoryProblem
+import pydomjudge.repository.kattis as kattis
+import pydomjudge.scripts.util as script_util
+from pydomjudge.model import Contest
+from pydomjudge.repository.kattis import RepositoryProblem
 
 
 def add_arguments(parser: argparse.ArgumentParser):

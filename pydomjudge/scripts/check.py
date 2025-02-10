@@ -1,9 +1,9 @@
 import argparse
 import sys
 
-import pyjudge.repository.kattis as kattis
-import pyjudge.scripts.util as script_util
-import pyjudge.scripts.find_problem as find_problem
+import pydomjudge.repository.kattis as kattis
+import pydomjudge.scripts.util as script_util
+import pydomjudge.scripts.find_problem as find_problem
 
 
 def main():

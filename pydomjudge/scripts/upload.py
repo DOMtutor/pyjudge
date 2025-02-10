@@ -13,9 +13,9 @@ import re
 import sys
 from typing import List, Tuple, Collection, Optional, Dict, Set
 
-import pyjudge.action.update as update
+import pydomjudge.action.update as update
 from problemtools.verifyproblem import VerifyError
-from pyjudge.model import (
+from pydomjudge.model import (
     Contest,
     Verdict,
     Problem,
@@ -25,13 +25,13 @@ from pyjudge.model import (
     Affiliation,
     TeamCategory,
 )
-from pyjudge.model.settings import JudgeInstance
-from pyjudge.model.team import SystemCategory
-from pyjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
-import pyjudge.scripts.db as db
-import pyjudge.repository.kattis as kattis
-from pyjudge.scripts.db import Database
-import pyjudge.scripts.util as script_util
+from pydomjudge.model.settings import JudgeInstance
+from pydomjudge.model.team import SystemCategory
+from pydomjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
+import pydomjudge.scripts.db as db
+import pydomjudge.repository.kattis as kattis
+from pydomjudge.scripts.db import Database
+import pydomjudge.scripts.util as script_util
 
 
 log = logging.getLogger(__name__)

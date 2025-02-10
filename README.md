@@ -1,4 +1,4 @@
-# PyJudge
+# PyDOMJudge
 
 A library to help interaction with DOMjudge
 

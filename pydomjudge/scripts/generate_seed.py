@@ -5,7 +5,7 @@ import sys
 import jinja2
 import random
 
-import pyjudge.scripts.util as script_util
+import pydomjudge.scripts.util as script_util
 
 
 def render_content(

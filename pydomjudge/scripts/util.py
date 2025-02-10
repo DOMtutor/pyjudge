@@ -21,9 +21,9 @@ def add_logging(parser: argparse.ArgumentParser):
 def apply_logging(args: argparse.Namespace):
     if args.debug or args.log == "DEBUG":
         logging.basicConfig(level=logging.DEBUG)
-        logging.getLogger("pyjudge").setLevel(level=logging.DEBUG)
+        logging.getLogger("pydomjudge").setLevel(level=logging.DEBUG)
         logging.getLogger("problemtools").setLevel(logging.DEBUG)
     elif args.log:
         logging.basicConfig(level=logging.INFO)
         logging.getLogger("problemtools").setLevel(logging.WARNING)
-        logging.getLogger("pyjudge").setLevel(level=args.log)
+        logging.getLogger("pydomjudge").setLevel(level=args.log)
