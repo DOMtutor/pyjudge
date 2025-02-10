@@ -96,6 +96,7 @@ def rasterize_pdf(
     source: pathlib.Path,
     destination: pathlib.Path,
     working_directory: pathlib.Path | None = None,
+    super_sampling: float = 4,
 ):
     from pypdf import PdfReader, PdfWriter
 
@@ -104,32 +105,20 @@ def rasterize_pdf(
 
     metadata = PdfReader(source).metadata
 
-    rasterized_pdf = working_directory / f"{source.name}.rasterized.pdf"
-    subprocess.run(
-        [
-            "convert",
-            "-render",
-            "-density",
-            "150",
-            source,
-            rasterized_pdf,
-        ],
-        timeout=60,
-        check=True,
-        cwd=working_directory,
-    )
-    compressed_pdf = working_directory / f"{source.name}.compressed.pdf"
+    compressed_pdf = working_directory / f"{source.name}.rasterized.pdf"
     subprocess.run(
         [
             "gs",
-            "-sDEVICE=pdfwrite",
+            "-sDEVICE=pdfimage24",
             "-dCompatibilityLevel=1.4",
             "-dPDFSETTINGS=/ebook",
             "-dNOPAUSE",
             "-dQUIET",
             "-dBATCH",
+            f"-r{int(300 * super_sampling)}",
+            f"-dDownScaleFactor={super_sampling}",
             f"-sOutputFile={compressed_pdf.absolute()}",
-            rasterized_pdf,
+            source,
         ],
         timeout=60,
         check=True,
