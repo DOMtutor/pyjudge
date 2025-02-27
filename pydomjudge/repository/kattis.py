@@ -889,9 +889,11 @@ class Repository(object):
 
     @staticmethod
     def is_repository(directory: pathlib.Path):
-        return (directory / "config.yaml").is_file() and (
-            directory / "problems"
-        ).is_dir()
+        return (
+            directory.is_dir()
+            and (directory / "config.yaml").is_file()
+            and (directory / "problems").is_dir()
+        )
 
     def __init__(self, base_path: pathlib.Path):
         if not Repository.is_repository(base_path):
@@ -1108,17 +1110,27 @@ class Repository(object):
 
 
 def add_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument("--repository", type=pathlib.Path, default=pathlib.Path.cwd())
+    parser.add_argument("--repository", type=pathlib.Path)
 
 
 def from_args(args: argparse.Namespace) -> Repository:
-    candidates: List[pathlib.Path] = [
-        args.repository / "repository",
-        args.repository,
-        args.repository.parent,
-    ]
+    candidates: List[pathlib.Path]
+    cwd = pathlib.Path.cwd()
+    if args.repository is None:
+        candidates = [cwd / "repository"]
+        for parent in cwd.resolve().absolute().parents:
+            if parent.name == "repository":
+                candidates.append(parent)
+    else:
+        candidates = [
+            args.repository / "repository",
+            args.repository,
+            args.repository.parent,
+        ]
     for path in candidates:
-        if path.exists() and Repository.is_repository(path):
+        if Repository.is_repository(path):
             return Repository(path)
 
-    raise FileNotFoundError(f"No repository at path {args.repository}")
+    raise FileNotFoundError(
+        f"No repository at path {args.repository if args.repository is not None else cwd}"
+    )

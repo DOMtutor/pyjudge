@@ -13,6 +13,7 @@ def main():
     find_problem.add_arguments(parser)
 
     parser.add_argument("--statement", type=str)
+    parser.add_argument("--assignment", action="store_true")
     args = parser.parse_args()
     script_util.apply_logging(args)
 
@@ -23,6 +24,8 @@ def main():
 
     for problem in problems:
         if args.statement:
-            problem.generate_problem_text_if_required(args.statement)
+            problem.generate_problem_text_if_required(
+                args.statement, assignment=args.assignment
+            )
         else:
             problem.check()
