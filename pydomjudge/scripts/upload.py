@@ -124,13 +124,13 @@ def upload_contest(
                 with connection.transaction_cursor(
                     isolation_level="SERIALIZABLE", prepared_cursor=True
                 ) as cursor:
-                    problem_ids[
-                        contest_problem.problem
-                    ] = update.create_or_update_problem_data(
-                        cursor,
-                        config.judge,
-                        contest_problem.problem,
-                        contest.assignment,
+                    problem_ids[contest_problem.problem] = (
+                        update.create_or_update_problem_data(
+                            cursor,
+                            config.judge,
+                            contest_problem.problem,
+                            contest.assignment,
+                        )
                     )
                     if update_test_cases:
                         update.create_or_update_problem_testcases(
@@ -162,6 +162,7 @@ def upload_problems(
     problems: List[RepositoryProblem],
     update_submissions: bool = True,
     verify_problems: bool = False,
+    assignment: bool = False,
 ):
     if update_submissions:
         if verify_problems:
@@ -179,7 +180,9 @@ def upload_problems(
     with config.database as connection:
         for problem in problems:
             with connection.transaction_cursor(prepared_cursor=True) as cursor:
-                update.create_or_update_problem_data(cursor, config.judge, problem)
+                update.create_or_update_problem_data(
+                    cursor, config.judge, problem, assignment=assignment
+                )
                 update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:
                     _update_problem_submissions(
@@ -297,6 +300,7 @@ def command_problem(config: PyjudgeConfig, args):
         problems,
         verify_problems=args.verify,
         update_submissions=args.update_submissions,
+        assignment=args.assignment,
     )
 
 
@@ -381,7 +385,7 @@ def main():
         action="store_false",
         dest="verify",
         help="Skip checking of problems",
-        default=False,
+        default=True,
     )
     problem_parser.add_argument(
         "--skip-submissions",
@@ -396,6 +400,12 @@ def main():
         dest="update_testcases",
         default=True,
         help="Skip updating of testcases",
+    )
+    problem_parser.add_argument(
+        "--assignment",
+        action="store_true",
+        dest="assignment",
+        default=False,
     )
     problem_parser.set_defaults(func=command_problem)
 

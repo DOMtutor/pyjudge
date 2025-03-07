@@ -264,9 +264,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
 
     text_data, text_type = problem.problem_text
     cursor.execute(
-        "UPDATE problem "
-        "SET problemtext = ?, problemtext_type = ? "
-        "WHERE probid = ?",
+        "UPDATE problem SET problemtext = ?, problemtext_type = ? WHERE probid = ?",
         (text_data, text_type, problem_id),
     )
     return problem_id
@@ -665,7 +663,7 @@ def set_languages(
     cursor.execute(
         "SELECT langid, compile_script, EXISTS(SELECT * FROM submission "
         "  WHERE submission.langid = language.langid) as has_submission "
-        f"FROM language WHERE {field_not_in_list("langid", languages)}",
+        f"FROM language WHERE {field_not_in_list('langid', languages)}",
         tuple(language.key for language in languages),
     )
     languages_to_delete = []
@@ -879,9 +877,9 @@ def create_problem_submissions(
         if not file_names:
             log.warning("No files for submission %d", submission_id)
 
-        assert (
-            team_id in used_team_ids
-        ), f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
+        assert team_id in used_team_ids, (
+            f"{team_id} not in given teams {' '.join(map(str, team_ids.keys()))}"
+        )
         submissions_by_contest_and_team[contest_id][team_id][file_names].append(
             submission_id
         )
@@ -980,6 +978,8 @@ def create_problem_submissions(
                     problem_id,
                 )
 
+                # Sleep is needed to prevent segfault of the mysql-connector?!
+                time.sleep(0.2)
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                     "judgehost, valid, expected_results) "
@@ -1002,9 +1002,7 @@ def create_problem_submissions(
                     new_submission_id,
                 )
 
-                time.sleep(
-                    0.2
-                )  # This is needed to prevent segfault of the mysql-connector?!
+                time.sleep(0.2)
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
                     "VALUES (?, ? , 1, ?)",
@@ -1018,6 +1016,7 @@ def create_problem_submissions(
                     "WHERE submitid = ?",
                     (contest_start[contest_id], expected_results_string, existing_id),
                 )
+                time.sleep(0.2)
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
