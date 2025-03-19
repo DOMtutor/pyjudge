@@ -61,6 +61,10 @@ class StatusExecutionError(ExecutionError):
         return f"Exit with {self.code}\n{self.out}\n{self.err}"
 
 
+class KattisRepositoryError(Exception):
+    pass
+
+
 class RepositoryTestCase(ProblemTestCase):
     def __init__(self, base_path: pathlib.Path):
         self.base_path = base_path
@@ -308,6 +312,7 @@ class RepositoryProblem(Problem):
         self._generator = None
         self._problemtools = verify.Problem(str(self.directory.absolute()))
         self._problemtools_loaded = False
+        self._reference_submission = None
         self.log = log.getChild(self.repository_key)
 
         if "time_limit" in limits:
@@ -363,6 +368,30 @@ class RepositoryProblem(Problem):
                 str(checker_directory), work_dir=p.tmpdir, include_dir=include_dir
             )
             p.output_validators._validators = [validator]
+
+        reference_submission: run.SourceCode | None = None
+        # noinspection PyProtectedMember
+        submissions_by_type = self._problemtools.submissions._submissions
+        for submissions in submissions_by_type.values():
+            for submission in submissions:
+                submission: run.SourceCode
+                if (
+                    submission.name.startswith("reference_")
+                    or "_reference_" in submission.name
+                ):
+                    if reference_submission is None:
+                        reference_submission = submission
+                    else:
+                        self.log.warning("Multiple reference submissions for %s", self)
+                        break
+
+        if reference_submission is None:
+            for candidate in ["AC", "SL", "TLE"]:
+                if candidate in submissions_by_type and submissions_by_type[candidate]:
+                    reference_submission = submissions_by_type[candidate][0]
+                    break
+        self._reference_submission = reference_submission
+
         self._problemtools_loaded = True
         return p
 
@@ -624,26 +653,26 @@ class RepositoryProblem(Problem):
                 input_mtime,
             )
 
-        assert self._problemtools_loaded
+        if self._reference_submission is None:
+            raise KattisRepositoryError(
+                f"No correct solution found for problem {self} to generate answers"
+            )
 
-        # noinspection PyProtectedMember
-        submission: run.SourceCode = self._problemtools.submissions._submissions["AC"][
-            0
-        ]
+        assert self._problemtools_loaded
 
         self.log.debug(
             "Generating answer for %s using submission %s",
             answer_file.name,
-            submission.name,
+            self._reference_submission.name,
         )
 
-        result, error = submission.compile()
+        result, error = self._reference_submission.compile()
         if not result:
             raise ExecutionError(error)
 
         # noinspection PyTestUnpassedFixture
         error_file = pathlib.Path(self._problemtools.tmpdir) / "submission_ans_error"
-        status, _ = submission.run(
+        status, _ = self._reference_submission.run(
             infile=str(input_file), outfile=str(answer_file), errfile=str(error_file)
         )
         flag = ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -919,7 +948,6 @@ class Repository(object):
 
         self.repository_runscript_directory = base_path / "runscript"
 
-        # TODO Allow to just change the config of the language without providing the files
         repository_languages_directory = base_path / "compiler"
 
         language_settings: dict[str, Any] | list[str] = configuration.get(
@@ -991,7 +1019,7 @@ class Repository(object):
         for author in self.authors:
             if any(pattern.match(submission.name) for pattern in author.patterns):
                 if match is not None:
-                    raise ValueError(
+                    raise KattisRepositoryError(
                         f"Found multiple matching authors ({author}, {match}) for submission {submission}"
                     )
                 else:
@@ -1009,7 +1037,7 @@ class Repository(object):
         if validation_directory.exists():
             checker_files = list(validation_directory.iterdir())
             if len(checker_files) > 1:
-                raise ValueError(f"Found multiple checkers for {problem}")
+                raise KattisRepositoryError(f"Found multiple checkers for {problem}")
             if checker_files:
                 file: pathlib.Path = checker_files[0]
                 if file.is_file():
@@ -1020,7 +1048,7 @@ class Repository(object):
                         ".java": "java",
                     }
                     if file.suffix not in suffix_to_language:
-                        raise ValueError(
+                        raise KattisRepositoryError(
                             f"Checker file {file.name} for {problem} not understood"
                         )
 
@@ -1029,29 +1057,35 @@ class Repository(object):
                 elif file.is_dir():
                     directory_to_language = {
                         "checker": "java",
+                        "java": "java",
                         "validate": "cpp",
+                        "cpp": "cpp",
                         "checker_py": "python",
+                        "python": "python",
+                        "py": "python",
                     }
                     if file.name not in directory_to_language:
-                        raise ValueError(
+                        raise KattisRepositoryError(
                             f"Checker directory {file.name} for {problem} not understood"
                         )
                     checker_directory = file
                     checker_language = directory_to_language[file.name]
                 else:
-                    raise ValueError(
+                    raise KattisRepositoryError(
                         f"Checker for {problem} contains weird file {file.name}"
                     )
 
         if checker_directory is None:
             if problem.validation == "custom":
-                raise ValueError(
+                raise KattisRepositoryError(
                     f"Found no checker for custom validation for {problem}"
                 )
             return None
 
         if problem.validation != "custom":
-            raise ValueError(f"Found checkers for non-custom validation for {problem}")
+            raise KattisRepositoryError(
+                f"Found checkers for non-custom validation for {problem}"
+            )
         return checker_language, checker_directory
 
     def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:

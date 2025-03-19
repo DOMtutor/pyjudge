@@ -8,7 +8,7 @@ from collections import defaultdict
 from typing import Optional
 
 from pydomjudge.action import query
-from pydomjudge.data.submission import ContestDataDto
+from pydomjudge.data.submission import ContestDataDto, SubmissionDto
 import pydomjudge.scripts.db as db
 from pydomjudge.scripts.db import Database
 
@@ -92,7 +92,8 @@ def write_submissions_folder(
     with database as connection:
         teams = query.find_non_system_teams(connection)
         team_keys = {team.key for team in teams}
-        submissions = [
+        logging.info("Fetching submissions")
+        submissions: list[SubmissionDto] = [
             submission
             for submission in query.find_submissions(connection, contest_key)
             if submission.team_key in team_keys
@@ -102,17 +103,32 @@ def write_submissions_folder(
     grouped_submissions = defaultdict(list)
     for submission in submissions:
         grouped_submissions[
-            (submission.contest_problem_key, submission.team_key)
+            (
+                submission.contest_problem_key,
+                submission.problem_key,
+                submission.team_key,
+            )
         ].append(submission)
 
-    for (problem_key, team_key), submissions in grouped_submissions.items():
+    submission_metadata = defaultdict(lambda: defaultdict(dict))
+    for (
+        contest_problem_key,
+        problem_key,
+        team_key,
+    ), submissions in grouped_submissions.items():
         path = destination / problem_key / team_key
         path.mkdir(exist_ok=True, parents=True)
         for i, submission in enumerate(
             sorted(submissions, key=lambda s: s.submission_time)
         ):
             for file in submission.files:
-                (path / f"{i:03d}_{file.filename}").write_bytes(file.content)
+                filename = f"{i:03d}_{file.filename}"
+                (path / filename).write_bytes(file.content)
+                submission_metadata[problem_key][team_key][i] = submission.serialize(
+                    exclude_files_if_present=True
+                )
+    with (destination / "metadata.json").open("wt") as f:
+        json.dump(submission_metadata, f)
 
 
 def command_contest(database: Database, args):

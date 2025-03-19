@@ -116,7 +116,7 @@ class SubmissionDto:
     def byte_size(self):
         return sum(file.byte_size for file in self.files)
 
-    def serialize(self):
+    def serialize(self, exclude_files_if_present=False):
         data = {
             "team": self.team_key,
             "contest": self.contest_key,
@@ -131,7 +131,7 @@ class SubmissionDto:
             data["runtime"] = self.maximum_runtime
         if self.verdict is not None:
             data["verdict"] = self.verdict.serialize()
-        if self.files:
+        if self.files and not exclude_files_if_present:
             data["files"] = [file.serialize() for file in self.files]
         return data
 
