@@ -2,6 +2,8 @@ import dataclasses
 import base64
 from typing import Optional, List, Dict
 
+import chardet
+
 from pydomjudge import util
 from pydomjudge.data.teams import TeamDto
 from pydomjudge.model import Verdict
@@ -17,27 +19,39 @@ class SubmissionFileDto:
     def byte_size(self) -> int:
         return len(self.content)
 
+    def _decode(self):
+        if hasattr(self, "_str_content"):
+            return self._str_content
+
+        try:
+            content = self.content.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                result = chardet.detect(self.content, should_rename_legacy=True)
+                if "encoding" in result:
+                    content = self.content.decode(result["encoding"])
+                else:
+                    content = None
+            except UnicodeDecodeError:
+                content = None
+        self._str_content = content
+        return self._str_content
+
     @property
     def line_count(self) -> Optional[int]:
-        try:
-            lines = [line.strip() for line in self.content.decode("utf-8").splitlines()]
-            return len([line for line in lines if line])
-        except UnicodeDecodeError:
+        content = self._decode()
+        if content is None:
             return None
+        lines = [line.strip() for line in content.splitlines()]
+        return len([line for line in lines if line])
 
     def content_safe(self, default=None) -> str:
-        try:
-            return self.content.decode("utf-8")
-        except UnicodeDecodeError:
-            return default
+        content = self._decode()
+        return content if content is not None else default
 
     @property
     def is_text_file(self):
-        try:
-            self.content.decode("utf-8")
-            return True
-        except UnicodeDecodeError:
-            return False
+        return self._decode() is not None
 
     def serialize(self):
         return {

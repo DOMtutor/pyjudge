@@ -110,23 +110,33 @@ def write_submissions_folder(
             )
         ].append(submission)
 
-    submission_metadata = defaultdict(lambda: defaultdict(dict))
+    submission_metadata = defaultdict(lambda: defaultdict(list))
     for (
         contest_problem_key,
         problem_key,
         team_key,
     ), submissions in grouped_submissions.items():
-        path = destination / problem_key / team_key
+        path = (
+            destination
+            / f"{contest_problem_key}_{problem_key}".replace("/", "_")
+            / team_key.replace("/", "_")
+        )
         path.mkdir(exist_ok=True, parents=True)
         for i, submission in enumerate(
             sorted(submissions, key=lambda s: s.submission_time)
         ):
+            paths = []
             for file in submission.files:
-                filename = f"{i:03d}_{file.filename}"
-                (path / filename).write_bytes(file.content)
-                submission_metadata[problem_key][team_key][i] = submission.serialize(
-                    exclude_files_if_present=True
-                )
+                file_destination = path / f"{i:03d}_{file.filename}"
+                file_destination.write_bytes(file.content)
+                paths.append(file_destination.relative_to(destination))
+
+            submission_metadata[problem_key][team_key].append(
+                {
+                    "files": [list(submission_file.parts) for submission_file in paths],
+                    "data": submission.serialize(exclude_files_if_present=True),
+                }
+            )
     with (destination / "metadata.json").open("wt") as f:
         json.dump(submission_metadata, f)
 
