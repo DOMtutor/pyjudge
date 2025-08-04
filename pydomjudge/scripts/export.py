@@ -8,7 +8,11 @@ from collections import defaultdict
 from typing import Optional
 
 from pydomjudge.action import query
-from pydomjudge.data.submission import ContestDataDto, SubmissionDto
+from pydomjudge.data.submission import (
+    ContestDataDto,
+    SubmissionDto,
+    ContestDescriptionDto,
+)
 import pydomjudge.scripts.db as db
 from pydomjudge.scripts.db import Database
 
@@ -90,6 +94,9 @@ def write_submissions_folder(
         sys.exit("Destination already exists, refusing to export")
 
     with database as connection:
+        contest: ContestDescriptionDto = query.find_contest_description(
+            connection, contest_key
+        )
         teams = query.find_non_system_teams(connection)
         team_keys = {team.key for team in teams}
         logging.info("Fetching submissions")
@@ -138,7 +145,9 @@ def write_submissions_folder(
                 }
             )
     with (destination / "metadata.json").open("wt") as f:
-        json.dump(submission_metadata, f)
+        json.dump(
+            {"contest": contest.serialize(), "submissions": submission_metadata}, f
+        )
 
 
 def command_contest(database: Database, args):
