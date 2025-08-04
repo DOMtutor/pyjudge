@@ -24,4 +24,10 @@ from .submission import (
     JuryProblemSubmission as JuryProblemSubmission,
 )
 from .user import UserRole as UserRole, User as User
-from .team import Team as Team, Affiliation as Affiliation, TeamCategory as TeamCategory
+from .team import (
+    Team as Team,
+    Affiliation as Affiliation,
+    TeamCategory as TeamCategory,
+    SystemCategory as SystemCategory,
+    DefaultCategory as DefaultCategory,
+)

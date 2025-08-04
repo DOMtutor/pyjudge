@@ -437,9 +437,7 @@ class RepositoryProblem(Problem):
     def checker(self) -> Optional[Executable]:
         return self.repository.get_checker_of(self)
 
-    def generate_problem_text_if_required(
-        self, lang="en", force=False, assignment=False
-    ):  # TODO Assignment?
+    def generate_problem_text_if_required(self, lang="en", force=False):
         import problemtools.problem2pdf
 
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
@@ -482,8 +480,6 @@ class RepositoryProblem(Problem):
                 # noinspection SpellCheckingInspection
                 options.destfile = str(build_pdf.absolute())
                 options.quiet = not log.isEnabledFor(logging.DEBUG)
-                if assignment:
-                    options.problemset_options = ["aiwatermark"]
 
                 problemtools.problem2pdf.convert(
                     str(problem_directory.absolute()), options
@@ -494,7 +490,8 @@ class RepositoryProblem(Problem):
                     raise ValueError(
                         f"Missing problem pdf for {self.name} -- probably a LaTeX error"
                     )
-                if assignment:
+                rasterize = False
+                if rasterize:
                     final_pdf = directory / f"{self.name}.final.pdf"
                     rasterize_pdf(build_pdf, final_pdf)
                     shutil.copy(final_pdf, destination_pdf)
@@ -502,15 +499,8 @@ class RepositoryProblem(Problem):
                     shutil.copy(build_pdf, destination_pdf)
         return destination_pdf
 
-    def problem_text(
-        self, lang="en", assignment=False
-    ) -> Tuple[bytes, str]:  # TODO Assignment?
-        if assignment:
-            problem_pdf = self.generate_problem_text_if_required(
-                lang, force=True, assignment=True
-            )
-        else:
-            problem_pdf = self.generate_problem_text_if_required(lang)
+    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+        problem_pdf = self.generate_problem_text_if_required(lang)
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
 

@@ -271,10 +271,7 @@ def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
 
 
 def create_or_update_problem_data(
-    cursor: MySQLCursor,
-    instance: JudgeInstance,
-    problem: Problem,
-    assignment=False,  # TODO
+    cursor: MySQLCursor, instance: JudgeInstance, problem: Problem
 ) -> int:
     log.debug("Updating problem %s", problem)
 
@@ -294,7 +291,7 @@ def create_or_update_problem_data(
         )
         problem_id = cursor.lastrowid
 
-    text_data, text_type = problem.problem_text(assignment=assignment)
+    text_data, text_type = problem.problem_text()
 
     time_factor = problem.limits.time_factor
     if time_factor is None or time_factor <= 0.0:

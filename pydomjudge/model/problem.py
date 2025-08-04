@@ -104,9 +104,7 @@ class Problem(object):
         return None
 
     @abc.abstractmethod
-    def problem_text(
-        self, lang="en", assignment=False
-    ) -> Tuple[bytes, str]:  # TODO Assignment?
+    def problem_text(self, lang="en") -> Tuple[bytes, str]:
         pass
 
     @property
