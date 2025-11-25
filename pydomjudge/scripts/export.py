@@ -146,7 +146,12 @@ def write_submissions_folder(
             )
     with (destination / "metadata.json").open("wt") as f:
         json.dump(
-            {"contest": contest.serialize(), "submissions": submission_metadata}, f
+            {
+                "contest": contest.serialize(),
+                "submissions": submission_metadata,
+                "teams": [team.serialize() for team in teams],
+            },
+            f,
         )
 
 

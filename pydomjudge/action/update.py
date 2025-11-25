@@ -644,7 +644,7 @@ def set_languages(
         for key in allowed_for_submission:
             if key not in language_by_key:
                 raise ValueError(
-                    f"Unknown language {key}, known languages are {' '.join(language_by_key.keys())}"
+                    f"Unknown language {key}, languages of the repository are {' '.join(language_by_key.keys())}"
                 )
             allowed_keys.add(key)
 
