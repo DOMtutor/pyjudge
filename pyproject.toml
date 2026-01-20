@@ -1,6 +1,6 @@
 [project]
 name = "PyDOMjudge"
-version = "0.2"
+version = "0.2.1"
 description = "A library to ease interaction with DOMjudge"
 authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
 
@@ -12,7 +12,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "mysql-connector-python>=9.0",
+    "pymysql>=1.1",
     "PyYAML>=6.0",
     "Pillow>=9.0",
     "dateutils>=0.6",

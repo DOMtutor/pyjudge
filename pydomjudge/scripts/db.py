@@ -1,83 +1,46 @@
 import argparse
 import pathlib
+from typing import Optional, Union, Protocol, Any, Iterator, Sequence
+
+import pymysql
 import yaml
-from typing import Optional, Union
-
-import mysql.connector
-from mysql.connector.abstracts import MySQLConnectionAbstract
-from mysql.connector.cursor import MySQLCursor
+from pymysql.connections import Connection
+from pymysql.cursors import Cursor
 
 
-class DatabaseCursor(object):
-    def __init__(self, connection: MySQLConnectionAbstract, **kwargs):
-        self.connection = connection
-        self.cursor = None
-        self.args = kwargs
+class DBCursor(Protocol):
+    def execute(self, query: str, params: Any = ...) -> Any: ...
+    def fetchone(self) -> Optional[tuple[Any, ...]]: ...
+    def fetchmany(self, size: int = ...) -> list[tuple[Any, ...]]: ...
+    def fetchall(self) -> list[tuple[Any, ...]]: ...
 
-    def __enter__(self) -> MySQLCursor:
-        self.cursor = self.connection.cursor(**self.args)
-        return self.cursor
+    def close(self) -> None: ...
+    def __iter__(self) -> Iterator[tuple[Any, ...]]: ...
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.cursor is not None:
-            self.cursor.close()
-        self.cursor = None
-        return False
-
-
-class DatabaseTransaction(object):
-    def __init__(self, connection: MySQLConnectionAbstract, **kwargs):
-        self.connection = connection
-        self.args = kwargs
-        self.transaction: Optional[MySQLConnectionAbstract] = None
-
-    def cursor(self, **kwargs):
-        assert self.transaction is not None
-        return DatabaseCursor(self.transaction, **kwargs)
-
-    def __enter__(self) -> MySQLConnectionAbstract:
-        self.transaction = self.connection.start_transaction(**self.args)
-        return self.transaction
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self.transaction.rollback()
-        else:
-            self.transaction.commit()
+    rowcount: int
+    lastrowid: Optional[int]
+    arraysize: int
+    description: Optional[Sequence[tuple]]
 
 
 class DatabaseTransactionCursor(object):
     def __init__(
         self,
-        connection: MySQLConnectionAbstract,
-        readonly: bool = False,
-        isolation_level: Optional[str] = None,
-        buffered_cursor: bool = False,
-        prepared_cursor: bool = True,
+        connection: Connection,
     ):
         self.connection = connection
-        self.readonly: bool = readonly
-        self.isolation_level: Optional[str] = isolation_level
-        self.buffered_cursor = buffered_cursor
-        self.prepared_cursor = prepared_cursor
+        self.cursor: Optional[Cursor] = None
 
-        self.cursor: Optional[MySQLCursor] = None
-
-    def __enter__(self) -> MySQLCursor:
-        self.connection.start_transaction(
-            consistent_snapshot=True, isolation_level=self.isolation_level
-        )
-        self.cursor = self.connection.cursor(
-            buffered=self.buffered_cursor, raw=False, prepared=self.prepared_cursor
-        )
+    def __enter__(self) -> DBCursor:
+        self.cursor = self.connection.cursor()
         return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.cursor.close()
         if exc_type is None:
             self.connection.commit()
         else:
             self.connection.rollback()
+        self.cursor.close()
 
 
 class Database(object):
@@ -94,41 +57,29 @@ class Database(object):
         self._connection = None
 
     def __enter__(self):
-        self._connection = mysql.connector.connect(
+        self._connection = pymysql.connect(
             host=self.host,
             port=self.port,
             user=self.user,
             passwd=self.password,
             database=self.database,
-            use_pure=False,
         )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._connection.close()
-        return False
-
-    def transaction(self, **kwargs) -> DatabaseTransaction:
-        return DatabaseTransaction(self._connection, **kwargs)
 
     def transaction_cursor(
         self,
-        readonly: bool = False,
-        isolation_level: Optional[str] = None,
-        buffered_cursor: bool = False,
-        prepared_cursor: bool = True,
+        readonly: bool = False,  # TODO Implement
     ) -> DatabaseTransactionCursor:
         return DatabaseTransactionCursor(
             self._connection,
-            readonly,
-            isolation_level,
-            buffered_cursor,
-            prepared_cursor,
         )
 
 
 def list_param(data):
-    return f"({','.join(['?'] * len(data))})"
+    return f"({','.join(['%s'] * len(data))})"
 
 
 def field_in_list(field, allowed):
@@ -143,7 +94,7 @@ def field_not_in_list(field, allowed):
     return "1 = 1"
 
 
-def get_unique(cursor: MySQLCursor):
+def get_unique(cursor: DBCursor):
     result = cursor.fetchall()
     if not result:
         raise ValueError("No result found")

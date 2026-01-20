@@ -2,8 +2,6 @@ import logging
 from collections import defaultdict
 from typing import List, Collection, Tuple, Dict, Generator, Optional
 
-from mysql.connector.cursor import MySQLCursor
-
 from pydomjudge.data.submission import (
     SubmissionDto,
     SubmissionFileDto,
@@ -16,7 +14,13 @@ from pydomjudge.data.teams import UserDto, TeamDto
 from pydomjudge.model import Verdict
 from pydomjudge.model.submission import TestcaseVerdict
 from pydomjudge.model.team import SystemCategory
-from pydomjudge.scripts.db import Database, list_param, get_unique, field_in_list
+from pydomjudge.scripts.db import (
+    Database,
+    DBCursor as Cursor,
+    list_param,
+    get_unique,
+    field_in_list,
+)
 
 
 def parse_judging_verdict(key):
@@ -36,15 +40,15 @@ def parse_judging_verdict(key):
 
 
 def _find_contest_with_problems_by_key(
-    cursor: MySQLCursor, contest_key: str
+    cursor: Cursor, contest_key: str
 ) -> Tuple[str, Dict[int, ContestProblemDto]]:
-    cursor.execute("SELECT cid FROM contest WHERE shortname = ?", (contest_key,))
+    cursor.execute("SELECT cid FROM contest WHERE shortname = %s", (contest_key,))
     contest_id = get_unique(cursor)[0]
     cursor.execute(
         "SELECT cp.shortname, cp.points, cp.probid, cp.color, p.externalid "
         "FROM contestproblem cp "
         "  JOIN problem p ON p.probid = cp.probid "
-        "WHERE cid = ?",
+        "WHERE cid = %s",
         (contest_id,),
     )
     problems = {
@@ -59,9 +63,9 @@ def _find_contest_with_problems_by_key(
     return contest_id, problems
 
 
-def _find_contest_end(cursor: MySQLCursor, contest_key: str) -> Tuple[str, float]:
+def _find_contest_end(cursor: Cursor, contest_key: str) -> Tuple[str, float]:
     cursor.execute(
-        "SELECT cid, endtime FROM contest WHERE shortname = ?", (contest_key,)
+        "SELECT cid, endtime FROM contest WHERE shortname = %s", (contest_key,)
     )
     contest_id, contest_end = get_unique(cursor)
     return contest_id, float(contest_end)
@@ -70,7 +74,7 @@ def _find_contest_end(cursor: MySQLCursor, contest_key: str) -> Tuple[str, float
 def find_contest_problems(
     database: Database, contest_key: str
 ) -> List[ContestProblemDto]:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
         return list(problems.values())
 
@@ -78,9 +82,10 @@ def find_contest_problems(
 def find_contest_description(
     database: Database, contest_key: str
 ) -> ContestDescriptionDto:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
-            "SELECT starttime, endtime FROM contest WHERE shortname = ?", (contest_key,)
+            "SELECT starttime, endtime FROM contest WHERE shortname = %s",
+            (contest_key,),
         )
         start_time, end_time = get_unique(cursor)
         return ContestDescriptionDto(
@@ -91,7 +96,7 @@ def find_contest_description(
 def find_submissions(
     database: Database, contest_key: str, only_valid=True
 ) -> Generator[SubmissionDto, None, None]:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
             cursor, contest_key
         )
@@ -104,7 +109,7 @@ def find_submissions(
             f"  JOIN submission s on t.teamid = s.teamid "
             f"  JOIN problem p on s.probid = p.probid "
             f"WHERE "
-            f"  s.cid = ? AND "
+            f"  s.cid = %s AND "
             f"  p.probid IN {list_param(contest_problems_by_id)} ",
             (contest_id, *contest_problems_by_id.keys()),
         )
@@ -271,7 +276,7 @@ def find_submissions(
 def find_clarifications(
     database: Database, contest_key: str
 ) -> Collection[ClarificationDto]:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
             cursor, contest_key
         )
@@ -280,7 +285,7 @@ def find_clarifications(
             "FROM problem p, clarification c, team t "
             "WHERE "
             "  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
-            "  c.cid = ? ",
+            "  c.cid = %s ",
             (contest_id,),
         )
 
@@ -350,7 +355,7 @@ def find_clarifications(
 def find_non_system_teams(database: Database) -> List[TeamDto]:
     system_categories = {category.database_name for category in SystemCategory}
 
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
             f"SELECT t.teamid, t.name, t.display_name, tc.name FROM team t "
             f"  JOIN team_category tc on t.categoryid = tc.categoryid "
@@ -364,7 +369,7 @@ def find_non_system_teams(database: Database) -> List[TeamDto]:
         cursor.execute(
             f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
             f"WHERE "
-            f"  {field_in_list("u.teamid", team_data)}",
+            f"  {field_in_list('u.teamid', team_data)}",
             tuple(team_data.keys()),
         )
         team_users = {team_id: [] for team_id in team_data.keys()}
@@ -379,6 +384,6 @@ def find_non_system_teams(database: Database) -> List[TeamDto]:
 
 
 def find_languages(database: Database) -> Dict[str, str]:
-    with database.transaction_cursor(readonly=True, prepared_cursor=True) as cursor:
+    with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute("SELECT langid, name FROM language")
         return {language_key: name for language_key, name in cursor}

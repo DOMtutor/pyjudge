@@ -2,14 +2,11 @@ import datetime
 import json
 import logging
 import time
-import faulthandler
 
 from collections import defaultdict
 from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
 
-from mysql.connector.cursor import MySQLCursor
-
-from pydomjudge.scripts.db import list_param, field_not_in_list
+from pydomjudge.scripts.db import DBCursor as Cursor, list_param, field_not_in_list
 from pydomjudge.model import (
     TeamCategory,
     Team,
@@ -31,9 +28,6 @@ from .data import DbTestCase, test_case_compare_key
 from ..model.settings import JudgeInstance
 from ..model.team import SystemCategory
 
-# Debug MySQL in case it acts up
-faulthandler.enable()
-
 log = logging.getLogger(__name__)
 
 user_role_to_database = {
@@ -45,7 +39,7 @@ user_role_to_database = {
 
 
 def find_all_categories(
-    cursor: MySQLCursor, categories: List[TeamCategory]
+    cursor: Cursor, categories: List[TeamCategory]
 ) -> Mapping[TeamCategory, int]:
     cursor.execute("SELECT categoryid, name FROM team_category")
 
@@ -66,12 +60,12 @@ def find_all_categories(
     return category_ids
 
 
-def find_system_categories(cursor: MySQLCursor) -> Mapping[TeamCategory, int]:
+def find_system_categories(cursor: Cursor) -> Mapping[TeamCategory, int]:
     return find_all_categories(cursor, [])
 
 
 def update_categories(
-    cursor: MySQLCursor, categories: List[TeamCategory], lazy=False
+    cursor: Cursor, categories: List[TeamCategory], lazy=False
 ) -> Mapping[TeamCategory, int]:
     expected_categories = set(categories) | set(SystemCategory)
     expected_categories_by_name = {
@@ -101,7 +95,7 @@ def update_categories(
 
     for category in expected_categories:
         name = category.database_name
-        cursor.execute("SELECT categoryid FROM team_category WHERE name = ?", (name,))
+        cursor.execute("SELECT categoryid FROM team_category WHERE name = %s", (name,))
         result = cursor.fetchall()
         if result:
             if len(result) > 1:
@@ -110,14 +104,14 @@ def update_categories(
             log.debug("Found category %s", name)
         else:
             log.debug("Creating category %s", name)
-            cursor.execute("INSERT INTO team_category (name) VALUES (?)", (name,))
+            cursor.execute("INSERT INTO team_category (name) VALUES (%s)", (name,))
             category_id = cursor.lastrowid
 
         category_ids[category] = category_id
         cursor.execute(
             "UPDATE team_category "
-            "SET sortorder = ?, color = ?, visible = ?, allow_self_registration = ? "
-            "WHERE categoryid = ?",
+            "SET sortorder = %s, color = %s, visible = %s, allow_self_registration = %s "
+            "WHERE categoryid = %s",
             (
                 category.order,
                 category.color,
@@ -142,7 +136,7 @@ def update_categories(
 
 
 def create_or_update_teams(
-    cursor: MySQLCursor,
+    cursor: Cursor,
     teams: Collection[Team],
     affiliation_ids: Dict[Affiliation, int],
     user_ids: Dict[User, int],
@@ -170,14 +164,14 @@ def create_or_update_teams(
         if team in existing_teams:
             team_id = existing_teams[team]
             cursor.execute(
-                "UPDATE team SET display_name = ?, categoryid = ?, affilid = ? WHERE teamid = ?",
+                "UPDATE team SET display_name = %s, categoryid = %s, affilid = %s WHERE teamid = %s",
                 (team.display_name, team_category, affiliation_id, team_id),
             )
         else:
             log.debug("Creating team %s", team.name)
             cursor.execute(
                 "INSERT INTO team (name, display_name, categoryid, affilid) "
-                "VALUES (?, ?, ?, ?)",
+                "VALUES (%s, %s, %s, %s)",
                 (team.name, team.display_name, team_category, affiliation_id),
             )
             team_id = cursor.lastrowid
@@ -186,24 +180,24 @@ def create_or_update_teams(
         if team.members:
             member_ids = [user_ids[user] for user in team.members]
             cursor.execute(
-                f"UPDATE `user` SET teamid = ? WHERE userid IN {list_param(member_ids)}",
+                f"UPDATE `user` SET teamid = %s WHERE userid IN {list_param(member_ids)}",
                 (team_id, *member_ids),
             )
             cursor.execute(
                 f"UPDATE `user` SET teamid = NULL "
-                f"WHERE teamid = ? AND userid NOT IN {list_param(team.members)}",
+                f"WHERE teamid = %s AND userid NOT IN {list_param(team.members)}",
                 (team_id, *member_ids),
             )
 
     return existing_teams
 
 
-def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
+def create_or_update_executable(cursor: Cursor, executable: Executable):
     log.debug("Updating executable %s", executable)
     data, md5 = executable.make_zip()
     cursor.execute(
         "REPLACE INTO executable (execid, type, description, zipfile, md5sum) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "VALUES (%s, %s, %s, %s, %s)",
         (
             executable.key,
             executable.executable_type.value,
@@ -215,7 +209,7 @@ def create_or_update_executable(cursor: MySQLCursor, executable: Executable):
 
 
 def create_or_update_language(
-    cursor: MySQLCursor, language: Language, allow_submit: bool = True
+    cursor: Cursor, language: Language, allow_submit: bool = True
 ):
     create_or_update_executable(cursor, language.compile_script)
     log.debug("Updating language %s", language)
@@ -224,11 +218,11 @@ def create_or_update_language(
         "externalid, compile_script, name, extensions, "
         "time_factor, entry_point_description, require_entry_point, "
         "allow_submit, allow_judge) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE) "
         "ON DUPLICATE KEY UPDATE "
-        "externalid = ?, compile_script = ?, name = ?, extensions = ?, "
-        "time_factor = ?, entry_point_description = ?, require_entry_point = ?,"
-        "allow_submit = ?, allow_judge = TRUE",
+        "externalid = %s, compile_script = %s, name = %s, extensions = %s, "
+        "time_factor = %s, entry_point_description = %s, require_entry_point = %s,"
+        "allow_submit = %s, allow_judge = TRUE",
         (
             language.key,
             language.key,
@@ -251,42 +245,42 @@ def create_or_update_language(
     )
 
 
-def update_problem_statement(cursor: MySQLCursor, problem: Problem) -> int:
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
+    cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
     id_query = cursor.fetchone()
     if not id_query:
         raise KeyError(f"Problem {problem.key} does not exist in database")
 
     problem_id = id_query[0]
     cursor.execute(
-        "UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id)
+        "UPDATE problem SET name = %s WHERE probid = %s", (problem.name, problem_id)
     )
 
     text_data, text_type = problem.problem_text
     cursor.execute(
-        "UPDATE problem SET problemtext = ?, problemtext_type = ? WHERE probid = ?",
+        "UPDATE problem SET problemtext = %s, problemtext_type = %s WHERE probid = %s",
         (text_data, text_type, problem_id),
     )
     return problem_id
 
 
 def create_or_update_problem_data(
-    cursor: MySQLCursor, instance: JudgeInstance, problem: Problem
+    cursor: Cursor, instance: JudgeInstance, problem: Problem
 ) -> int:
     log.debug("Updating problem %s", problem)
 
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+    cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
     id_query = cursor.fetchone()
     if id_query:
         problem_id = id_query[0]
         log.debug("Problem present in database with id %d", problem_id)
         cursor.execute(
-            "UPDATE problem SET name = ? WHERE probid = ?", (problem.name, problem_id)
+            "UPDATE problem SET name = %s WHERE probid = %s", (problem.name, problem_id)
         )
     else:
         log.debug("Creating problem %s in database", problem)
         cursor.execute(
-            "INSERT INTO problem (externalid, name) VALUES (?, ?)",
+            "INSERT INTO problem (externalid, name) VALUES (%s, %s)",
             (problem.key, problem.name),
         )
         problem_id = cursor.lastrowid
@@ -302,9 +296,9 @@ def create_or_update_problem_data(
 
     cursor.execute(
         "UPDATE problem "
-        "SET problemtext = ?, problemtext_type = ?, special_compare_args = ?, "
-        "timelimit = ?, memlimit = ?, outputlimit = ? "
-        "WHERE probid = ?",
+        "SET problemtext = %s, problemtext_type = %s, special_compare_args = %s, "
+        "timelimit = %s, memlimit = %s, outputlimit = %s "
+        "WHERE probid = %s",
         (
             text_data,
             text_type,
@@ -319,13 +313,13 @@ def create_or_update_problem_data(
     checker = problem.checker
     if checker is None:
         cursor.execute(
-            "UPDATE problem SET special_compare = NULL WHERE probid = ?", (problem_id,)
+            "UPDATE problem SET special_compare = NULL WHERE probid = %s", (problem_id,)
         )
     if checker is not None:
         assert checker.executable_type == ExecutableType.Compare
         create_or_update_executable(cursor, checker)
         cursor.execute(
-            "UPDATE problem SET special_compare = ? WHERE probid = ?",
+            "UPDATE problem SET special_compare = %s WHERE probid = %s",
             (checker.key, problem_id),
         )
         log.debug("Updated checker")
@@ -333,9 +327,9 @@ def create_or_update_problem_data(
     return problem_id
 
 
-def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) -> int:
+def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
     log.debug("Updating problem test cases %s", problem)
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+    cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
     problem_id = cursor.fetchone()[0]
 
     problem_testcases = problem.testcases
@@ -346,7 +340,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         "SELECT t.testcaseid, t.orig_input_filename, t.description, t.`rank`, "
         "t.md5sum_input, t.md5sum_output "
         "FROM testcase t "
-        "WHERE t.probid = ?",
+        "WHERE t.probid = %s",
         (problem_id,),
     )
 
@@ -396,13 +390,13 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             description = description[:255]
         if description != database_case.description:
             cursor.execute(
-                "UPDATE testcase SET description = ? WHERE testcaseid = ?",
+                "UPDATE testcase SET description = %s WHERE testcaseid = %s",
                 (database_case.case_id, description),
             )
             database_case.description = description
 
         cursor.execute(
-            "SELECT EXISTS(SELECT * FROM testcase_content WHERE testcaseid = ?)",
+            "SELECT EXISTS(SELECT * FROM testcase_content WHERE testcaseid = %s)",
             (database_case.case_id,),
         )
         if cursor.fetchone()[0]:
@@ -413,8 +407,8 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
                 update_testcase_content.append((problem_testcase, database_case))
                 cursor.execute(
                     "UPDATE testcase "
-                    "SET md5sum_input = ?, md5sum_output = ? "
-                    "WHERE testcaseid = ?",
+                    "SET md5sum_input = %s, md5sum_output = %s "
+                    "WHERE testcaseid = %s",
                     (
                         problem_testcase.input_md5,
                         problem_testcase.output_md5,
@@ -452,9 +446,9 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             cursor.execute(
                 "UPDATE testcase "
                 "SET "
-                "orig_input_filename = ?, description = ?, md5sum_input = ?, md5sum_output = ?, "
-                "sample = ?, image_type = ?, deleted = 0 "
-                "WHERE testcaseid = ?",
+                "orig_input_filename = %s, description = %s, md5sum_input = %s, md5sum_output = %s, "
+                "sample = %s, image_type = %s, deleted = 0 "
+                "WHERE testcaseid = %s",
                 tuple(testcase_data),
             )
         else:
@@ -464,7 +458,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
             cursor.execute(
                 "INSERT INTO testcase (orig_input_filename, description, md5sum_input, md5sum_output, "
                 "sample, image_type, deleted, `rank`, probid) "
-                "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                "VALUES (%s, %s, %s, %s, %s, %s, 0, %s, %s)",
                 testcase_data,
             )
             case_id = cursor.lastrowid
@@ -521,12 +515,12 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
         for _, case in rank_update:
             maximal_rank += 1
             cursor.execute(
-                "UPDATE testcase SET `rank` = ? WHERE testcaseid = ?",
+                "UPDATE testcase SET `rank` = %s WHERE testcaseid = %s",
                 (maximal_rank, case.case_id),
             )
         for new_rank, case in rank_update:
             cursor.execute(
-                "UPDATE testcase SET `rank` = ? WHERE testcaseid = ?",
+                "UPDATE testcase SET `rank` = %s WHERE testcaseid = %s",
                 (new_rank, case.case_id),
             )
             case.rank = new_rank
@@ -544,7 +538,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
 
             cursor.execute(
                 "REPLACE INTO testcase_content (testcaseid, input, output, image, image_thumb)"
-                "VALUES (?, ?, ?, ?, ?)",
+                "VALUES (%s, %s, %s, %s, %s)",
                 (
                     database_case.case_id,
                     problem_testcase.input,
@@ -571,7 +565,7 @@ def create_or_update_problem_testcases(cursor: MySQLCursor, problem: Problem) ->
     return problem_id
 
 
-def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
+def update_settings(cursor: Cursor, settings: JudgeSettings):
     log.info("Updating judge settings")
     verdict_names = {
         Verdict.COMPILER_ERROR: "compiler-error",
@@ -587,7 +581,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
     def write(key, value):
         cursor.execute(
-            "REPLACE INTO configuration (name, value) VALUES (?, ?)", (key, value)
+            "REPLACE INTO configuration (name, value) VALUES (%s, %s)", (key, value)
         )
 
     scoring = settings.scoring
@@ -631,7 +625,7 @@ def update_settings(cursor: MySQLCursor, settings: JudgeSettings):
 
 
 def set_languages(
-    cursor: MySQLCursor,
+    cursor: Cursor,
     languages: Collection[Language],
     allowed_for_submission: Optional[Set[str]],
 ):
@@ -724,14 +718,14 @@ def clear_invalid_submissions(cursor):
 
 
 def create_problem_submissions(
-    cursor: MySQLCursor,
+    cursor: Cursor,
     problem: Problem,
     existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
     team_ids: Dict[Team, int],
     contest_ids: Optional[List[int]] = None,
 ):
     log.info("Updating submissions of problem %s", problem.name)
-    cursor.execute("SELECT probid FROM problem WHERE externalid = ?", (problem.key,))
+    cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
     id_query = cursor.fetchone()
     if not id_query:
         raise KeyError(f"No problem found for key {problem.key}")
@@ -741,7 +735,7 @@ def create_problem_submissions(
     if contest_ids is None:
         cursor.execute(
             "SELECT c.cid, c.starttime FROM contest c JOIN contestproblem cp on c.cid = cp.cid "
-            "WHERE cp.probid = ?",
+            "WHERE cp.probid = %s",
             (problem_id,),
         )
         contest_ids = set()
@@ -784,7 +778,7 @@ def create_problem_submissions(
         f"  submitid, origsubmitid, teamid, cid, expected_results, langid "
         f"FROM submission s "
         f"WHERE "
-        f"  probid = ? AND "
+        f"  probid = %s AND "
         f"  teamid IN {list_param(used_team_ids.keys())} AND "
         f"  cid IN {list_param(contest_ids)}",
         (problem_id,) + tuple(used_team_ids.keys()) + tuple(contest_ids),
@@ -940,7 +934,7 @@ def create_problem_submissions(
                 existing_file_hashes = submission_files[existing_id]
 
                 if language.key != existing_language_id:
-                    log.info("%s changed language?", submission)
+                    log.info("%s changed language%s", submission)
                     insert = True
                 elif set(file_names) != set(existing_file_hashes.keys()):
                     log.debug(
@@ -975,12 +969,10 @@ def create_problem_submissions(
                     problem_id,
                 )
 
-                # Sleep is needed to prevent segfault of the mysql-connector?!
-                time.sleep(0.2)
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, langid, submittime, "
                     "judgehost, valid, expected_results) "
-                    "VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, %s, NULL, 1, %s)",
                     (
                         existing_id,
                         contest_id,
@@ -999,21 +991,18 @@ def create_problem_submissions(
                     new_submission_id,
                 )
 
-                time.sleep(0.2)
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, `rank`, sourcecode) "
-                    "VALUES (?, ? , 1, ?)",
+                    "VALUES (%s, %s , 1, %s)",
                     (new_submission_id, submission.file_name, source_bytes),
                 )
-                time.sleep(0.2)
             else:
                 cursor.execute(
                     "UPDATE submission "
-                    "SET submittime = ?, expected_results = ? "
-                    "WHERE submitid = ?",
+                    "SET submittime = %s, expected_results = %s "
+                    "WHERE submitid = %s",
                     (contest_start[contest_id], expected_results_string, existing_id),
                 )
-                time.sleep(0.2)
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
@@ -1045,7 +1034,7 @@ def create_problem_submissions(
 
 
 def create_or_update_contest_problems(
-    cursor: MySQLCursor,
+    cursor: Cursor,
     contest: Contest,
     contest_id: int,
     problem_ids: Dict[Problem, int],
@@ -1056,15 +1045,15 @@ def create_or_update_contest_problems(
         # Cannot REPLACE INTO because of database triggers
         problem_id = problem_ids[contest_problem.problem]
         cursor.execute(
-            "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = ? AND probid = ?)",
+            "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
         )
         if cursor.fetchone()[0]:
             cursor.execute(
                 "UPDATE contestproblem SET "
-                "shortname = ?, points = ?, allow_submit = TRUE, allow_judge = TRUE,"
-                "color = ?, lazy_eval_results = NULL "
-                "WHERE cid = ? AND probid = ?",
+                "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
+                "color = %s, lazy_eval_results = NULL "
+                "WHERE cid = %s AND probid = %s",
                 (
                     contest_problem.name,
                     contest_problem.points,
@@ -1076,7 +1065,7 @@ def create_or_update_contest_problems(
         else:
             cursor.execute(
                 "INSERT INTO contestproblem (cid, probid, shortname, points, allow_submit, "
-                "allow_judge, color, lazy_eval_results) VALUES (?, ?, ?, ?, TRUE, TRUE, ?, NULL)",
+                "allow_judge, color, lazy_eval_results) VALUES (%s, %s, %s, %s, TRUE, TRUE, %s, NULL)",
                 (
                     contest_id,
                     problem_id,
@@ -1087,7 +1076,7 @@ def create_or_update_contest_problems(
             )
 
 
-def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False) -> int:
+def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> int:
     date_format = "%Y-%m-%d %H:%M:%S"
 
     def format_datetime(dt: Optional[datetime.datetime]):
@@ -1096,7 +1085,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
         return f"{dt.strftime(date_format)} {dt.tzinfo}"
 
     cursor.execute(
-        "SELECT cid, starttime, endtime FROM contest WHERE shortname = ?",
+        "SELECT cid, starttime, endtime FROM contest WHERE shortname = %s",
         (contest.key,),
     )
     id_query = cursor.fetchone()
@@ -1111,15 +1100,15 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
 
         cursor.execute(
             "UPDATE contest SET "
-            "externalid = ?, name = ?, shortname = ?, "
-            "activatetime = ?, activatetime_string = ?, "
-            "deactivatetime = ?, deactivatetime_string = ?, "
-            "starttime = ?, starttime_string = ?, "
-            "endtime = ?, endtime_string = ?, "
-            "freezetime = ?, freezetime_string = ?, "
+            "externalid = %s, name = %s, shortname = %s, "
+            "activatetime = %s, activatetime_string = %s, "
+            "deactivatetime = %s, deactivatetime_string = %s, "
+            "starttime = %s, starttime_string = %s, "
+            "endtime = %s, endtime_string = %s, "
+            "freezetime = %s, freezetime_string = %s, "
             "b = 0, enabled = TRUE, starttime_enabled = TRUE, process_balloons = FALSE, "
-            "public = ?, open_to_all_teams = ? "
-            "WHERE cid = ?",
+            "public = %s, open_to_all_teams = %s "
+            "WHERE cid = %s",
             (
                 contest.key,
                 contest.name,
@@ -1150,7 +1139,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
             "endtime, endtime_string, "
             "freezetime, freezetime_string, "
             "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, TRUE, TRUE, FALSE, ?, ?)",
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, TRUE, TRUE, FALSE, %s, %s)",
             (
                 contest.key,
                 contest.name,
@@ -1173,8 +1162,8 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
         )
         contest_id = cursor.lastrowid
 
-    cursor.execute("DELETE FROM contestteam WHERE cid = ?", (contest_id,))
-    cursor.execute("DELETE FROM contestteamcategory WHERE cid = ?", (contest_id,))
+    cursor.execute("DELETE FROM contestteam WHERE cid = %s", (contest_id,))
+    cursor.execute("DELETE FROM contestteamcategory WHERE cid = %s", (contest_id,))
 
     if contest.access is not None:
         team_names = contest.access.team_names
@@ -1188,7 +1177,7 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
                 raise ValueError("Non-existing teams specified")
             for (team_id,) in team_ids:
                 cursor.execute(
-                    "INSERT INTO contestteam (cid, teamid) VALUES (?, ?)",
+                    "INSERT INTO contestteam (cid, teamid) VALUES (%s, %s)",
                     (contest_id, team_id),
                 )
         team_categories = contest.access.team_categories
@@ -1202,20 +1191,20 @@ def create_or_update_contest(cursor: MySQLCursor, contest: Contest, force=False)
                 raise ValueError("Non-existing teams specified")
             for (category_id,) in category_ids:
                 cursor.execute(
-                    "INSERT INTO contestteamcategory (cid, categoryid) VALUES (?, ?)",
+                    "INSERT INTO contestteamcategory (cid, categoryid) VALUES (%s, %s)",
                     (contest_id, category_id),
                 )
 
     return contest_id
 
 
-def fetch_user_roles(cursor: MySQLCursor) -> Dict[str, int]:
+def fetch_user_roles(cursor: Cursor) -> Dict[str, int]:
     cursor.execute("SELECT roleid, role FROM role")
     return {role: role_id for role_id, role in cursor}
 
 
 def create_or_update_affiliations(
-    cursor: MySQLCursor, affiliations: Collection[Affiliation]
+    cursor: Cursor, affiliations: Collection[Affiliation]
 ) -> Dict[Affiliation, int]:
     log.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
@@ -1236,8 +1225,8 @@ def create_or_update_affiliations(
         if affiliation in affiliation_ids:
             cursor.execute(
                 "UPDATE team_affiliation SET "
-                "externalid = ?, shortname = ?, name = ?, country = ?, comments = NULL "
-                "WHERE affilid = ?",
+                "externalid = %s, shortname = %s, name = %s, country = %s, comments = NULL "
+                "WHERE affilid = %s",
                 (
                     affiliation.short_name,
                     affiliation.short_name,
@@ -1249,7 +1238,7 @@ def create_or_update_affiliations(
         else:
             cursor.execute(
                 "INSERT INTO team_affiliation (externalid, shortname, name, country, comments) "
-                "VALUES (?, ?, ?, ?, NULL) ",
+                "VALUES (%s, %s, %s, %s, NULL) ",
                 (
                     affiliation.short_name,
                     affiliation.short_name,
@@ -1262,7 +1251,7 @@ def create_or_update_affiliations(
 
 
 def create_or_update_users(
-    cursor: MySQLCursor, users: Collection[User], overwrite_passwords=False
+    cursor: Cursor, users: Collection[User], overwrite_passwords=False
 ) -> Dict[User, int]:
     log.info("Updating %d users", len(users))
     if not users:
@@ -1285,17 +1274,17 @@ def create_or_update_users(
             user_id = user_ids[user]
 
             cursor.execute(
-                "UPDATE `user` SET username = ?, name = ?, email = ?, enabled = TRUE WHERE userid = ?",
+                "UPDATE `user` SET username = %s, name = %s, email = %s, enabled = TRUE WHERE userid = %s",
                 (user.login_name, user.display_name, user.email, user_id),
             )
             if overwrite_passwords and user.password_hash:
                 cursor.execute(
-                    "UPDATE `user` SET password = ? WHERE userid = ?",
+                    "UPDATE `user` SET password = %s WHERE userid = %s",
                     (user.password_hash, user_id),
                 )
         else:
             cursor.execute(
-                "INSERT INTO `user` (username, name, email, password, enabled) VALUES (?, ?, ?, ?, TRUE)",
+                "INSERT INTO `user` (username, name, email, password, enabled) VALUES (%s, %s, %s, %s, TRUE)",
                 (user.login_name, user.display_name, user.email, user.password_hash),
             )
             user_id = cursor.lastrowid
@@ -1304,25 +1293,25 @@ def create_or_update_users(
         user_roles = set(
             role_ids_by_name[role] for role in user_role_to_database[user.role]
         )
-        cursor.execute("SELECT roleid FROM userrole WHERE userid = ?", (user_id,))
+        cursor.execute("SELECT roleid FROM userrole WHERE userid = %s", (user_id,))
         current_roles = set(role_id for (role_id,) in cursor)
         obsolete_roles = current_roles - user_roles
         if obsolete_roles:
             cursor.execute(
-                f"DELETE FROM userrole WHERE userid = ? AND roleid IN {list_param(obsolete_roles)}",
+                f"DELETE FROM userrole WHERE userid = %s AND roleid IN {list_param(obsolete_roles)}",
                 (user_id, *obsolete_roles),
             )
         missing_roles = user_roles - current_roles
         for role_id in missing_roles:
             cursor.execute(
-                "INSERT INTO userrole (userid, roleid) VALUES (?, ?)",
+                "INSERT INTO userrole (userid, roleid) VALUES (%s, %s)",
                 (user_id, role_id),
             )
 
     return user_ids
 
 
-def disable_unknown_users(cursor: MySQLCursor, user_login_names: Set[str]):
+def disable_unknown_users(cursor: Cursor, user_login_names: Set[str]):
     valid_users = {"admin", "judgehost"}
     valid_users.update(user_login_names)
     cursor.execute(

@@ -1,7 +1,3 @@
-# NOTE It seems to be important to import mysql.connector before many other imports, since these may load the wrong
-# version of libcrypt, see https://bugs.mysql.com/bug.php?id=97220
-from mysql.connector.cursor import MySQLCursor
-
 import argparse
 import dataclasses
 import datetime
@@ -29,6 +25,7 @@ from pydomjudge.model.settings import JudgeInstance
 from pydomjudge.model.team import SystemCategory
 from pydomjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
 import pydomjudge.scripts.db as db
+from pydomjudge.scripts.db import DBCursor as Cursor
 import pydomjudge.repository.kattis as kattis
 from pydomjudge.scripts.db import Database
 import pydomjudge.scripts.util as script_util
@@ -45,7 +42,7 @@ class PyjudgeConfig(object):
 
 
 def _update_problem_submissions(
-    cursor: MySQLCursor,
+    cursor: Cursor,
     problem: RepositoryProblem,
     config: Repository,
     contest_ids: Optional[Collection[int]] = None,
@@ -113,17 +110,13 @@ def upload_contest(
             log.info("Skipping problem verification")
 
     with config.database as connection:
-        with connection.transaction_cursor(
-            isolation_level="SERIALIZABLE", prepared_cursor=True
-        ) as cursor:
+        with connection.transaction_cursor() as cursor:
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
         if update_problems:
             problem_ids: Dict[Problem, int] = {}
             for contest_problem in contest.problems:
-                with connection.transaction_cursor(
-                    isolation_level="SERIALIZABLE", prepared_cursor=True
-                ) as cursor:
+                with connection.transaction_cursor() as cursor:
                     problem_ids[contest_problem.problem] = (
                         update.create_or_update_problem_data(
                             cursor, config.judge, contest_problem.problem
@@ -134,9 +127,7 @@ def upload_contest(
                             cursor, contest_problem.problem
                         )
 
-            with connection.transaction_cursor(
-                isolation_level="SERIALIZABLE", prepared_cursor=True
-            ) as cursor:
+            with connection.transaction_cursor() as cursor:
                 update.create_or_update_contest_problems(
                     cursor, contest, contest_id, problem_ids
                 )
@@ -144,9 +135,7 @@ def upload_contest(
         if update_submissions:
             for contest_problem in contest.problems:
                 assert isinstance(contest_problem.problem, RepositoryProblem)
-                with connection.transaction_cursor(
-                    isolation_level="SERIALIZABLE", prepared_cursor=True
-                ) as cursor:
+                with connection.transaction_cursor() as cursor:
                     _update_problem_submissions(
                         cursor, contest_problem.problem, config.repository, [contest_id]
                     )
@@ -175,7 +164,7 @@ def upload_problems(
 
     with config.database as connection:
         for problem in problems:
-            with connection.transaction_cursor(prepared_cursor=True) as cursor:
+            with connection.transaction_cursor() as cursor:
                 update.create_or_update_problem_data(cursor, config.judge, problem)
                 update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:
@@ -232,9 +221,7 @@ def upload_users(
     overwrite_passwords=False,
 ):
     with config.database as connection:
-        with connection.transaction_cursor(
-            isolation_level="SERIALIZABLE", prepared_cursor=True
-        ) as cursor:
+        with connection.transaction_cursor() as cursor:
             affiliation_ids = update.create_or_update_affiliations(
                 cursor, description.affiliations
             )
@@ -256,7 +243,7 @@ def upload_users(
 
 def update_settings(config: PyjudgeConfig):
     with config.database as connection:
-        with connection.transaction_cursor(prepared_cursor=True) as cursor:
+        with connection.transaction_cursor() as cursor:
             update.update_settings(cursor, config.judge.settings)
             update.update_categories(cursor, config.judge.team_categories, lazy=False)
             update.set_languages(
@@ -266,7 +253,7 @@ def update_settings(config: PyjudgeConfig):
 
 def check_database(config: PyjudgeConfig):
     with config.database as connection:
-        with connection.transaction_cursor(prepared_cursor=True) as cursor:
+        with connection.transaction_cursor() as cursor:
             update.clear_invalid_submissions(cursor)
 
 
