@@ -245,7 +245,8 @@ class RepositoryProblem(Problem):
     def link_or_copy_problem_statement(
         problem: "RepositoryProblem", destination: pathlib.Path, force=False
     ):
-        problem_paths = ["problem_statement", "data/sample"]
+        # also need to copy problem.yaml
+        problem_paths = ["problem_statement", "data/sample", "problem.yaml"]
 
         repository_path = problem.directory
         for sub_path in problem_paths:
@@ -310,7 +311,17 @@ class RepositoryProblem(Problem):
         self._test_cases = None
         self._submissions = None
         self._generator = None
-        self._problemtools = verify.Problem(str(self.directory.absolute()))
+        self._args = argparse.Namespace(
+            # might need attributes later?
+            # some attributes include:
+            # threads: int
+            # parts: list[str] ?
+            bail_on_error=False,
+            werror=False,
+            max_additional_info=15
+        )
+        # self._args added as the second param
+        self._problemtools = verify.Problem(str(self.directory.absolute()), self._args)
         self._problemtools_loaded = False
         self._reference_submission = None
         self.log = log.getChild(self.repository_key)
@@ -323,11 +334,19 @@ class RepositoryProblem(Problem):
         return self._name
 
     @property
+    def types(self) -> int:
+        # defaults to 1
+        return self.description.get("types", 1)
+
+    @property
     def limits(self) -> ProblemLimits:
         return self._limits
 
     def __enter__(self) -> problemtools.verifyproblem.Problem:
         p = self._problemtools.__enter__()
+
+        # call load() for submissions
+        self._problemtools.load()
 
         self._validator_temporary_directory = None
         if self.validation == "custom":
@@ -407,23 +426,31 @@ class RepositoryProblem(Problem):
         return self._problemtools
 
     def check(self):
-        self._generate_testcases()
-
         import problemtools.run.limit as limit
 
         limit.check_limit_capabilities(self)
 
         verify.ProblemAspect.bail_on_error = True
         with self as p:
+            # generate_answer_if_required is called only after reference_submission is set to the source code?
+            self._generate_testcases()
+
             p.config.check(None)
             p.attachments.check(None)
-            p.input_format_validators.check(None)
+            # input_format_validators is outdated
+            p.input_validators.check(None)
             p.output_validators.check(None)
             p.graders.check(None)
 
-            args = verify.default_args()
-            p.testdata.check(args)
-            p.submissions.check(args)
+            # it now expects to pass Context object not the raw args
+            args = argparse.Namespace(
+                data_filter=re.compile('.*'),
+                submission_filter=re.compile('.*'),
+                fixed_timelim=None
+            )
+            context = verify.Context(args, None)
+            p.testdata.check(context)
+            p.submissions.check(context)
 
     @property
     def checker_flags(self) -> Optional[str]:
@@ -475,15 +502,20 @@ class RepositoryProblem(Problem):
                 build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
-                options = problemtools.problem2pdf.ConvertOptions()
+                # expected Namespace object instead of ConvertOptions
+                options = argparse.Namespace(
+                    language=lang,
+                    destfile=str(build_pdf.absolute()),
+                    quiet=not log.isEnabledFor(logging.DEBUG),
+                    nopdf=False,
+                    problem=str(problem_directory.absolute()),
+                )
                 options.language = lang
                 # noinspection SpellCheckingInspection
                 options.destfile = str(build_pdf.absolute())
                 options.quiet = not log.isEnabledFor(logging.DEBUG)
 
-                problemtools.problem2pdf.convert(
-                    str(problem_directory.absolute()), options
-                )
+                problemtools.problem2pdf.convert(options)
 
                 # TODO Wait till problemtools allows extracting the output
                 if not build_pdf.exists():
@@ -680,42 +712,42 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-            with self:
-                for category_directory in (self.directory / "data").iterdir():
-                    if not category_directory.is_dir():
-                        continue
-                    for seed_file in category_directory.glob("*.seed"):
-                        self.generate_input_if_required(seed_file)
+        # removed with self: to avoid generating two contexts
+        for category_directory in (self.directory / "data").iterdir():
+            if not category_directory.is_dir():
+                continue
+            for seed_file in category_directory.glob("*.seed"):
+                self.generate_input_if_required(seed_file)
 
-                    for input_file in category_directory.glob("*.in"):
-                        if not input_file.is_file():
-                            continue
-                        if (
-                            any(
-                                input_file.name.startswith(s)
-                                for s in [
-                                    "small_",
-                                    "medium_",
-                                    "large_",
-                                    "huge_",
-                                    "tiny_",
-                                ]
-                            )
-                            and not input_file.with_suffix(".seed").exists()
-                        ):
-                            log.warning(
-                                "Input file %s has reserved name but no matching seed file",
-                                input_file,
-                            )
+            for input_file in category_directory.glob("*.in"):
+                if not input_file.is_file():
+                    continue
+                if (
+                    any(
+                        input_file.name.startswith(s)
+                        for s in [
+                            "small_",
+                            "medium_",
+                            "large_",
+                            "huge_",
+                            "tiny_",
+                        ]
+                    )
+                    and not input_file.with_suffix(".seed").exists()
+                ):
+                    log.warning(
+                        "Input file %s has reserved name but no matching seed file",
+                        input_file,
+                    )
 
-                        answer_file = input_file.with_suffix(".ans")
-                        self.generate_answer_if_required(input_file, answer_file)
-                        if not answer_file.stat().st_size:
-                            answer_file.unlink(missing_ok=True)
-                            continue
-                        self._test_cases.append(
-                            RepositoryTestCase(category_directory / input_file.stem)
-                        )
+                answer_file = input_file.with_suffix(".ans")
+                self.generate_answer_if_required(input_file, answer_file)
+                if not answer_file.stat().st_size:
+                    answer_file.unlink(missing_ok=True)
+                    continue
+                self._test_cases.append(
+                    RepositoryTestCase(category_directory / input_file.stem)
+                )
 
         return self._test_cases
 
