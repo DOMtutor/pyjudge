@@ -96,6 +96,10 @@ def upload_contest(
 ):
     if not force and contest.is_running(datetime.datetime.now().astimezone()):
         raise ValueError("Contest %s is running")
+    if contest.end_time < datetime.datetime.now(datetime.UTC):
+        log.warning(
+            "Contest is in the past (ends at %s), is this correct?", contest.end_time
+        )
 
     if update_problems:
         if verify_problems:
