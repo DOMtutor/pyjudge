@@ -245,7 +245,10 @@ class RepositoryProblem(Problem):
     def link_or_copy_problem_statement(
         problem: "RepositoryProblem", destination: pathlib.Path, force=False
     ):
-        # also need to copy problem.yaml
+        # Also need to copy problem.yaml for pdf generation
+        # problemtools/problemtools/problem2pdf.py
+        # problemtools/problemtools/statement_util.py
+        # problemtools/problemtools/metadata.py
         problem_paths = ["problem_statement", "data/sample", "problem.yaml"]
 
         repository_path = problem.directory
@@ -335,7 +338,7 @@ class RepositoryProblem(Problem):
 
     @property
     def types(self) -> int:
-        # defaults to 1
+        # Defaults to 1, which is pass-fail type
         return self.description.get("types", 1)
 
     @property
@@ -345,7 +348,7 @@ class RepositoryProblem(Problem):
     def __enter__(self) -> problemtools.verifyproblem.Problem:
         p = self._problemtools.__enter__()
 
-        # call load() for submissions
+        # Call load() for submissions to access submission data
         self._problemtools.load()
 
         self._validator_temporary_directory = None
@@ -433,6 +436,7 @@ class RepositoryProblem(Problem):
         verify.ProblemAspect.bail_on_error = True
         with self as p:
             # generate_answer_if_required is called only after reference_submission is set to the source code?
+            # This fixes "No correct solution found for problem P(helloworld)" error.
             self._generate_testcases()
 
             p.config.check(None)
@@ -442,7 +446,8 @@ class RepositoryProblem(Problem):
             p.output_validators.check(None)
             p.graders.check(None)
 
-            # it now expects to pass Context object not the raw args
+            # It now expects to pass Context object not the raw args
+            # problemtools/problemtools/verifyproblem.py
             args = argparse.Namespace(
                 data_filter=re.compile('.*'),
                 submission_filter=re.compile('.*'),
@@ -502,7 +507,8 @@ class RepositoryProblem(Problem):
                 build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
-                # expected Namespace object instead of ConvertOptions
+                # Expected Namespace object instead of ConvertOptions
+                # problemtools/problemtools/problem2pdf.py
                 options = argparse.Namespace(
                     language=lang,
                     destfile=str(build_pdf.absolute()),
@@ -510,10 +516,6 @@ class RepositoryProblem(Problem):
                     nopdf=False,
                     problem=str(problem_directory.absolute()),
                 )
-                options.language = lang
-                # noinspection SpellCheckingInspection
-                options.destfile = str(build_pdf.absolute())
-                options.quiet = not log.isEnabledFor(logging.DEBUG)
 
                 problemtools.problem2pdf.convert(options)
 
@@ -712,7 +714,7 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-        # removed with self: to avoid generating two contexts
+        # Removed with self: to avoid generating two contexts
         for category_directory in (self.directory / "data").iterdir():
             if not category_directory.is_dir():
                 continue
