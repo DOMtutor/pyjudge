@@ -104,6 +104,8 @@ def update_categories(
             log.debug("Found category %s", name)
         else:
             log.debug("Creating category %s", name)
+            # externalid required for team_category
+            # Reference to domjudge/webapp/src/Entity/TeamCategory.php
             cursor.execute(
                 "INSERT INTO team_category (name, externalid) VALUES (%s, %s)",
                 (name, category.key)
@@ -111,6 +113,7 @@ def update_categories(
             category_id = cursor.lastrowid
 
         category_ids[category] = category_id
+        # + externalid
         cursor.execute(
             "UPDATE team_category "
             "SET sortorder = %s, color = %s, visible = %s, allow_self_registration = %s, externalid = %s "
@@ -167,12 +170,15 @@ def create_or_update_teams(
 
         if team in existing_teams:
             team_id = existing_teams[team]
+            # externalid required for team
+            # Reference to domjudge/webapp/src/Entity/Team.php
             cursor.execute(
                 "UPDATE team SET display_name = %s, categoryid = %s, affilid = %s, externalid = %s WHERE teamid = %s",
                 (team.display_name, team_category, affiliation_id, team.name, team_id),
             )
         else:
             log.debug("Creating team %s", team.name)
+            # + externalid
             cursor.execute(
                 "INSERT INTO team (name, display_name, categoryid, affilid, externalid) "
                 "VALUES (%s, %s, %s, %s, %s)",
@@ -197,6 +203,8 @@ def create_or_update_teams(
 
 
 def create_or_update_executable(cursor: Cursor, executable: Executable):
+    # Immutable executable is introduced for v9
+    # Reference to domjudge/webapp/src/Entity/ImmutableExecutable.php, for the combined hash logic
     import hashlib
 
     log.debug("Updating executable %s", executable)
@@ -318,6 +326,7 @@ def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
     )
 
     text_data, text_type = problem.problem_text
+    # problemtext -> problem_statement_content (problem)
     cursor.execute(
         "UPDATE problem SET problem_statement_content = %s, problemstatement_type = %s WHERE probid = %s",
         (text_data, text_type, problem_id),
@@ -340,7 +349,8 @@ def create_or_update_problem_data(
         )
     else:
         log.debug("Creating problem %s in database", problem)
-        # need to initialize 'types' value
+        # Need to initialize 'types' value (default: 1 [pass-fail])
+        # Reference to domjudge/webapp/src/Entity/Problem.php and pyjudge/pydomjudge/repository/kattis.py
         cursor.execute(
             "INSERT INTO problem (externalid, name, types) VALUES (%s, %s, %s)",
             (problem.key, problem.name, problem.types),
@@ -356,6 +366,7 @@ def create_or_update_problem_data(
     if time_limit <= 0:
         time_limit = 0.1
 
+    # problemtext_type -> problemstatement_type (problem)
     cursor.execute(
         "UPDATE problem "
         "SET problemstatement_type = %s, special_compare_args = %s, "
@@ -397,6 +408,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
 
     testcases_by_name: Dict[str, DbTestCase] = {}
     leftover_cases = []
+    # `rank` -> ranknumber
     cursor.execute(
         "SELECT t.testcaseid, t.orig_input_filename, t.description, t.ranknumber, "
         "t.md5sum_input, t.md5sum_output "
@@ -516,6 +528,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             maximal_rank += 1
             case_rank = maximal_rank
             testcase_data.extend([maximal_rank, problem_id])
+            # `rank` -> ranknumber
             cursor.execute(
                 "INSERT INTO testcase (orig_input_filename, description, md5sum_input, md5sum_output, "
                 "sample, image_type, deleted, ranknumber, probid) "
@@ -575,11 +588,13 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
         )
         for _, case in rank_update:
             maximal_rank += 1
+            # `rank` -> ranknumber
             cursor.execute(
                 "UPDATE testcase SET ranknumber = %s WHERE testcaseid = %s",
                 (maximal_rank, case.case_id),
             )
         for new_rank, case in rank_update:
+            # `rank` -> ranknumber
             cursor.execute(
                 "UPDATE testcase SET ranknumber = %s WHERE testcaseid = %s",
                 (new_rank, case.case_id),
@@ -597,13 +612,14 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             else:
                 image, thumbnail = image_data
 
-            # delete testcase content
+            # Normal REPLACE would possibly display duplicate key error
+            # Delete testcase content
             cursor.execute(
                 "DELETE FROM testcase_content WHERE testcaseid = %s",
                 (database_case.case_id,)
             )
 
-            # insert new content
+            # Insert new content
             cursor.execute(
                 "INSERT INTO testcase_content (testcaseid, input, output, image, image_thumb)"
                 "VALUES (%s, %s, %s, %s, %s)",
@@ -1002,6 +1018,7 @@ def create_problem_submissions(
                 existing_file_hashes = submission_files[existing_id]
 
                 if language.key != existing_language_id:
+                    # Typo from the find and replace?
                     log.info("%s changed language?", submission)
                     insert = True
                 elif set(file_names) != set(existing_file_hashes.keys()):
@@ -1037,6 +1054,7 @@ def create_problem_submissions(
                     problem_id,
                 )
 
+                # Judgehost column is removed since judgehost is no longer assigned on the submission itself
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
                     "langid, submittime, valid, expected_results) "
@@ -1059,13 +1077,16 @@ def create_problem_submissions(
                     new_submission_id,
                 )
 
+                # `rank` -> ranknumber
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, ranknumber, sourcecode) "
                     "VALUES (%s, %s, 1, %s)",
                     (new_submission_id, submission.file_name, source_bytes),
                 )
 
-
+                # Since judgehost does not automatically create judging for you from the submission,
+                # you have to manually fill up judging, judgetask, judging_run, and queuetask.
+                # Reference to domjudge/webapp/src/Entity/{Judging, Judgetask, JudgingRun, QueueTask}.php
                 import uuid
                 judging_uuid = str(uuid.uuid4())
                 cursor.execute(
@@ -1075,7 +1096,7 @@ def create_problem_submissions(
                 )
                 judging_id = cursor.lastrowid
 
-                time.sleep(0.2)
+                # Retrieve global config
                 cursor.execute(
                     "SELECT name, value FROM configuration WHERE name IN "
                     "('script_timelimit', 'script_memory_limit', 'script_filesize_limit', "
@@ -1083,7 +1104,7 @@ def create_problem_submissions(
                 )
                 config_values = {row[0]: row[1] for row in cursor.fetchall()}
 
-                time.sleep(0.2)
+                # Retrieve compile script for the language
                 cursor.execute(
                     "SELECT l.extensions, l.filter_compiler_files, l.time_factor, "
                     "e.immutable_execid, ie.hash "
@@ -1099,7 +1120,7 @@ def create_problem_submissions(
                 else:
                     raise ValueError(f"Language {language.key} not found")
 
-                time.sleep(0.2)
+                # Retrieve problem limits
                 cursor.execute(
                     "SELECT p.timelimit, p.memlimit, p.outputlimit, p.special_compare_args, "
                     "p.special_compare, p.multipass_limit "
@@ -1112,11 +1133,13 @@ def create_problem_submissions(
                 else:
                     raise ValueError(f"Problem {problem_id} not found")
 
+                # Some default values if not set
                 if not mem_limit:
                     mem_limit = int(config_values.get('memory_limit', 2097152))
                 if not output_limit:
                     output_limit = int(config_values.get('output_limit', 8192))
 
+                # Retrieve run and compare scripts
                 cursor.execute(
                     "SELECT e.immutable_execid, ie.hash FROM executable e "
                     "INNER JOIN immutable_executable ie ON e.immutable_execid = ie.immutable_execid "
@@ -1143,6 +1166,7 @@ def create_problem_submissions(
 
                 compare_script_id, compare_hash = compare_result if compare_result else (None, None)
 
+                # Build JSON format configs for compile, run, and compare
                 compile_config = json.dumps({
                     'script_timelimit': int(config_values.get('script_timelimit', 30)),
                     'script_memory_limit': int(config_values.get('script_memory_limit', 2097152)),
@@ -1172,15 +1196,14 @@ def create_problem_submissions(
                     'hash': compare_hash
                 })
 
-                time.sleep(0.2)
+                # In preparation for building judgetask
                 cursor.execute(
                     "SELECT testcaseid, md5sum_input, md5sum_output FROM testcase WHERE probid = %s AND deleted = 0 ORDER BY ranknumber",
                     (problem_id,)
                 )
                 testcases = cursor.fetchall()
 
-                time.sleep(0.2)
-                # create judgetasks
+                # Create judgetask for each testcase
                 for testcase_id, input_hash, output_hash in testcases:
                     testcase_hash = input_hash + '_' + output_hash if input_hash and output_hash else ''
                     cursor.execute(
@@ -1200,14 +1223,14 @@ def create_problem_submissions(
                         (judging_id, judgetask_id, testcase_id)
                     )
 
-                # don't probably need prios
+                # Create queuetask
+                # Don't probably need prios
                 cursor.execute(
                     "INSERT INTO queuetask (judgingid, priority, teampriority, starttime) "
                     "VALUES (%s, 0, 0, NULL)",
                     (judging_id,)
                 )
 
-                time.sleep(0.2)
             else:
                 cursor.execute(
                     "UPDATE submission "
@@ -1261,10 +1284,12 @@ def create_or_update_contest_problems(
             (contest_id, problem_id),
         )
         if cursor.fetchone()[0]:
+            # Setting lazy_eval_results to EVAL_DEFAULT, which is 0.
+            # Reference to domjudge/webapp/src/Service/DOMJudgeService.php
             cursor.execute(
                 "UPDATE contestproblem SET "
                 "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
-                "color = %s, lazy_eval_results = 2 "
+                "color = %s, lazy_eval_results = 0 "
                 "WHERE cid = %s AND probid = %s",
                 (
                     contest_problem.name,
@@ -1278,7 +1303,7 @@ def create_or_update_contest_problems(
             # lazy_eval_results cannot be NULL
             cursor.execute(
                 "INSERT INTO contestproblem (cid, probid, shortname, points, allow_submit, "
-                "allow_judge, color, lazy_eval_results) VALUES (%s, %s, %s, %s, TRUE, TRUE, %s, 2)",
+                "allow_judge, color, lazy_eval_results) VALUES (%s, %s, %s, %s, TRUE, TRUE, %s, 0)",
                 (
                     contest_id,
                     problem_id,
@@ -1436,6 +1461,7 @@ def create_or_update_affiliations(
     }
     for affiliation in affiliations:
         if affiliation in affiliation_ids:
+            # comments -> internalcomments (team_affiliation)
             cursor.execute(
                 "UPDATE team_affiliation SET "
                 "externalid = %s, shortname = %s, name = %s, country = %s, internalcomments = NULL "
@@ -1449,6 +1475,7 @@ def create_or_update_affiliations(
                 ),
             )
         else:
+            # comments -> internalcomments (team_affiliation)
             cursor.execute(
                 "INSERT INTO team_affiliation (externalid, shortname, name, country, internalcomments) "
                 "VALUES (%s, %s, %s, %s, NULL) ",
