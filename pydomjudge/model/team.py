@@ -86,6 +86,7 @@ class Affiliation(object):
 
 @dataclasses.dataclass
 class Team(object):
+    key: str
     name: str
     display_name: str
     members: List[User]

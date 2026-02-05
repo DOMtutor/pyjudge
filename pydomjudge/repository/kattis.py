@@ -337,9 +337,9 @@ class RepositoryProblem(Problem):
         return self._name
 
     @property
-    def types(self) -> int:
+    def type(self) -> int:
         # Defaults to 1, which is pass-fail type
-        return self.description.get("types", 1)
+        return self.description.get("type", 1)
 
     @property
     def limits(self) -> ProblemLimits:

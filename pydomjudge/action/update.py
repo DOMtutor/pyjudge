@@ -2,6 +2,8 @@ import datetime
 import json
 import logging
 import time
+import hashlib
+import uuid
 
 from collections import defaultdict
 from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
@@ -205,27 +207,9 @@ def create_or_update_teams(
 def create_or_update_executable(cursor: Cursor, executable: Executable):
     # Immutable executable is introduced for v9
     # Reference to domjudge/webapp/src/Entity/ImmutableExecutable.php, for the combined hash logic
-    import hashlib
-
     log.debug("Updating executable %s", executable)
 
-    file_info = []
-    for file_data in executable.contents:
-        with file_data.open() as f:
-            file_content = f.read()
-
-        filename = file_data.relative_path[-1]
-        file_hash = hashlib.md5(file_content).hexdigest()
-        is_executable = 1 if filename in ('build', 'run') else 0
-
-        file_info.append({
-            'filename': filename,
-            'content': file_content,
-            'hash': file_hash,
-            'is_executable': is_executable,
-        })
-
-    file_info.sort(key=lambda x: x['filename'])
+    file_info = executable.file_info()
 
     combined = "".join(
         f['hash'] + f['filename'] + str(f['is_executable'])
@@ -353,7 +337,7 @@ def create_or_update_problem_data(
         # Reference to domjudge/webapp/src/Entity/Problem.php and pyjudge/pydomjudge/repository/kattis.py
         cursor.execute(
             "INSERT INTO problem (externalid, name, types) VALUES (%s, %s, %s)",
-            (problem.key, problem.name, problem.types),
+            (problem.key, problem.name, problem.type),
         )
         problem_id = cursor.lastrowid
 
@@ -1054,48 +1038,6 @@ def create_problem_submissions(
                     problem_id,
                 )
 
-                # Judgehost column is removed since judgehost is no longer assigned on the submission itself
-                cursor.execute(
-                    "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
-                    "langid, submittime, valid, expected_results) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s)",
-                    (
-                        existing_id,
-                        contest_id,
-                        team_id,
-                        problem_id,
-                        language.key,
-                        contest_start[contest_id],
-                        expected_results_string,
-                    ),
-                )
-                new_submission_id = cursor.lastrowid
-                source_bytes = source_code.encode("utf-8")
-                log.debug(
-                    "Inserting file %s for submission %s",
-                    submission.file_name,
-                    new_submission_id,
-                )
-
-                # `rank` -> ranknumber
-                cursor.execute(
-                    "INSERT INTO submission_file (submitid, filename, ranknumber, sourcecode) "
-                    "VALUES (%s, %s, 1, %s)",
-                    (new_submission_id, submission.file_name, source_bytes),
-                )
-
-                # Since judgehost does not automatically create judging for you from the submission,
-                # you have to manually fill up judging, judgetask, judging_run, and queuetask.
-                # Reference to domjudge/webapp/src/Entity/{Judging, Judgetask, JudgingRun, QueueTask}.php
-                import uuid
-                judging_uuid = str(uuid.uuid4())
-                cursor.execute(
-                    "INSERT INTO judging (submitid, cid, starttime, valid, uuid) "
-                    "VALUES (%s, %s, %s, 1, %s)",
-                    (new_submission_id, contest_id, contest_start[contest_id], judging_uuid)
-                )
-                judging_id = cursor.lastrowid
-
                 # Retrieve global config
                 cursor.execute(
                     "SELECT name, value FROM configuration WHERE name IN "
@@ -1166,6 +1108,13 @@ def create_problem_submissions(
 
                 compare_script_id, compare_hash = compare_result if compare_result else (None, None)
 
+                # In preparation for building judgetask
+                cursor.execute(
+                    "SELECT testcaseid, md5sum_input, md5sum_output FROM testcase WHERE probid = %s AND deleted = 0 ORDER BY ranknumber",
+                    (problem_id,)
+                )
+                testcases = cursor.fetchall()
+
                 # Build JSON format configs for compile, run, and compare
                 compile_config = json.dumps({
                     'script_timelimit': int(config_values.get('script_timelimit', 30)),
@@ -1196,12 +1145,46 @@ def create_problem_submissions(
                     'hash': compare_hash
                 })
 
-                # In preparation for building judgetask
+                # Judgehost column is removed since judgehost is no longer assigned on the submission itself
                 cursor.execute(
-                    "SELECT testcaseid, md5sum_input, md5sum_output FROM testcase WHERE probid = %s AND deleted = 0 ORDER BY ranknumber",
-                    (problem_id,)
+                    "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
+                    "langid, submittime, valid, expected_results) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s)",
+                    (
+                        existing_id,
+                        contest_id,
+                        team_id,
+                        problem_id,
+                        language.key,
+                        contest_start[contest_id],
+                        expected_results_string,
+                    ),
                 )
-                testcases = cursor.fetchall()
+                new_submission_id = cursor.lastrowid
+                source_bytes = source_code.encode("utf-8")
+                log.debug(
+                    "Inserting file %s for submission %s",
+                    submission.file_name,
+                    new_submission_id,
+                )
+
+                # `rank` -> ranknumber
+                cursor.execute(
+                    "INSERT INTO submission_file (submitid, filename, ranknumber, sourcecode) "
+                    "VALUES (%s, %s, 1, %s)",
+                    (new_submission_id, submission.file_name, source_bytes),
+                )
+
+                # Since judgehost does not automatically create judging for you from the submission,
+                # you have to manually fill up judging, judgetask, judging_run, and queuetask.
+                # Reference to domjudge/webapp/src/Entity/{Judging, Judgetask, JudgingRun, QueueTask}.php
+                judging_uuid = str(uuid.uuid4())
+                cursor.execute(
+                    "INSERT INTO judging (submitid, cid, starttime, valid, uuid) "
+                    "VALUES (%s, %s, %s, 1, %s)",
+                    (new_submission_id, contest_id, contest_start[contest_id], judging_uuid)
+                )
+                judging_id = cursor.lastrowid
 
                 # Create judgetask for each testcase
                 for testcase_id, input_hash, output_hash in testcases:
@@ -1289,7 +1272,7 @@ def create_or_update_contest_problems(
             cursor.execute(
                 "UPDATE contestproblem SET "
                 "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
-                "color = %s, lazy_eval_results = 0 "
+                "color = %s, lazy_eval_results = 2 "
                 "WHERE cid = %s AND probid = %s",
                 (
                     contest_problem.name,
