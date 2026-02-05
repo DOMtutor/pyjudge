@@ -1132,6 +1132,7 @@ class Repository(object):
     # noinspection PyMethodMayBeStatic
     def get_solution_team_of_language(self, language: Language):
         return Team(
+            key=f"sol_lang_{language.key}",
             name=f"sol_lang_{language.key}",
             display_name=f"Sample Solution {language.name}",
             category=SystemCategory.Solution,
@@ -1143,6 +1144,7 @@ class Repository(object):
     def get_team_of_author(self, author: Optional[RepositoryAuthor]):
         if author is None:
             return Team(
+                key="sol_author_unknown",
                 name="sol_author_unknown",
                 display_name="Author Unknown",
                 category=SystemCategory.Author,
@@ -1151,6 +1153,7 @@ class Repository(object):
             )
 
         return Team(
+            key=f"sol_author_{author.key}",
             name=f"sol_author_{author.key}",
             display_name=f"Author {author.name}",
             category=SystemCategory.Author,

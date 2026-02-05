@@ -115,6 +115,7 @@ class Team(object):
             members.append(user_by_name[member_name])
 
         return Team(
+            key=name,
             name=name,
             display_name=data["display_name"],
             members=members,
