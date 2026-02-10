@@ -261,6 +261,15 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
         )
     )
 
+    # Deletes every immutable_execid that does not appear in the `executable` table.
+    # It automatically deletes from the `executable_file` too? (ON DELETE CASCADE)
+    # Reference to domjudge/webapp/migrations/Version20201219154651.php
+    cursor.execute(
+        "DELETE FROM immutable_executable "
+        "WHERE immutable_execid NOT IN "
+        "(SELECT immutable_execid FROM executable WHERE immutable_execid IS NOT NULL)"
+    )
+
 def create_or_update_language(
     cursor: Cursor, language: Language, allow_submit: bool = True
 ):
