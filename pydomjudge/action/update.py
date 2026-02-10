@@ -225,14 +225,14 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
 
     if result:
         immutable_execid = result[0]
-        log.debug(f"Reusing existing immutable_execid: {immutable_execid}")
+        log.debug("Reusing existing immutable_execid: %s", immutable_execid)
     else:
         cursor.execute(
             "INSERT INTO immutable_executable (hash) VALUES (%s) ",
             (immutable_hash,)
         )
         immutable_execid = cursor.lastrowid
-        log.debug(f"Created new immutable_execid: {immutable_execid}")
+        log.debug("Created new immutable_execid: %s", immutable_execid)
 
         for ranknumber, file in enumerate(file_info):
             cursor.execute(
