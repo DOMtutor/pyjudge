@@ -605,7 +605,9 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             else:
                 image, thumbnail = image_data
 
-            # Normal REPLACE would possibly display duplicate key error
+            # I think I confused myself here with another error.
+            # No REPLACE INTO as testcaseid is not necessarily unique???
+            # `tc_contentid` is the primary key, which automatically gets incremented.
             # Delete testcase content
             cursor.execute(
                 "DELETE FROM testcase_content WHERE testcaseid = %s",
