@@ -1,23 +1,39 @@
-from typing import Any, Dict, Set, Optional, Iterable
-
+import gzip
+import json
 import logging
 import pathlib
+import platform
 import shutil
 import subprocess
-import platform
+import sys
+from typing import Any, Iterable
 
 force_copy = platform.system() == "Windows"
+_wordlist_cache: str | None = None
 
 
-def list_if_not_none(iterable: Optional[Iterable[Any]]):
+def default_wordlist() -> str:
+    global _wordlist_cache
+    if _wordlist_cache is None:
+        import importlib.resources
+
+        _wordlist_cache = (
+            importlib.resources.files("pydomjudge")
+            .joinpath("default_wordlist.txt")
+            .read_text(encoding="utf-8")
+        )
+    return _wordlist_cache
+
+
+def list_if_not_none(iterable: Iterable[Any] | None):
     if iterable is None:
         return None
     return list(iterable)
 
 
-def filter_none(data: Dict[str, Any], except_keys: Optional[Set[str]] = None):
+def filter_none(data: dict[str, Any], except_keys: set[str] | None = None):
     if except_keys is None:
-        except_keys = {}
+        except_keys = set()
     return {
         key: value
         for key, value in data.items()
@@ -90,6 +106,28 @@ def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
         logging.warning("Compilation succeeded but %s does not exist", compiled_file)
         return None
     return compiled_file
+
+
+def read_json_from(source: pathlib.Path | None):
+    if source is None:
+        return json.load(sys.stdin)
+    if source.suffix in {".gz", ".gzip"}:
+        with gzip.open(str(source), mode="rt") as f:
+            return json.load(f)
+    with source.open(mode="rt") as f:
+        return json.load(f)
+
+
+def write_json_to(data, destination: pathlib.Path | None):
+    if destination is None:
+        json.dump(data, sys.stdout)
+    else:
+        if destination.suffix in {".gz", ".gzip"}:
+            with gzip.open(str(destination), mode="wt") as f:
+                json.dump(data, f)
+        else:
+            with destination.open(mode="wt") as f:
+                json.dump(data, f)
 
 
 def rasterize_pdf(

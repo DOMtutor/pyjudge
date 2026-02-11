@@ -1,6 +1,5 @@
-import dataclasses
 import base64
-from typing import Optional, List, Dict
+import dataclasses
 
 import chardet
 
@@ -19,7 +18,7 @@ class SubmissionFileDto:
     def byte_size(self) -> int:
         return len(self.content)
 
-    def _decode(self):
+    def _decode(self) -> str | None:
         if hasattr(self, "_str_content"):
             return self._str_content
 
@@ -38,14 +37,14 @@ class SubmissionFileDto:
         return self._str_content
 
     @property
-    def line_count(self) -> Optional[int]:
+    def line_count(self) -> int | None:
         content = self._decode()
         if content is None:
             return None
         lines = [line.strip() for line in content.splitlines()]
         return len([line for line in lines if line])
 
-    def content_safe(self, default=None) -> str:
+    def content_safe(self, default=None) -> str | None:
         content = self._decode()
         return content if content is not None else default
 
@@ -103,11 +102,11 @@ class SubmissionDto:
     language_key: str
     submission_time: float
 
-    verdict: Optional[Verdict]
-    case_result: List[TestcaseResultDto]
+    verdict: Verdict | None
+    case_result: list[TestcaseResultDto]
     too_late: bool
 
-    files: List[SubmissionFileDto]
+    files: list[SubmissionFileDto]
 
     @property
     def line_count(self):
@@ -116,7 +115,7 @@ class SubmissionDto:
         )
 
     @property
-    def maximum_runtime(self) -> Optional[float]:
+    def maximum_runtime(self) -> float | None:
         return max(
             (res.runtime for res in self.case_result if res.runtime is not None),
             default=None,
@@ -172,7 +171,7 @@ class ContestProblemDto:
     problem_key: str
     contest_problem_key: str
     points: int
-    color: Optional[str]
+    color: str | None
 
 
 @dataclasses.dataclass
@@ -180,10 +179,10 @@ class ClarificationDto:
     key: str
     team_key: str
     contest_key: str
-    contest_problem_key: Optional[str]
+    contest_problem_key: str | None
 
     request_time: float
-    response_to: Optional[str]
+    response_to: str | None
     from_jury: bool
     body: str
 
@@ -222,11 +221,11 @@ class ClarificationDto:
 @dataclasses.dataclass
 class ContestDescriptionDto:
     contest_key: str
-    start: Optional[float]
-    end: Optional[float]
+    start: float | None
+    end: float | None
 
     def serialize(self):
-        data = {"key": self.contest_key}
+        data: dict[str, str | float] = {"key": self.contest_key}
         if self.start is not None:
             data["start"] = float(self.start)
         if self.end is not None:
@@ -247,11 +246,11 @@ class ContestDescriptionDto:
 @dataclasses.dataclass
 class ContestDataDto:
     description: ContestDescriptionDto
-    teams: Dict[str, TeamDto]
-    languages: Dict[str, str]
-    problems: Dict[str, str]
-    submissions: List[SubmissionDto]
-    clarifications: List[ClarificationDto]
+    teams: dict[str, TeamDto]
+    languages: dict[str, str]
+    problems: dict[str, str]
+    submissions: list[SubmissionDto]
+    clarifications: list[ClarificationDto]
 
     def serialize(self):
         data = {
@@ -267,7 +266,7 @@ class ContestDataDto:
         return data
 
     @staticmethod
-    def parse(data):
+    def parse(data) -> "ContestDataDto":
         return ContestDataDto(
             description=ContestDescriptionDto.parse(data["description"]),
             teams={team.key: team for team in map(TeamDto.parse, data["teams"])},

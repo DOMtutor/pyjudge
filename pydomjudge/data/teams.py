@@ -1,5 +1,4 @@
 import dataclasses
-from typing import List, Optional
 
 
 @dataclasses.dataclass
@@ -29,8 +28,8 @@ class UserDto(object):
 class TeamDto(object):
     key: str
     display_name: str
-    category_name: Optional[str]
-    members: List[UserDto]
+    category_name: str | None
+    members: list[UserDto]
 
     def __str__(self):
         return f"{self.key}"
