@@ -5,6 +5,7 @@ import pathlib
 from typing import List
 
 import matplotlib
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -58,7 +59,7 @@ class ProblemRenderer(object):
     def render_problem_submission_statistics(
         self, problem_stats: ProblemStatistics, file: pathlib.Path
     ):
-        x_axis = np.arange(start=0, stop=self.submission_buckets)
+        x_axis = np.arange(0, stop=self.submission_buckets)
 
         verdict_data = {verdict: np.zeros(len(x_axis)) for verdict in Verdict}
         for (
@@ -114,7 +115,7 @@ class ProblemRenderer(object):
                 bottom=summed,
             )
             summed += value
-        ax.set_xlim([-1, self.submission_buckets * self.seconds_per_bucket])
+        ax.set_xlim((-1, self.submission_buckets * self.seconds_per_bucket))
         ax.legend()
         ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 

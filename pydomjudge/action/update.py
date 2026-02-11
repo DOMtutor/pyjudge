@@ -722,7 +722,7 @@ def create_problem_submissions(
     problem: Problem,
     existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
     team_ids: Dict[Team, int],
-    contest_ids: Optional[List[int]] = None,
+    contest_ids: Collection[int] | None = None,
 ):
     log.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))

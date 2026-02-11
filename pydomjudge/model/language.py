@@ -2,7 +2,7 @@ import abc
 import dataclasses
 import enum
 import pathlib
-from typing import Tuple, Collection, Optional
+from typing import Collection
 
 
 class ExecutableType(enum.Enum):
@@ -51,7 +51,7 @@ class PathFile(FileData):
 
 
 @dataclasses.dataclass
-class Executable(abc.ABC):
+class Executable:
     @staticmethod
     def get_directory_contents(directory: pathlib.Path) -> Collection[PathFile]:
         return [
@@ -65,7 +65,7 @@ class Executable(abc.ABC):
     executable_type: ExecutableType
     contents: Collection[FileData]
 
-    def make_zip(self) -> Tuple[bytes, str]:
+    def make_zip(self) -> tuple[bytes, str]:
         import io
         import zipfile
         import shutil
@@ -98,7 +98,7 @@ class Language(object):
     name: str
     time_factor: float
     extensions: Collection[str]
-    entry_point_description: Optional[str]
+    entry_point_description: str | None
     entry_point_required: bool
     compile_script: Executable
 

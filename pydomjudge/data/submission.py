@@ -1,6 +1,5 @@
-import dataclasses
 import base64
-from typing import Optional, List, Dict
+import dataclasses
 
 import chardet
 
@@ -8,6 +7,7 @@ from pydomjudge import util
 from pydomjudge.data.teams import TeamDto
 from pydomjudge.model import Verdict
 from pydomjudge.model.submission import TestcaseVerdict
+from pydomjudge.util import get_map_if_present, put_if_present
 
 
 @dataclasses.dataclass
@@ -19,7 +19,7 @@ class SubmissionFileDto:
     def byte_size(self) -> int:
         return len(self.content)
 
-    def _decode(self):
+    def _decode(self) -> str | None:
         if hasattr(self, "_str_content"):
             return self._str_content
 
@@ -38,14 +38,14 @@ class SubmissionFileDto:
         return self._str_content
 
     @property
-    def line_count(self) -> Optional[int]:
+    def line_count(self) -> int | None:
         content = self._decode()
         if content is None:
             return None
         lines = [line.strip() for line in content.splitlines()]
         return len([line for line in lines if line])
 
-    def content_safe(self, default=None) -> str:
+    def content_safe(self, default=None) -> str | None:
         content = self._decode()
         return content if content is not None else default
 
@@ -103,11 +103,11 @@ class SubmissionDto:
     language_key: str
     submission_time: float
 
-    verdict: Optional[Verdict]
-    case_result: List[TestcaseResultDto]
+    verdict: Verdict | None
+    case_result: list[TestcaseResultDto]
     too_late: bool
 
-    files: List[SubmissionFileDto]
+    files: list[SubmissionFileDto]
 
     @property
     def line_count(self):
@@ -116,7 +116,7 @@ class SubmissionDto:
         )
 
     @property
-    def maximum_runtime(self) -> Optional[float]:
+    def maximum_runtime(self) -> float | None:
         return max(
             (res.runtime for res in self.case_result if res.runtime is not None),
             default=None,
@@ -141,8 +141,7 @@ class SubmissionDto:
             "too_late": self.too_late,
             "results": [c.serialize() for c in self.case_result],
         }
-        if self.maximum_runtime is not None:
-            data["runtime"] = self.maximum_runtime
+        put_if_present(data, "runtime", self.maximum_runtime)
         if self.verdict is not None:
             data["verdict"] = self.verdict.serialize()
         if self.files and not exclude_files_if_present:
@@ -158,9 +157,7 @@ class SubmissionDto:
             problem_key=data["problem"],
             language_key=data["language"],
             submission_time=data["time"],
-            verdict=Verdict.parse(data["verdict"])
-            if data.get("verdict", None) is not None
-            else None,
+            verdict=get_map_if_present(data, "verdict", Verdict.parse),
             too_late=data["too_late"],
             files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
             case_result=[TestcaseResultDto.parse(result) for result in data["results"]],
@@ -172,7 +169,7 @@ class ContestProblemDto:
     problem_key: str
     contest_problem_key: str
     points: int
-    color: Optional[str]
+    color: str | None
 
 
 @dataclasses.dataclass
@@ -180,10 +177,10 @@ class ClarificationDto:
     key: str
     team_key: str
     contest_key: str
-    contest_problem_key: Optional[str]
+    contest_problem_key: str | None
 
     request_time: float
-    response_to: Optional[str]
+    response_to: str | None
     from_jury: bool
     body: str
 
@@ -196,10 +193,8 @@ class ClarificationDto:
             "jury": self.from_jury,
             "body": self.body,
         }
-        if self.contest_problem_key is not None:
-            data["contest_problem"] = self.contest_problem_key
-        if self.response_to is not None:
-            data["response"] = self.response_to
+        put_if_present(data, "contest_problem", self.contest_problem_key)
+        put_if_present(data, "response", self.response_to)
         return data
 
     @staticmethod
@@ -222,39 +217,33 @@ class ClarificationDto:
 @dataclasses.dataclass
 class ContestDescriptionDto:
     contest_key: str
-    start: Optional[float]
-    end: Optional[float]
+    start: float | None
+    end: float | None
 
     def serialize(self):
-        data = {"key": self.contest_key}
-        if self.start is not None:
-            data["start"] = float(self.start)
-        if self.end is not None:
-            data["end"] = float(self.end)
+        data: dict[str, str | float] = {"key": self.contest_key}
+        put_if_present(data, "start", self.start)
+        put_if_present(data, "end", self.end)
         return data
 
     @staticmethod
     def parse(data):
-        start = data.get("start", None)
-        if start is not None:
-            start = float(start)
-        end = data.get("end", None)
-        if end is not None:
-            end = float(end)
+        start = get_map_if_present(data, "start", float)
+        end = get_map_if_present(data, "end", float)
         return ContestDescriptionDto(contest_key=data["key"], start=start, end=end)
 
 
 @dataclasses.dataclass
 class ContestDataDto:
     description: ContestDescriptionDto
-    teams: Dict[str, TeamDto]
-    languages: Dict[str, str]
-    problems: Dict[str, str]
-    submissions: List[SubmissionDto]
-    clarifications: List[ClarificationDto]
+    teams: dict[str, TeamDto]
+    languages: dict[str, str]
+    problems: dict[str, str]
+    submissions: list[SubmissionDto]
+    clarifications: list[ClarificationDto]
 
     def serialize(self):
-        data = {
+        return {
             "description": self.description.serialize(),
             "teams": [team.serialize() for team in self.teams.values()],
             "languages": self.languages,
@@ -264,10 +253,9 @@ class ContestDataDto:
                 clarification.serialize() for clarification in self.clarifications
             ],
         }
-        return data
 
     @staticmethod
-    def parse(data):
+    def parse(data) -> "ContestDataDto":
         return ContestDataDto(
             description=ContestDescriptionDto.parse(data["description"]),
             teams={team.key: team for team in map(TeamDto.parse, data["teams"])},

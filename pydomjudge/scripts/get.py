@@ -7,19 +7,19 @@ import pydomjudge.scripts.util as script_util
 import pydomjudge.scripts.find_problem as find_problem
 
 
-def func_statements(args, problems, add_entry):
+def func_statements(args, problems, add_content):
     languages = set(args.language)
     for problem in problems:
         for language in languages:
             problem_pdf = problem.generate_problem_text_if_required(language)
             name = f"{problem.name}.pdf"
             if len(languages) > 1:
-                add_entry(problem_pdf, f"{language}/{name}")
+                add_content(problem_pdf, f"{language}/{name}")
             else:
-                add_entry(problem_pdf, name)
+                add_content(problem_pdf, name)
 
 
-def func_samples(args, problems, add_entry):
+def func_samples(args, problems, add_content):
     for problem in problems:
         for case in problem.testcases:
             if case.is_sample():
@@ -27,8 +27,8 @@ def func_samples(args, problems, add_entry):
                 if name.startswith("sample/"):
                     name = name[len("sample/") :]
 
-                add_entry(case.input, f"{problem.key}/{name}.in")
-                add_entry(case.output, f"{problem.key}/{name}.ans")
+                add_content(case.input, f"{problem.key}/{name}.in")
+                add_content(case.output, f"{problem.key}/{name}.ans")
 
 
 def main():
@@ -68,30 +68,39 @@ def main():
         with destination.open("wb") as f:
             with tarfile.open(mode="w", fileobj=f) as tar:
 
-                def add_file(data, name):
-                    tar.add(data, name, recursive=False)
+                def add_content(data, name):
+                    if isinstance(data, bytes):
+                        with tar.open(name, mode="w") as d:
+                            d.write(data)
+                    else:
+                        tar.add(data, name, recursive=False)
 
-                args.func(args, problems, add_file)
+                args.func(args, problems, add_content)
     elif destination.suffix == ".zip":
         import zipfile
 
         with destination.open("wb") as f:
             with zipfile.ZipFile(f, mode="w") as z:
 
-                def add_file(data, name):
+                def add_content(data, name):
                     if isinstance(data, bytes):
                         with z.open(name, mode="w") as d:
                             d.write(data)
                     else:
                         z.write(data, name)
 
-                args.func(args, problems, add_file)
+                args.func(args, problems, add_content)
     else:
         import shutil
 
         destination.mkdir(parents=True, exist_ok=True)
 
-        def add_file(data, name):
-            shutil.copy(data, destination / name)
+        def add_content(data, name):
+            if isinstance(data, bytes):
+                file = destination / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(data)
+            else:
+                shutil.copy(data, destination / name)
 
-        args.func(args, problems, add_file)
+        args.func(args, problems, add_content)

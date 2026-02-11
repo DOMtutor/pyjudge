@@ -1,6 +1,6 @@
 import dataclasses
 from datetime import datetime
-from typing import Optional, List, Set
+from typing import Optional, List, Set, Any
 
 import pytz
 
@@ -48,14 +48,18 @@ class ContestAccess(object):
     def parse(data):
         team_names = set(data.get("teams", []))
         team_categories = set(
-            TeamCategory.parse(name) for name in data.get("categories", [])
+            TeamCategory.parse(key, data)
+            for key, data in data.get("categories", {}).items()
         )
         return ContestAccess(team_names=team_names, team_categories=team_categories)
 
     def serialize(self):
         return {
             "teams": list(self.team_names),
-            "categories": [category.serialize() for category in self.team_categories],
+            "categories": {
+                category.json_ref(): category.serialize()
+                for category in self.team_categories
+            },
         }
 
 
@@ -107,6 +111,7 @@ class Contest(object):
 
     @staticmethod
     def _format_datetime(dt: datetime):
+        assert dt.tzinfo is not None
         return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
 
     @staticmethod
@@ -152,7 +157,7 @@ class Contest(object):
 
     def serialize(self, problem_loader: ProblemLoader):
         self.validate()
-        data = {
+        data: dict[str, Any] = {
             "key": self.key,
             "name": self.name,
             "activate": Contest._format_datetime(self.activation_time),

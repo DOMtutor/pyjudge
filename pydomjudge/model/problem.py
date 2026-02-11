@@ -1,9 +1,9 @@
 import abc
 import dataclasses
-from typing import Optional, Tuple, Collection, TypeVar, Generic
+from typing import Collection, TypeVar, Generic
 
-from .submission import JuryProblemSubmission
 from .language import Executable
+from .submission import JuryProblemSubmission
 from .util import get_md5
 
 
@@ -36,15 +36,15 @@ class ProblemTestCase(abc.ABC):
         pass
 
     @property
-    def image_extension(self) -> Optional[str]:
+    def image_extension(self) -> str | None:
         return None
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         return None
 
     @property
-    def image(self) -> Optional[Tuple[bytes, bytes]]:
+    def image(self) -> tuple[bytes, bytes] | None:
         image = self._load_image()
         if image is None:
             return None
@@ -60,7 +60,7 @@ class ProblemTestCase(abc.ABC):
         return image, thumbnail.getvalue()
 
     @abc.abstractmethod
-    def _load_image(self) -> Optional[bytes]:
+    def _load_image(self) -> bytes | None:
         pass
 
     def __str__(self):
@@ -70,12 +70,12 @@ class ProblemTestCase(abc.ABC):
 @dataclasses.dataclass
 class ProblemLimits(object):
     time_factor: float
-    memory_kib: Optional[int]
-    output_kib: Optional[int]
+    memory_kib: int | None
+    output_kib: int | None
 
 
 @abc.abstractmethod
-class Problem(object):
+class Problem(abc.ABC):
     @property
     @abc.abstractmethod
     def name(self) -> str:
@@ -96,15 +96,15 @@ class Problem(object):
 
     @property
     @abc.abstractmethod
-    def checker(self) -> Optional[Executable]:
+    def checker(self) -> Executable | None:
         pass
 
     @property
-    def checker_flags(self) -> Optional[str]:
+    def checker_flags(self) -> str | None:
         return None
 
     @abc.abstractmethod
-    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+    def problem_text(self, lang="en") -> tuple[bytes, str]:
         pass
 
     @property

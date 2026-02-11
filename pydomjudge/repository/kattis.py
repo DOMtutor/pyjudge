@@ -52,13 +52,14 @@ class ExecutionError(Exception):
 
 
 class StatusExecutionError(ExecutionError):
-    def __init__(self, code, out, err):
+    def __init__(self, code, out, err, details=None):
         super().__init__(err)
         self.code = code
         self.out = out
+        self.details = details
 
     def __str__(self):
-        return f"Exit with {self.code}\n{self.out}\n{self.err}"
+        return f"Exit with {self.code}{f' {self.details}' if self.details else ''}\n{self.out}\n{self.err}"
 
 
 class KattisRepositoryError(Exception):
@@ -406,8 +407,20 @@ class RepositoryProblem(Problem):
     def kattis_problem(self) -> problemtools.verifyproblem.Problem:
         return self._problemtools
 
-    def check(self):
-        self._generate_testcases()
+    def check(self, force=False):
+        last_verified = self.directory / ".last_verified"
+        if last_verified.exists() and not force:
+            date = last_verified.stat().st_mtime
+            if all(
+                f.stat().st_mtime <= date
+                for f in self.directory.rglob("**/*")
+                if f.is_file()
+            ):
+                self.log.debug("Skipping verification of already checked problem")
+                return
+            last_verified.unlink()
+
+        self._load_testcases()
 
         import problemtools.run.limit as limit
 
@@ -424,6 +437,7 @@ class RepositoryProblem(Problem):
             args = verify.default_args()
             p.testdata.check(args)
             p.submissions.check(args)
+        last_verified.touch()
 
     @property
     def checker_flags(self) -> Optional[str]:
@@ -602,14 +616,16 @@ class RepositoryProblem(Problem):
                     with tempfile.NamedTemporaryFile(mode="r+t") as t:
                         run_generator(t)
 
-                        if not filecmp.cmp(input_file, pathlib.Path(t.name)):
+                        if not filecmp.cmp(
+                            input_file, pathlib.Path(t.name), shallow=False
+                        ):
                             raise ExecutionError(
                                 f"Generator produces different outputs for seed {seed_file.name}"
                             )
 
                 except subprocess.CalledProcessError as exc:
                     raise ExecutionError(
-                        f"Generator process failed on {seed_file.name}"
+                        f"Generator process failed on {seed_file.name}:\n{exc.stderr}"
                     ) from exc
 
         except ValueError as e:
@@ -674,9 +690,14 @@ class RepositoryProblem(Problem):
                 with error_file.open(mode="rb") as f:
                     error = f.read().decode("utf-8", "replace")
                 error_file.unlink(missing_ok=True)
-            raise StatusExecutionError(status, "", error)
+            raise StatusExecutionError(
+                status,
+                "",
+                error,
+                details=f"{self._reference_submission.name} on {input_file.name}",
+            )
 
-    def _generate_testcases(self) -> Collection[RepositoryTestCase]:
+    def _load_testcases(self) -> Collection[RepositoryTestCase]:
         if self._test_cases is None:
             self._test_cases = []
 
@@ -721,7 +742,7 @@ class RepositoryProblem(Problem):
 
     @property
     def testcases(self) -> Collection[RepositoryTestCase]:
-        return self._generate_testcases()
+        return self._load_testcases()
 
     @property
     def submissions(self) -> Collection[JurySubmission]:
@@ -1019,10 +1040,10 @@ class Repository(object):
     @staticmethod
     def get_checker_data_of(
         problem: RepositoryProblem,
-    ) -> Optional[tuple[str, pathlib.Path]]:
+    ) -> tuple[str, pathlib.Path] | None:
         validation_directory = problem.directory / "output_validators"
-        checker_directory: Optional[pathlib.Path] = None
-        checker_language: Optional[str] = None
+        checker_directory: pathlib.Path | None = None
+        checker_language: str | None = None
 
         if validation_directory.exists():
             checker_files = list(validation_directory.iterdir())
@@ -1141,10 +1162,7 @@ def from_args(args: argparse.Namespace) -> Repository:
     candidates: List[pathlib.Path]
     cwd = pathlib.Path.cwd()
     if args.repository is None:
-        candidates = [cwd / "repository"]
-        for parent in cwd.resolve().absolute().parents:
-            if parent.name == "repository":
-                candidates.append(parent)
+        candidates = [cwd / "repository", cwd] + list(cwd.resolve().absolute().parents)
     else:
         candidates = [
             args.repository / "repository",

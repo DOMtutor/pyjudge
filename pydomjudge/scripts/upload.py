@@ -7,7 +7,7 @@ import logging
 import pathlib
 import re
 import sys
-from typing import List, Tuple, Collection, Optional, Dict, Set
+from typing import List, Tuple, Collection, Dict, Set
 
 import pydomjudge.action.update as update
 from problemtools.verifyproblem import VerifyError
@@ -45,7 +45,7 @@ def _update_problem_submissions(
     cursor: Cursor,
     problem: RepositoryProblem,
     config: Repository,
-    contest_ids: Optional[Collection[int]] = None,
+    contest_ids: Collection[int] | None = None,
 ):
     problem_submissions: Collection[JurySubmission] = problem.submissions
     submissions: List[Tuple[Team, ProblemSubmission]] = []
