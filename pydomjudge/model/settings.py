@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import field
-from typing import Dict, Sequence, Set, Optional, List
+from typing import Sequence
 
 from .team import TeamCategory
 from .submission import Verdict
@@ -10,7 +10,7 @@ from pydomjudge.util import list_if_not_none, filter_none
 @dataclasses.dataclass
 class ScoringSettings(object):
     penalty_time: float = 600.0
-    result_priority: Dict[Verdict, int] = field(
+    result_priority: dict[Verdict, int] = field(
         default_factory=lambda: {
             Verdict.TIME_LIMIT: 70,
             Verdict.MEMORY_LIMIT: 95,
@@ -141,9 +141,9 @@ class JudgeInstance(object):
     identifier: str
     settings: JudgeSettings
     base_time: float
-    user_whitelist: Set[str]
-    allowed_language_keys: Optional[Set[str]]
-    team_categories: List[TeamCategory]
+    user_whitelist: set[str]
+    allowed_language_keys: set[str] | None
+    team_categories: list[TeamCategory]
 
     @staticmethod
     def parse_instance(data):

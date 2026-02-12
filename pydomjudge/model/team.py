@@ -1,6 +1,6 @@
 import dataclasses
 import enum
-from typing import List, Optional, Dict
+from typing import List, Dict
 
 from .user import User
 
@@ -61,7 +61,7 @@ class DefaultCategory(TeamCategory, enum.Enum):
 class Affiliation(object):
     short_name: str
     name: str
-    country: Optional[str]
+    country: str | None
 
     @staticmethod
     def parse(key, data):
@@ -88,9 +88,9 @@ class Affiliation(object):
 class Team(object):
     name: str
     display_name: str
-    members: List[User]
-    category: Optional[TeamCategory]
-    affiliation: Optional[Affiliation]
+    members: list[User]
+    category: TeamCategory | None
+    affiliation: Affiliation | None
 
     @staticmethod
     def parse(
@@ -129,9 +129,10 @@ class Team(object):
         data = {
             "name": self.name,
             "display_name": self.display_name,
-            "category": self.category.json_ref,
             "members": [user.login_name for user in self.members],
         }
+        if self.category:
+            data["category"] = self.category.json_ref
         if self.affiliation:
             data["affiliation"] = self.affiliation.short_name
         return data

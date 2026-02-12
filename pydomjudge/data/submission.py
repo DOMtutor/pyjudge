@@ -222,10 +222,8 @@ class ContestDescriptionDto:
 
     def serialize(self):
         data: dict[str, str | float] = {"key": self.contest_key}
-        if self.start is not None:
-            data["start"] = float(self.start)
-        if self.end is not None:
-            data["end"] = float(self.end)
+        put_if_present(data, "start", self.start)
+        put_if_present(data, "end", self.end)
         return data
 
     @staticmethod

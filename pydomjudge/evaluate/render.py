@@ -114,7 +114,7 @@ class ProblemRenderer(object):
                 bottom=summed,
             )
             summed += value
-        ax.set_xlim([-1, self.submission_buckets * self.seconds_per_bucket])
+        ax.set_xlim((-1, self.submission_buckets * self.seconds_per_bucket))
         ax.legend()
         ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
 

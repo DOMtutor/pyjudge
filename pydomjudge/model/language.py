@@ -51,7 +51,7 @@ class PathFile(FileData):
 
 
 @dataclasses.dataclass
-class Executable(abc.ABC):
+class Executable:
     @staticmethod
     def get_directory_contents(directory: pathlib.Path) -> Collection[PathFile]:
         return [

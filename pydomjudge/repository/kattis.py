@@ -1019,10 +1019,10 @@ class Repository(object):
     @staticmethod
     def get_checker_data_of(
         problem: RepositoryProblem,
-    ) -> Optional[tuple[str, pathlib.Path]]:
+    ) -> tuple[str, pathlib.Path] | None:
         validation_directory = problem.directory / "output_validators"
-        checker_directory: Optional[pathlib.Path] = None
-        checker_language: Optional[str] = None
+        checker_directory: pathlib.Path | None = None
+        checker_language: str | None = None
 
         if validation_directory.exists():
             checker_files = list(validation_directory.iterdir())

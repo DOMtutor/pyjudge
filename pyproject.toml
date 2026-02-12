@@ -19,7 +19,8 @@ dependencies = [
     "problemtools",
     "pypdf>=5.3.0",
     "bcrypt>=4",
-    "chardet>=5"
+    "chardet>=5",
+    "matplotlib"
 ]
 
 [project.scripts]
