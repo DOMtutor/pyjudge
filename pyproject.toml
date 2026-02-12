@@ -38,6 +38,7 @@ include = ["pydomjudge*"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
 "pydomjudge.repository" = ["languages.yml"]
+"pydomjudge" = ["default_wordlist.txt"]
 
 [build-system]
 requires = ["setuptools"]

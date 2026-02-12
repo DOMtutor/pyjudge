@@ -7,6 +7,7 @@ from pydomjudge import util
 from pydomjudge.data.teams import TeamDto
 from pydomjudge.model import Verdict
 from pydomjudge.model.submission import TestcaseVerdict
+from pydomjudge.util import get_map_if_present, put_if_present
 
 
 @dataclasses.dataclass
@@ -140,8 +141,7 @@ class SubmissionDto:
             "too_late": self.too_late,
             "results": [c.serialize() for c in self.case_result],
         }
-        if self.maximum_runtime is not None:
-            data["runtime"] = self.maximum_runtime
+        put_if_present(data, "runtime", self.maximum_runtime)
         if self.verdict is not None:
             data["verdict"] = self.verdict.serialize()
         if self.files and not exclude_files_if_present:
@@ -157,9 +157,7 @@ class SubmissionDto:
             problem_key=data["problem"],
             language_key=data["language"],
             submission_time=data["time"],
-            verdict=Verdict.parse(data["verdict"])
-            if data.get("verdict", None) is not None
-            else None,
+            verdict=get_map_if_present(data, "verdict", Verdict.parse),
             too_late=data["too_late"],
             files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
             case_result=[TestcaseResultDto.parse(result) for result in data["results"]],
@@ -195,10 +193,8 @@ class ClarificationDto:
             "jury": self.from_jury,
             "body": self.body,
         }
-        if self.contest_problem_key is not None:
-            data["contest_problem"] = self.contest_problem_key
-        if self.response_to is not None:
-            data["response"] = self.response_to
+        put_if_present(data, "contest_problem", self.contest_problem_key)
+        put_if_present(data, "response", self.response_to)
         return data
 
     @staticmethod
@@ -234,12 +230,8 @@ class ContestDescriptionDto:
 
     @staticmethod
     def parse(data):
-        start = data.get("start", None)
-        if start is not None:
-            start = float(start)
-        end = data.get("end", None)
-        if end is not None:
-            end = float(end)
+        start = get_map_if_present(data, "start", float)
+        end = get_map_if_present(data, "end", float)
         return ContestDescriptionDto(contest_key=data["key"], start=start, end=end)
 
 
@@ -253,7 +245,7 @@ class ContestDataDto:
     clarifications: list[ClarificationDto]
 
     def serialize(self):
-        data = {
+        return {
             "description": self.description.serialize(),
             "teams": [team.serialize() for team in self.teams.values()],
             "languages": self.languages,
@@ -263,7 +255,6 @@ class ContestDataDto:
                 clarification.serialize() for clarification in self.clarifications
             ],
         }
-        return data
 
     @staticmethod
     def parse(data) -> "ContestDataDto":

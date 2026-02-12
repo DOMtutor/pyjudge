@@ -1,5 +1,7 @@
 import dataclasses
 
+from pydomjudge.util import put_if_present
+
 
 @dataclasses.dataclass
 class UserDto(object):
@@ -40,8 +42,7 @@ class TeamDto(object):
             "display_name": self.display_name,
             "members": [user.serialize() for user in self.members],
         }
-        if self.category_name is not None:
-            data["category"] = self.category_name
+        put_if_present(data, "category", self.category_name)
         return data
 
     @staticmethod

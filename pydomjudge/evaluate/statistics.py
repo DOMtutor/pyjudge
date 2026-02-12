@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import itertools
+import logging
 import math
 import statistics
 from collections import defaultdict
@@ -11,6 +12,8 @@ import pytz
 from pydomjudge.data.submission import SubmissionDto, ContestDataDto
 from pydomjudge.data.teams import TeamDto
 from pydomjudge.model import Verdict
+
+log = logging.getLogger(__name__)
 
 
 def all_false(_: Any) -> bool:
@@ -116,6 +119,7 @@ class ProblemGroupStatistics(object):
         verdict_count: dict[Verdict, int] = defaultdict(lambda: 0)
         verdicts_by_time: dict[Verdict, list[float]] = defaultdict(list)
         for submission in submissions:
+            assert submission.verdict is not None
             verdicts_by_time[submission.verdict].append(submission.submission_time)
 
         return ProblemGroupStatistics(
@@ -159,7 +163,10 @@ class ContestStatistics(object):
     problem_statistics_by_key: dict[str, ProblemStatistics]
 
     @staticmethod
-    def of(contest_data: ContestDataDto, team_filter: Callable[[TeamDto], bool] = None):
+    def of(
+        contest_data: ContestDataDto,
+        team_filter: Callable[[TeamDto], bool] | None = None,
+    ):
         if team_filter is None:
 
             def team_filter(_: TeamDto) -> bool:
@@ -282,6 +289,13 @@ class SummaryStatistics(object):
             ):
                 continue
 
+            contest_description = contest_data_by_key[
+                submission.contest_key
+            ].description
+            contest_start = contest_description.start
+            contest_end = contest_description.end
+            assert contest_start is not None and contest_end is not None
+
             problem_unique_key = (
                 submission.contest_key,
                 submission.contest_problem_key,
@@ -301,11 +315,6 @@ class SummaryStatistics(object):
                 set(user.login_name for user in submission_team.members)
             )
 
-            contest_description = contest_data_by_key[
-                submission.contest_key
-            ].description
-            contest_start = contest_description.start
-            contest_end = contest_description.end
             submissions_by_time_remaining[
                 int(
                     (
