@@ -176,7 +176,7 @@ def create_or_update_teams(
             # Reference to domjudge/webapp/src/Entity/Team.php
             cursor.execute(
                 "UPDATE team SET display_name = %s, categoryid = %s, affilid = %s, externalid = %s WHERE teamid = %s",
-                (team.display_name, team_category, affiliation_id, team.name, team_id),
+                (team.display_name, team_category, affiliation_id, team.key, team_id),
             )
         else:
             log.debug("Creating team %s", team.name)
@@ -184,7 +184,7 @@ def create_or_update_teams(
             cursor.execute(
                 "INSERT INTO team (name, display_name, categoryid, affilid, externalid) "
                 "VALUES (%s, %s, %s, %s, %s)",
-                (team.name, team.display_name, team_category, affiliation_id, team.name),
+                (team.name, team.display_name, team_category, affiliation_id, team.key),
             )
             team_id = cursor.lastrowid
             existing_teams[team] = team_id
