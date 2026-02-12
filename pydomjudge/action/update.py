@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 import time
-import hashlib
 import uuid
 
 from collections import defaultdict
