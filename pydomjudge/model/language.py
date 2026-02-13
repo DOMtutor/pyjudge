@@ -86,29 +86,6 @@ class Executable(abc.ABC):
         file_info.sort(key=lambda x: x['filename'])
         return file_info
 
-    # def make_zip(self) -> Tuple[bytes, str]:
-    #     import io
-    #     import zipfile
-    #     import shutil
-    #     import hashlib
-    #
-    #     zip_file = io.BytesIO()
-    #     with zipfile.ZipFile(
-    #         zip_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=False
-    #     ) as z:
-    #         for file in sorted(self.contents):
-    #             info = zipfile.ZipInfo(filename="/".join(file.relative_path))
-    #             info.external_attr = 0o100444 << 16
-    #             if file.relative_path[-1] in {"build", "run"}:
-    #                 info.external_attr |= 0o111 << 16
-    #
-    #             with file.open() as f:
-    #                 with z.open(info, mode="w") as d:
-    #                     shutil.copyfileobj(f, d)
-    #
-    #     byte_value = zip_file.getvalue()
-    #     return byte_value, hashlib.md5(byte_value).hexdigest()
-
     def __str__(self):
         return f"{self.key}({self.executable_type})"
 

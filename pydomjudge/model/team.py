@@ -115,7 +115,7 @@ class Team(object):
             members.append(user_by_name[member_name])
 
         return Team(
-            key=name,
+            key=data["key"],
             name=name,
             display_name=data["display_name"],
             members=members,
@@ -129,6 +129,7 @@ class Team(object):
 
     def serialize(self):
         data = {
+            "key": self.key,
             "name": self.name,
             "display_name": self.display_name,
             "category": self.category.json_ref,

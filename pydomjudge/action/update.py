@@ -318,7 +318,6 @@ def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
     )
 
     text_data, text_type = problem.problem_text
-    # problemtext -> problem_statement_content (problem)
     cursor.execute(
         "UPDATE problem SET problem_statement_content = %s, problemstatement_type = %s WHERE probid = %s",
         (text_data, text_type, problem_id),
@@ -358,7 +357,6 @@ def create_or_update_problem_data(
     if time_limit <= 0:
         time_limit = 0.1
 
-    # problemtext_type -> problemstatement_type (problem)
     cursor.execute(
         "UPDATE problem "
         "SET problemstatement_type = %s, special_compare_args = %s, "
@@ -400,7 +398,6 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
 
     testcases_by_name: Dict[str, DbTestCase] = {}
     leftover_cases = []
-    # `rank` -> ranknumber
     cursor.execute(
         "SELECT t.testcaseid, t.orig_input_filename, t.description, t.ranknumber, "
         "t.md5sum_input, t.md5sum_output "
@@ -520,7 +517,6 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             maximal_rank += 1
             case_rank = maximal_rank
             testcase_data.extend([maximal_rank, problem_id])
-            # `rank` -> ranknumber
             cursor.execute(
                 "INSERT INTO testcase (orig_input_filename, description, md5sum_input, md5sum_output, "
                 "sample, image_type, deleted, ranknumber, probid) "
@@ -580,13 +576,11 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
         )
         for _, case in rank_update:
             maximal_rank += 1
-            # `rank` -> ranknumber
             cursor.execute(
                 "UPDATE testcase SET ranknumber = %s WHERE testcaseid = %s",
                 (maximal_rank, case.case_id),
             )
         for new_rank, case in rank_update:
-            # `rank` -> ranknumber
             cursor.execute(
                 "UPDATE testcase SET ranknumber = %s WHERE testcaseid = %s",
                 (new_rank, case.case_id),
@@ -1140,7 +1134,7 @@ def create_problem_submissions(
                     'memory_limit': int(mem_limit),
                     'output_limit': int(output_limit),
                     'process_limit': int(config_values.get('process_limit', 64)),
-                    'entry_point': None, # uploaded submissions cannot have entry points?
+                    'entry_point': None,
                     'pass_limit': int(multipass_limit) if multipass_limit else 1,
                     'hash': run_hash,
                     'overshoot': 0
@@ -1151,7 +1145,7 @@ def create_problem_submissions(
                     'script_memory_limit': int(config_values.get('script_memory_limit', 2097152)),
                     'script_filesize_limit': int(config_values.get('script_filesize_limit', 540672)),
                     'compare_args': compare_args if compare_args else '',
-                    'combined_run_compare': False, # let's see
+                    'combined_run_compare': False,
                     'hash': compare_hash
                 })
 
@@ -1178,7 +1172,6 @@ def create_problem_submissions(
                     new_submission_id,
                 )
 
-                # `rank` -> ranknumber
                 cursor.execute(
                     "INSERT INTO submission_file (submitid, filename, ranknumber, sourcecode) "
                     "VALUES (%s, %s, 1, %s)",
@@ -1217,7 +1210,6 @@ def create_problem_submissions(
                     )
 
                 # Create queuetask
-                # Don't probably need prios
                 cursor.execute(
                     "INSERT INTO queuetask (judgingid, priority, teampriority, starttime) "
                     "VALUES (%s, 0, 0, NULL)",
@@ -1282,7 +1274,7 @@ def create_or_update_contest_problems(
             cursor.execute(
                 "UPDATE contestproblem SET "
                 "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
-                "color = %s, lazy_eval_results = 2 "
+                "color = %s, lazy_eval_results = 0 "
                 "WHERE cid = %s AND probid = %s",
                 (
                     contest_problem.name,
@@ -1454,7 +1446,6 @@ def create_or_update_affiliations(
     }
     for affiliation in affiliations:
         if affiliation in affiliation_ids:
-            # comments -> internalcomments (team_affiliation)
             cursor.execute(
                 "UPDATE team_affiliation SET "
                 "externalid = %s, shortname = %s, name = %s, country = %s, internalcomments = NULL "
@@ -1468,7 +1459,6 @@ def create_or_update_affiliations(
                 ),
             )
         else:
-            # comments -> internalcomments (team_affiliation)
             cursor.execute(
                 "INSERT INTO team_affiliation (externalid, shortname, name, country, internalcomments) "
                 "VALUES (%s, %s, %s, %s, NULL) ",
