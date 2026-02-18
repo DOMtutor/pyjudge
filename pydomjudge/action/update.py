@@ -1008,7 +1008,6 @@ def create_problem_submissions(
                 existing_file_hashes = submission_files[existing_id]
 
                 if language.key != existing_language_id:
-                    # Typo from the find and replace?
                     log.info("%s changed language?", submission)
                     insert = True
                 elif set(file_names) != set(existing_file_hashes.keys()):
@@ -1063,10 +1062,10 @@ def create_problem_submissions(
                     (language.key,)
                 )
                 lang_result = cursor.fetchone()
-                if lang_result:
-                    lang_extensions, filter_compiler_files, time_factor, compile_script_id, compile_hash = lang_result
-                else:
+
+                if not lang_result:
                     raise ValueError(f"Language {language.key} not found")
+                lang_extensions, filter_compiler_files, time_factor, compile_script_id, compile_hash = lang_result
 
                 # Retrieve problem limits
                 cursor.execute(
@@ -1076,10 +1075,10 @@ def create_problem_submissions(
                     (problem_id,)
                 )
                 prob_result = cursor.fetchone()
-                if prob_result:
-                    time_limit, mem_limit, output_limit, compare_args, special_compare, multipass_limit = prob_result
-                else:
+
+                if not prob_result:
                     raise ValueError(f"Problem {problem_id} not found")
+                time_limit, mem_limit, output_limit, compare_args, special_compare, multipass_limit = prob_result
 
                 # Some default values if not set
                 if not mem_limit:
