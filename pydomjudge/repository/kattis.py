@@ -447,8 +447,6 @@ class RepositoryProblem(Problem):
 
         verify.ProblemAspect.bail_on_error = True
         with self as p:
-            self._generate_testcases()
-
             p.config.check(None)
             p.attachments.check(None)
             # input_format_validators is outdated
