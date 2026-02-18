@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+import hashlib
 
 from collections import defaultdict
 from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
