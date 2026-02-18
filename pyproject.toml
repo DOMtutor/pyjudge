@@ -1,6 +1,6 @@
 [project]
 name = "PyDOMjudge"
-version = "0.2.1"
+version = "0.2.15"
 description = "A library to ease interaction with DOMjudge"
 authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
 
@@ -19,7 +19,8 @@ dependencies = [
     "problemtools",
     "pypdf>=5.3.0",
     "bcrypt>=4",
-    "chardet>=5"
+    "chardet>=5",
+    "matplotlib"
 ]
 
 [project.scripts]
@@ -27,6 +28,7 @@ dt_judge_upload = "pydomjudge.scripts.upload:main"
 dt_judge_export = "pydomjudge.scripts.export:main"
 dt_kattis_find = "pydomjudge.scripts.find_problem:main"
 dt_kattis_check = "pydomjudge.scripts.check:main"
+dt_kattis_get = "pydomjudge.scripts.get:main"
 dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
 dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
 
@@ -38,6 +40,7 @@ include = ["pydomjudge*"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
 "pydomjudge.repository" = ["languages.yml"]
+"pydomjudge" = ["default_wordlist.gz"]
 
 [build-system]
 requires = ["setuptools"]

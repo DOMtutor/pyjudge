@@ -3,7 +3,6 @@ import json
 import logging
 import pathlib
 import sys
-import gzip
 from collections import defaultdict
 from typing import Optional
 
@@ -15,24 +14,13 @@ from pydomjudge.data.submission import (
 )
 import pydomjudge.scripts.db as db
 from pydomjudge.scripts.db import Database
+from pydomjudge.util import write_json_to
 
 log = logging.getLogger(__name__)
 
 
-def _write_to(data, destination: Optional[pathlib.Path]):
-    if destination is None:
-        json.dump(data, sys.stdout)
-    else:
-        if destination.suffix in {".gz", ".gzip"}:
-            with gzip.open(str(destination), mode="wt") as f:
-                json.dump(data, f)
-        else:
-            with destination.open(mode="wt") as f:
-                json.dump(data, f)
-
-
 def write_contest(
-    database: Database, contest_key: str, destination: Optional[pathlib.Path]
+    database: Database, contest_key: str, destination: pathlib.Path | None
 ):
     with database as connection:
         teams = query.find_non_system_teams(connection)
@@ -68,7 +56,7 @@ def write_contest(
         submissions=submissions,
         clarifications=clarifications,
     ).serialize()
-    _write_to(data, destination)
+    write_json_to(data, destination)
 
 
 def write_submission_files(
@@ -84,7 +72,7 @@ def write_submission_files(
         ]
 
     data = [submission.serialize() for submission in submissions]
-    _write_to(data, destination)
+    write_json_to(data, destination)
 
 
 def write_submissions_folder(
@@ -191,7 +179,7 @@ def main():
         "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
     )
     file_export_parser = subparsers.add_parser(
-        "files", help="All submitted files of a contest, written to disk"
+        "submission_files", help="All submitted files of a contest, written to disk"
     )
     file_export_parser.add_argument("contest", help="The contest key")
     file_export_parser.add_argument(

@@ -1,5 +1,6 @@
 import dataclasses
-from typing import List, Optional
+
+from pydomjudge.util import put_if_present
 
 
 @dataclasses.dataclass
@@ -29,8 +30,8 @@ class UserDto(object):
 class TeamDto(object):
     key: str
     display_name: str
-    category_name: Optional[str]
-    members: List[UserDto]
+    category_name: str | None
+    members: list[UserDto]
 
     def __str__(self):
         return f"{self.key}"
@@ -41,8 +42,7 @@ class TeamDto(object):
             "display_name": self.display_name,
             "members": [user.serialize() for user in self.members],
         }
-        if self.category_name is not None:
-            data["category"] = self.category_name
+        put_if_present(data, "category", self.category_name)
         return data
 
     @staticmethod

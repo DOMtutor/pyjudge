@@ -1,10 +1,11 @@
 import dataclasses
 import datetime
 import itertools
+import logging
 import math
 import statistics
 from collections import defaultdict
-from typing import Set, Dict, List, Callable
+from typing import Callable, Any
 
 import pytz
 
@@ -12,25 +13,31 @@ from pydomjudge.data.submission import SubmissionDto, ContestDataDto
 from pydomjudge.data.teams import TeamDto
 from pydomjudge.model import Verdict
 
+log = logging.getLogger(__name__)
+
+
+def all_false(_: Any) -> bool:
+    return False
+
 
 @dataclasses.dataclass
 class ProblemGroupStatistics(object):
     submission_count: int
     correct_submission_count: int
-    teams_with_attempt: Set[str]
-    teams_with_solution: Set[str]
-    submissions_until_correct_by_team: Dict[str, int]
+    teams_with_attempt: set[str]
+    teams_with_solution: set[str]
+    submissions_until_correct_by_team: dict[str, int]
 
-    first_teams: List[str]
-    fastest_teams: List[str]
-    shortest_teams: List[str]
-    smallest_teams: List[str]
+    first_teams: list[tuple[str, SubmissionDto]]
+    fastest_teams: list[tuple[str, SubmissionDto]]
+    shortest_teams: list[tuple[str, SubmissionDto]]
+    smallest_teams: list[tuple[str, SubmissionDto]]
 
-    verdict_count: Dict[Verdict, int]
-    verdicts_by_time: Dict[Verdict, List[float]]
+    verdict_count: dict[Verdict, int]
+    verdicts_by_time: dict[Verdict, list[float]]
 
     @staticmethod
-    def of(submissions: List[SubmissionDto]):
+    def of(submissions: list[SubmissionDto]):
         correct_submissions = [
             submission
             for submission in submissions
@@ -38,10 +45,10 @@ class ProblemGroupStatistics(object):
         ]
         submission_count: int = len(submissions)
         correct_submission_count: int = len(correct_submissions)
-        teams_with_attempt: Set[str] = set(
+        teams_with_attempt: set[str] = set(
             submission.team_key for submission in submissions
         )
-        teams_with_solution: Set[str] = set(
+        teams_with_solution: set[str] = set(
             submission.team_key for submission in correct_submissions
         )
 
@@ -64,7 +71,7 @@ class ProblemGroupStatistics(object):
             if correct_submissions:
                 correct_submissions_by_team[team_key] = correct_submissions
 
-        first_correct_submission_by_team: Dict[str, SubmissionDto] = {
+        first_correct_submission_by_team: dict[str, SubmissionDto] = {
             team_key: min(team_submissions, key=lambda s: s.submission_time)
             for team_key, team_submissions in correct_submissions_by_team.items()
         }
@@ -84,7 +91,7 @@ class ProblemGroupStatistics(object):
             list(first_correct_submission_by_team.items()),
             key=lambda item: item[1].submission_time,
         )
-        fastest_correct_submission_by_team: Dict[str, SubmissionDto] = {
+        fastest_correct_submission_by_team: dict[str, SubmissionDto] = {
             team_key: min(team_submissions, key=lambda s: s.maximum_runtime)
             for team_key, team_submissions in correct_submissions_by_team.items()
         }
@@ -92,7 +99,7 @@ class ProblemGroupStatistics(object):
             list(fastest_correct_submission_by_team.items()),
             key=lambda item: item[1].maximum_runtime,
         )
-        shortest_correct_submission_by_team: Dict[str, SubmissionDto] = {
+        shortest_correct_submission_by_team: dict[str, SubmissionDto] = {
             team_key: min(team_submissions, key=lambda s: s.line_count)
             for team_key, team_submissions in correct_submissions_by_team.items()
         }
@@ -100,7 +107,7 @@ class ProblemGroupStatistics(object):
             list(shortest_correct_submission_by_team.items()),
             key=lambda item: item[1].line_count,
         )
-        smallest_correct_submission_by_team: Dict[str, SubmissionDto] = {
+        smallest_correct_submission_by_team: dict[str, SubmissionDto] = {
             team_key: min(team_submissions, key=lambda s: s.byte_size)
             for team_key, team_submissions in correct_submissions_by_team.items()
         }
@@ -109,9 +116,10 @@ class ProblemGroupStatistics(object):
             key=lambda item: item[1].byte_size,
         )
 
-        verdict_count: Dict[Verdict, int] = defaultdict(lambda: 0)
-        verdicts_by_time: Dict[Verdict, List[float]] = defaultdict(list)
+        verdict_count: dict[Verdict, int] = defaultdict(lambda: 0)
+        verdicts_by_time: dict[Verdict, list[float]] = defaultdict(list)
         for submission in submissions:
+            assert submission.verdict is not None
             verdicts_by_time[submission.verdict].append(submission.submission_time)
 
         return ProblemGroupStatistics(
@@ -131,11 +139,11 @@ class ProblemGroupStatistics(object):
 
 @dataclasses.dataclass
 class ProblemStatistics(object):
-    by_language: Dict[str, ProblemGroupStatistics]
+    by_language: dict[str, ProblemGroupStatistics]
     overall: ProblemGroupStatistics
 
     @staticmethod
-    def of(submissions: List[SubmissionDto]):
+    def of(submissions: list[SubmissionDto]):
         submissions_by_language = defaultdict(list)
         for submission in submissions:
             submissions_by_language[submission.language_key].append(submission)
@@ -150,12 +158,15 @@ class ProblemStatistics(object):
 
 @dataclasses.dataclass
 class ContestStatistics(object):
-    team_name_by_key: Dict[str, str]
-    language_name_by_key: Dict[str, str]
-    problem_statistics_by_key: Dict[str, ProblemStatistics]
+    team_name_by_key: dict[str, str]
+    language_name_by_key: dict[str, str]
+    problem_statistics_by_key: dict[str, ProblemStatistics]
 
     @staticmethod
-    def of(contest_data: ContestDataDto, team_filter: Callable[[TeamDto], bool] = None):
+    def of(
+        contest_data: ContestDataDto,
+        team_filter: Callable[[TeamDto], bool] | None = None,
+    ):
         if team_filter is None:
 
             def team_filter(_: TeamDto) -> bool:
@@ -178,7 +189,7 @@ class ContestStatistics(object):
             problem = contest_data.problems[submission.contest_problem_key]
             submissions_by_problem[problem].append(submission)
 
-        problem_statistics_by_key: Dict[str, ProblemStatistics] = {
+        problem_statistics_by_key: dict[str, ProblemStatistics] = {
             problem_key: ProblemStatistics.of(submissions)
             for problem_key, submissions in submissions_by_problem.items()
         }
@@ -191,7 +202,7 @@ class ContestStatistics(object):
 
 @dataclasses.dataclass
 class SummaryStatistics(object):
-    contest_keys: List[str]
+    contest_keys: list[str]
 
     total_active_users: int
     total_contest_count: int
@@ -208,25 +219,25 @@ class SummaryStatistics(object):
 
     minimum_solution_line_count: int
 
-    submissions_per_day: List[int]
-    submissions_per_hour: List[int]
-    submissions_per_day_hour: List[List[int]]
-    submissions_by_time_remaining: List[int]
-    submissions_by_contest: Dict[str, int]
-    submissions_by_problem: Dict[str, int]
-    submissions_by_language: Dict[str, int]
-    submissions_by_language_correct: Dict[str, int]
+    submissions_per_day: list[int]
+    submissions_per_hour: list[int]
+    submissions_per_day_hour: list[list[int]]
+    submissions_by_time_remaining: list[int]
+    submissions_by_contest: dict[str, int]
+    submissions_by_problem: dict[str, int]
+    submissions_by_language: dict[str, int]
+    submissions_by_language_correct: dict[str, int]
 
-    clarifications_per_day: List[int]
-    clarifications_per_hour: List[int]
-    clarifications_by_contest: Dict[str, int]
-    clarification_response_times: List[int]
-    clarifications_by_key: Dict[str, int]
-    clarifications_by_problem: Dict[str, int]
+    clarifications_per_day: list[int]
+    clarifications_per_hour: list[int]
+    clarifications_by_contest: dict[str, int]
+    clarification_response_times: list[int]
+    clarifications_by_key: dict[str, int]
+    clarifications_by_problem: dict[str, int]
 
     @staticmethod
     def of(
-        contests_data: List[ContestDataDto],
+        contests_data: list[ContestDataDto],
         timezone: pytz.BaseTzInfo,
         submission_filter=None,
     ) -> "SummaryStatistics":
@@ -278,6 +289,13 @@ class SummaryStatistics(object):
             ):
                 continue
 
+            contest_description = contest_data_by_key[
+                submission.contest_key
+            ].description
+            contest_start = contest_description.start
+            contest_end = contest_description.end
+            assert contest_start is not None and contest_end is not None
+
             problem_unique_key = (
                 submission.contest_key,
                 submission.contest_problem_key,
@@ -297,11 +315,6 @@ class SummaryStatistics(object):
                 set(user.login_name for user in submission_team.members)
             )
 
-            contest_description = contest_data_by_key[
-                submission.contest_key
-            ].description
-            contest_start = contest_description.start
-            contest_end = contest_description.end
             submissions_by_time_remaining[
                 int(
                     (
