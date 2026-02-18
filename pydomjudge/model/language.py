@@ -1,6 +1,7 @@
 import abc
 import dataclasses
 import enum
+import hashlib
 import pathlib
 from typing import Collection
 
@@ -65,28 +66,25 @@ class Executable:
     executable_type: ExecutableType
     contents: Collection[FileData]
 
-    def make_zip(self) -> tuple[bytes, str]:
-        import io
-        import zipfile
-        import shutil
-        import hashlib
+    def file_info(self) -> list[dict]:
+        file_info = []
+        for file_data in self.contents:
+            with file_data.open() as f:
+                file_content = f.read()
 
-        zip_file = io.BytesIO()
-        with zipfile.ZipFile(
-            zip_file, mode="w", compression=zipfile.ZIP_DEFLATED, allowZip64=False
-        ) as z:
-            for file in sorted(self.contents):
-                info = zipfile.ZipInfo(filename="/".join(file.relative_path))
-                info.external_attr = 0o100444 << 16
-                if file.relative_path[-1] in {"build", "run"}:
-                    info.external_attr |= 0o111 << 16
+            filename = file_data.relative_path[-1]
+            file_hash = hashlib.md5(file_content).hexdigest()
+            is_executable = 1 if filename in ('build', 'run') else 0
 
-                with file.open() as f:
-                    with z.open(info, mode="w") as d:
-                        shutil.copyfileobj(f, d)
+            file_info.append({
+                'filename': filename,
+                'content': file_content,
+                'hash': file_hash,
+                'is_executable': is_executable,
+            })
 
-        byte_value = zip_file.getvalue()
-        return byte_value, hashlib.md5(byte_value).hexdigest()
+        file_info.sort(key=lambda x: x['filename'])
+        return file_info
 
     def __str__(self):
         return f"{self.key}({self.executable_type})"
