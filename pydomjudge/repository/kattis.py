@@ -725,41 +725,41 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-        for category_directory in (self.directory / "data").iterdir():
-            if not category_directory.is_dir():
-                continue
-            for seed_file in category_directory.glob("*.seed"):
-                self.generate_input_if_required(seed_file)
-
-            for input_file in category_directory.glob("*.in"):
-                if not input_file.is_file():
+            for category_directory in (self.directory / "data").iterdir():
+                if not category_directory.is_dir():
                     continue
-                if (
-                    any(
-                        input_file.name.startswith(s)
-                        for s in [
-                            "small_",
-                            "medium_",
-                            "large_",
-                            "huge_",
-                            "tiny_",
-                        ]
-                    )
-                    and not input_file.with_suffix(".seed").exists()
-                ):
-                    log.warning(
-                        "Input file %s has reserved name but no matching seed file",
-                        input_file,
-                    )
+                for seed_file in category_directory.glob("*.seed"):
+                    self.generate_input_if_required(seed_file)
 
-                answer_file = input_file.with_suffix(".ans")
-                self.generate_answer_if_required(input_file, answer_file)
-                if not answer_file.stat().st_size:
-                    answer_file.unlink(missing_ok=True)
-                    continue
-                self._test_cases.append(
-                    RepositoryTestCase(category_directory / input_file.stem)
-                )
+                for input_file in category_directory.glob("*.in"):
+                    if not input_file.is_file():
+                        continue
+                    if (
+                        any(
+                            input_file.name.startswith(s)
+                            for s in [
+                                "small_",
+                                "medium_",
+                                "large_",
+                                "huge_",
+                                "tiny_",
+                            ]
+                        )
+                        and not input_file.with_suffix(".seed").exists()
+                    ):
+                        log.warning(
+                            "Input file %s has reserved name but no matching seed file",
+                            input_file,
+                        )
+
+                    answer_file = input_file.with_suffix(".ans")
+                    self.generate_answer_if_required(input_file, answer_file)
+                    if not answer_file.stat().st_size:
+                        answer_file.unlink(missing_ok=True)
+                        continue
+                    self._test_cases.append(
+                        RepositoryTestCase(category_directory / input_file.stem)
+                    )
 
         return self._test_cases
 
