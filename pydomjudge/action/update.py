@@ -211,9 +211,10 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
     file_info = executable.file_info()
 
     combined = "".join(
-        f['hash'] + f['filename'] + str(f['is_executable'])
+        f"{f['hash']}{f['filename']}{f['is_executable']}"
         for f in file_info
     )
+
     immutable_hash = hashlib.md5(combined.encode()).hexdigest()
 
     cursor.execute(
@@ -598,9 +599,9 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             else:
                 image, thumbnail = image_data
 
-            # I think I confused myself here with another error.
-            # No REPLACE INTO as testcaseid is not necessarily unique???
-            # `tc_contentid` is the primary key, which automatically gets incremented.
+            # Cannot `REPLACE INTO` or `ON DUPLICATE KEY UPDATE`,
+            # because the primary key is `tc_contentid` (auto-increment).
+            # It would result in always inserting a new row instead of replacing.
             # Delete testcase content
             cursor.execute(
                 "DELETE FROM testcase_content WHERE testcaseid = %s",
@@ -1149,7 +1150,6 @@ def create_problem_submissions(
                     'hash': compare_hash
                 })
 
-                # Judgehost column is removed since judgehost is no longer assigned on the submission itself
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
                     "langid, submittime, valid, expected_results) "

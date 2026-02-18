@@ -245,10 +245,7 @@ class RepositoryProblem(Problem):
     def link_or_copy_problem_statement(
         problem: "RepositoryProblem", destination: pathlib.Path, force=False
     ):
-        # Also need to copy problem.yaml for pdf generation
-        # problemtools/problemtools/problem2pdf.py
-        # problemtools/problemtools/statement_util.py
-        # problemtools/problemtools/metadata.py
+
         problem_paths = ["problem_statement", "data/sample", "problem.yaml"]
 
         repository_path = problem.directory
@@ -435,8 +432,6 @@ class RepositoryProblem(Problem):
 
         verify.ProblemAspect.bail_on_error = True
         with self as p:
-            # generate_answer_if_required is called only after reference_submission is set to the source code?
-            # This fixes "No correct solution found for problem P(helloworld)" error.
             self._generate_testcases()
 
             p.config.check(None)
@@ -446,8 +441,6 @@ class RepositoryProblem(Problem):
             p.output_validators.check(None)
             p.graders.check(None)
 
-            # It now expects to pass Context object not the raw args
-            # problemtools/problemtools/verifyproblem.py
             args = argparse.Namespace(
                 data_filter=re.compile('.*'),
                 submission_filter=re.compile('.*'),
@@ -507,8 +500,6 @@ class RepositoryProblem(Problem):
                 build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
-                # Expected Namespace object instead of ConvertOptions
-                # problemtools/problemtools/problem2pdf.py
                 options = argparse.Namespace(
                     language=lang,
                     destfile=str(build_pdf.absolute()),
@@ -714,7 +705,6 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-        # Removed with self: to avoid generating two contexts
         for category_directory in (self.directory / "data").iterdir():
             if not category_directory.is_dir():
                 continue
