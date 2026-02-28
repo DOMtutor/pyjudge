@@ -439,14 +439,15 @@ class RepositoryProblem(Problem):
                 return
             last_verified.unlink()
 
-        self._load_testcases()
-
         import problemtools.run.limit as limit
 
         limit.check_limit_capabilities(self)
 
         verify.ProblemAspect.bail_on_error = True
+
         with self as p:
+            self._load_testcases()
+
             p.config.check(None)
             p.attachments.check(None)
             # input_format_validators is outdated
