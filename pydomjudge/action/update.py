@@ -374,6 +374,12 @@ def create_or_update_problem_data(
         ),
     )
 
+    if text_data is not None:
+        cursor.execute(
+            "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
+            (problem_id, text_data),
+        )
+
     checker = problem.checker
     if checker is None:
         cursor.execute(
