@@ -3,12 +3,13 @@ from collections import defaultdict
 from typing import List, Collection, Tuple, Dict, Generator, Optional
 
 from pydomjudge.data.submission import (
-    SubmissionDto,
     SubmissionFileDto,
     ClarificationDto,
     ContestProblemDto,
     ContestDescriptionDto,
     TestcaseResultDto,
+    SubmissionWithFilesDto,
+    SubmissionDto,
 )
 from pydomjudge.data.teams import UserDto, TeamDto
 from pydomjudge.model import Verdict
@@ -94,7 +95,7 @@ def find_contest_description(
 
 
 def find_submissions(
-    database: Database, contest_key: str, only_valid=True
+    database: Database, contest_key: str, only_valid=True, include_files=True
 ) -> Generator[SubmissionDto, None, None]:
     with database.transaction_cursor(readonly=True) as cursor:
         contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
@@ -169,25 +170,26 @@ def find_submissions(
                 parse_judging_verdict(judging_result),
             )
 
-        cursor.execute(
-            f"SELECT "
-            f"  s.submitid, sf.filename, sf.sourcecode "
-            f"FROM submission s "
-            f"  JOIN submission_file sf on s.submitid = sf.submitid "
-            f"WHERE "
-            f"  s.submitid IN {list_param(submission_data)} "
-            f"GROUP BY s.submitid",
-            tuple(submission_data.keys()),
-        )
-        source_data = defaultdict(dict)
-        for submission_id, filename, content in cursor:
-            if isinstance(content, str):
-                content = content.encode("utf-8")
-            elif isinstance(content, bytearray):
-                content = bytes(content)
-            if not isinstance(content, bytes):
-                raise TypeError(type(content))
-            source_data[submission_id][filename] = content
+        source_data: dict[str, dict[str, bytes]] = defaultdict(dict)
+        if include_files:
+            cursor.execute(
+                f"SELECT "
+                f"  s.submitid, sf.filename, sf.sourcecode "
+                f"FROM submission s "
+                f"  JOIN submission_file sf on s.submitid = sf.submitid "
+                f"WHERE "
+                f"  s.submitid IN {list_param(submission_data)} "
+                f"GROUP BY s.submitid",
+                tuple(submission_data.keys()),
+            )
+            for submission_id, filename, content in cursor:
+                if isinstance(content, str):
+                    content = content.encode("utf-8")
+                elif isinstance(content, bytearray):
+                    content = bytes(content)
+                if not isinstance(content, bytes):
+                    raise TypeError(type(content))
+                source_data[submission_id][filename] = content
 
         cursor.execute(
             f"SELECT "
@@ -202,7 +204,11 @@ def find_submissions(
         testcase_ids = set()
         for judging_id, runtime, testcase_id, result in cursor:
             judging_testcases_db[judging_id].append(
-                (testcase_id, round(float(runtime), 3), TestcaseVerdict.parse(result))
+                (
+                    testcase_id,
+                    round(float(runtime), 3),
+                    TestcaseVerdict.from_string(result),
+                )
             )
             testcase_ids.add(testcase_id)
 
@@ -256,7 +262,7 @@ def find_submissions(
                 judging_result,
             )
 
-        yield SubmissionDto(
+        submission = SubmissionDto(
             team_key=team_key,
             contest_key=contest_key,
             contest_problem_key=contest_problem_key,
@@ -264,13 +270,20 @@ def find_submissions(
             language_key=language_key,
             verdict=judging_result,
             submission_time=submission_time,
-            files=[
-                SubmissionFileDto(filename, content)
-                for (filename, content) in source_data[submission_id].items()
-            ],
             too_late=contest_end < submission_time,
             case_result=testcases,
         )
+
+        if include_files:
+            yield SubmissionWithFilesDto(
+                **submission.model_dump(),
+                files=[
+                    SubmissionFileDto(filename=filename, content=content)
+                    for (filename, content) in source_data[submission_id].items()
+                ],
+            )
+        else:
+            yield submission
 
 
 def find_clarifications(
@@ -352,8 +365,8 @@ def find_clarifications(
         return clarifications_by_id.values()
 
 
-def find_non_system_teams(database: Database) -> List[TeamDto]:
-    system_categories = {category.database_name for category in SystemCategory}
+def find_non_system_teams(database: Database) -> list[TeamDto]:
+    system_categories: set[str] = {category.value.key for category in SystemCategory}
 
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
@@ -378,7 +391,12 @@ def find_non_system_teams(database: Database) -> List[TeamDto]:
                 UserDto(login_name=username, display_name=name, email=email)
             )
         return [
-            TeamDto(team_key, team_name, category, team_users[team_id])
+            TeamDto(
+                key=team_key,
+                display_name=team_name,
+                category_name=category,
+                members=team_users[team_id],
+            )
             for team_id, (team_key, team_name, category) in team_data.items()
         ]
 

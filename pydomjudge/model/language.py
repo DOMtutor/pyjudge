@@ -93,7 +93,7 @@ class Executable:
 
 
 @dataclasses.dataclass
-class Language(object):
+class Language:
     key: str
     name: str
     time_factor: float

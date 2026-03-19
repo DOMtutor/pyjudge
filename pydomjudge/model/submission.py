@@ -1,7 +1,8 @@
 import abc
-import dataclasses
 import enum
-from typing import Optional, Set
+from typing import Optional, Annotated
+
+from pydantic import PlainSerializer, BeforeValidator, BaseModel
 
 from .language import Language
 from .util import get_md5
@@ -26,7 +27,7 @@ class Verdict(enum.Enum):
         raise KeyError(key)
 
     @staticmethod
-    def parse(key):
+    def from_string(key):
         for verdict in Verdict:
             if verdict.value[1] == key:
                 return verdict
@@ -35,11 +36,15 @@ class Verdict(enum.Enum):
     def judge_key(self):
         return self.value[0]
 
-    def serialize(self):
+    def __str__(self):
         return self.value[1]
 
-    def __str__(self):
-        return self.serialize()
+
+PydanticVerdict = Annotated[
+    Verdict,
+    PlainSerializer(str, when_used="json"),
+    BeforeValidator(lambda v: Verdict.from_string(v) if isinstance(v, str) else v),
+]
 
 
 class TestcaseVerdict(enum.Enum):
@@ -60,7 +65,7 @@ class TestcaseVerdict(enum.Enum):
         raise KeyError(key)
 
     @staticmethod
-    def parse(key):
+    def from_string(key):
         for verdict in TestcaseVerdict:
             if verdict.value[1] == key:
                 return verdict
@@ -69,11 +74,17 @@ class TestcaseVerdict(enum.Enum):
     def judge_key(self):
         return self.value[0]
 
-    def serialize(self):
+    def __str__(self):
         return self.value[1]
 
-    def __str__(self):
-        return self.serialize()
+
+PydanticTestcaseVerdict = Annotated[
+    TestcaseVerdict,
+    PlainSerializer(str, when_used="json"),
+    BeforeValidator(
+        lambda v: TestcaseVerdict.from_string(v) if isinstance(v, str) else v
+    ),
+]
 
 
 class ProblemSubmission(abc.ABC):
@@ -91,12 +102,12 @@ class ProblemSubmission(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def language(self) -> Optional[Language]:
+    def language(self) -> Language | None:
         pass
 
     @property
     @abc.abstractmethod
-    def expected_results(self) -> Optional[Set[Verdict]]:
+    def expected_results(self) -> set[Verdict] | None:
         pass
 
     @property
@@ -113,8 +124,7 @@ class ProblemSubmission(abc.ABC):
         return f"S({self.file_name}@{','.join(map(str, self.expected_results))})"
 
 
-@dataclasses.dataclass
-class SubmissionAuthor(object):
+class SubmissionAuthor(BaseModel):
     key: str
     name: str
 

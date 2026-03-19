@@ -1,4 +1,3 @@
-import json
 import pathlib
 import sys
 
@@ -25,9 +24,6 @@ def main():
         role=UserRole.Admin,
     )
 
-    with pathlib.Path("admin.json").open(mode="wt") as f:
-        # noinspection PyTypeChecker
-        json.dump(
-            UsersDescription(users=[admin], teams=[], affiliations=[]).serialize(),
-            f,
-        )
+    pathlib.Path("admin.json").write_text(
+        UsersDescription(users=[admin], teams=[], affiliations=[]).model_dump_json()
+    )

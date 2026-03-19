@@ -20,7 +20,8 @@ dependencies = [
     "pypdf>=5.3.0",
     "bcrypt>=4",
     "chardet>=5",
-    "matplotlib"
+    "matplotlib",
+    "pydantic"
 ]
 
 [project.scripts]

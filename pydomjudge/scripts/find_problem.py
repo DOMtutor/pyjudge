@@ -1,7 +1,6 @@
 import argparse
 import pathlib
 import re
-import json
 from typing import List
 
 import pydomjudge.repository.kattis as kattis
@@ -47,9 +46,7 @@ def find_problems(
     problem_candidates = set()
     if args.contest:
         for contest_file in args.contest:
-            with contest_file.open(mode="rt") as f:
-                contest_data = json.load(f)
-            contest = Contest.parse(contest_data, problem_loader=repository.problems)
+            contest = Contest.load(contest_file.read_bytes(), repository.problems)
             for contest_problem in contest.problems:
                 problem_candidates.add(contest_problem.problem)
     else:

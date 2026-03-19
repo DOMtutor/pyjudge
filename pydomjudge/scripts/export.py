@@ -1,5 +1,5 @@
+from pydantic import BaseModel
 import argparse
-import json
 import logging
 import pathlib
 import sys
@@ -13,10 +13,35 @@ from pydomjudge.data.submission import (
     ContestDescriptionDto,
 )
 import pydomjudge.scripts.db as db
+from pydomjudge.data.teams import TeamDto
 from pydomjudge.scripts.db import Database
-from pydomjudge.util import write_json_to
+from pydomjudge.util import write_str_to
 
 log = logging.getLogger(__name__)
+
+
+class SubmissionsExport(BaseModel):
+    submissions: list[SubmissionDto]
+
+
+class SubmissionMetadata(BaseModel):
+    # [list(submission_file.parts) for submission_file in paths],
+    files: list[pathlib.Path]
+    data: SubmissionDto  # exclude_files_if_present=True
+
+
+class TeamMetadata(BaseModel):
+    submissions: list[SubmissionMetadata]
+
+
+class ProblemMetadata(BaseModel):
+    team_data: dict[str, TeamMetadata]
+
+
+class MetadataExport(BaseModel):
+    contest: ContestDescriptionDto
+    submissions: dict[str, ProblemMetadata]
+    teams: list[TeamDto]
 
 
 def write_contest(
@@ -48,15 +73,17 @@ def write_contest(
             if clarification.team_key in teams_by_key
         ]
 
-    data = ContestDataDto(
-        description=contest_description,
-        teams=teams_by_key,
-        languages=language_name_by_key,
-        problems=problem_key_by_contest_problem_key,
-        submissions=submissions,
-        clarifications=clarifications,
-    ).serialize()
-    write_json_to(data, destination)
+    write_str_to(
+        ContestDataDto(
+            description=contest_description,
+            teams=teams_by_key,
+            languages=language_name_by_key,
+            problems=problem_key_by_contest_problem_key,
+            submissions=submissions,
+            clarifications=clarifications,
+        ).model_dump_json(),
+        destination,
+    )
 
 
 def write_submission_files(
@@ -71,8 +98,9 @@ def write_submission_files(
             if submission.team_key in team_keys
         ]
 
-    data = [submission.serialize() for submission in submissions]
-    write_json_to(data, destination)
+    write_str_to(
+        SubmissionsExport(submissions=submissions).model_dump_json(), destination
+    )
 
 
 def write_submissions_folder(
@@ -105,7 +133,9 @@ def write_submissions_folder(
             )
         ].append(submission)
 
-    submission_metadata = defaultdict(lambda: defaultdict(list))
+    submission_metadata: dict[str, dict[str, list[SubmissionMetadata]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for (
         contest_problem_key,
         problem_key,
@@ -127,20 +157,28 @@ def write_submissions_folder(
                 paths.append(file_destination.relative_to(destination))
 
             submission_metadata[problem_key][team_key].append(
-                {
-                    "files": [list(submission_file.parts) for submission_file in paths],
-                    "data": submission.serialize(exclude_files_if_present=True),
-                }
+                SubmissionMetadata(
+                    files=paths,
+                    data=submission,
+                )
             )
-    with (destination / "metadata.json").open("wt") as f:
-        json.dump(
-            {
-                "contest": contest.serialize(),
-                "submissions": submission_metadata,
-                "teams": [team.serialize() for team in teams],
+
+    write_str_to(
+        MetadataExport(
+            contest=contest,
+            submissions={
+                problem_key: ProblemMetadata(
+                    team_data={
+                        team_key: TeamMetadata(submissions=metadata)
+                        for team_key, metadata in submissions_by_team.items()
+                    }
+                )
+                for problem_key, submissions_by_team in submission_metadata.items()
             },
-            f,
-        )
+            teams=teams,
+        ).model_dump_json(),
+        destination / "metadata.json",
+    )
 
 
 def command_contest(database: Database, args):

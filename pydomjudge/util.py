@@ -1,7 +1,4 @@
-import typing
-from typing import Callable
 import gzip
-import json
 import logging
 import pathlib
 import platform
@@ -19,11 +16,15 @@ def default_wordlist() -> list[str]:
     if _wordlist_cache is None:
         import importlib.resources
 
-        _wordlist_cache = gzip.decompress(
-            importlib.resources.files("pydomjudge")
-            .joinpath("default_wordlist.gz")
-            .read_bytes()
-        ).splitlines()
+        _wordlist_cache = (
+            gzip.decompress(
+                importlib.resources.files("pydomjudge")
+                .joinpath("default_wordlist.gz")
+                .read_bytes()
+            )
+            .decode()
+            .splitlines()
+        )
     return _wordlist_cache
 
 
@@ -41,25 +42,6 @@ def filter_none(data: dict[str, Any], except_keys: set[str] | None = None):
         for key, value in data.items()
         if value is not None or key in except_keys
     }
-
-
-K = typing.TypeVar("K")
-X = typing.TypeVar("X")
-Y = typing.TypeVar("Y")
-
-
-def get_map_if_present(d: dict[K, X], key: K, f: Callable[[X], Y]) -> Y | None:
-    return f(d.get(key)) if key in d else None
-
-
-def map_if_present(x: X | None, f: Callable[[X], Y]) -> Y | None:
-    return f(x) if x is not None else None
-
-
-def put_if_present(d: dict[K, Y], key: K, val: Y | None) -> dict[K, Y]:
-    if val is not None:
-        d[key] = val
-    return d
 
 
 def mkdir(path):
@@ -137,30 +119,29 @@ def check_input_defined_or_pipe(path: pathlib.Path | None):
     return path is not None or not sys.stdin.isatty()
 
 
-def read_json_from(source: pathlib.Path | None, read_from_terminal=False):
+def read_str_from(source: pathlib.Path | None, read_from_terminal=False) -> str:
     if source is None:
         if not read_from_terminal and sys.stdin.isatty():
             raise ValueError("Refusing to read from terminal")
-        return json.load(sys.stdin)
+        return sys.stdin.read()
     if source.suffix in {".gz", ".gzip"}:
         with gzip.open(str(source), mode="rt") as f:
-            return json.load(f)
-    with source.open(mode="rt") as f:
-        return json.load(f)
+            return f.read()
+    return source.read_text()
 
 
-def write_json_to(data, destination: pathlib.Path | None, write_to_terminal=False):
+def write_str_to(data: str, destination: pathlib.Path | None, write_to_terminal=False):
     if destination is None:
         if not write_to_terminal and sys.stdout.isatty():
             raise ValueError("Refusing to write to terminal")
-        json.dump(data, sys.stdout)
+        sys.stdout.write(data)
     else:
         if destination.suffix in {".gz", ".gzip"}:
             with gzip.open(str(destination), mode="wt") as f:
-                json.dump(data, f)
+                f.write(data)
         else:
             with destination.open(mode="wt") as f:
-                json.dump(data, f)
+                f.write(data)
 
 
 def rasterize_pdf(

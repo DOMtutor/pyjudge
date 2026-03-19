@@ -45,7 +45,7 @@ def find_all_categories(
 
     all_categories = list(categories) + list(SystemCategory)
     database_to_category: Dict[str, TeamCategory] = {
-        category.database_name: category for category in all_categories
+        category.name: category for category in all_categories
     }
 
     category_ids_by_name: Mapping[str, int] = {
@@ -69,7 +69,7 @@ def update_categories(
 ) -> Mapping[TeamCategory, int]:
     expected_categories = set(categories) | set(SystemCategory)
     expected_categories_by_name = {
-        category.database_name: category for category in expected_categories
+        category.name: category for category in expected_categories
     }
 
     cursor.execute("SELECT categoryid, name FROM team_category")
@@ -94,7 +94,7 @@ def update_categories(
     category_ids = {}
 
     for category in expected_categories:
-        name = category.database_name
+        name = category.name
         cursor.execute("SELECT categoryid FROM team_category WHERE name = %s", (name,))
         result = cursor.fetchall()
         if result:
@@ -175,6 +175,7 @@ def create_or_update_teams(
                 (team.name, team.display_name, team_category, affiliation_id),
             )
             team_id = cursor.lastrowid
+            assert team_id is not None
             existing_teams[team] = team_id
 
         if team.members:
@@ -256,7 +257,7 @@ def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
         "UPDATE problem SET name = %s WHERE probid = %s", (problem.name, problem_id)
     )
 
-    text_data, text_type = problem.problem_text
+    text_data, text_type = problem.problem_text()
     cursor.execute(
         "UPDATE problem SET problemtext = %s, problemtext_type = %s WHERE probid = %s",
         (text_data, text_type, problem_id),
@@ -284,6 +285,7 @@ def create_or_update_problem_data(
             (problem.key, problem.name),
         )
         problem_id = cursor.lastrowid
+    assert problem_id is not None
 
     text_data, text_type = problem.problem_text()
 
@@ -330,7 +332,7 @@ def create_or_update_problem_data(
 def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
     log.debug("Updating problem test cases %s", problem)
     cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
-    problem_id = cursor.fetchone()[0]
+    problem_id = cursor.fetchone()[0]  # ty:ignore[not-subscriptable]
 
     problem_testcases = problem.testcases
 
@@ -348,7 +350,12 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
     for case_id, file_name, description, rank, input_md5, output_md5 in cursor:
         maximal_rank = max(maximal_rank, rank)
         test_case = DbTestCase(
-            case_id, file_name, description, rank, input_md5, output_md5
+            case_id=case_id,
+            name=file_name,
+            description=description,
+            rank=rank,
+            input_md5=input_md5,
+            output_md5=output_md5,
         )
         if not file_name or file_name in testcases_by_name:
             leftover_cases.append(test_case)
@@ -399,7 +406,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             "SELECT EXISTS(SELECT * FROM testcase_content WHERE testcaseid = %s)",
             (database_case.case_id,),
         )
-        if cursor.fetchone()[0]:
+        if cursor.fetchone()[0]:  # ty:ignore[not-subscriptable]
             if (
                 problem_testcase.input_md5 != database_case.input_md5
                 or problem_testcase.output_md5 != database_case.output_md5
@@ -427,7 +434,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
 
     for problem_testcase in missing_cases:
         description = problem_testcase.description
-        if problem_testcase.description and len(description) >= 255:
+        if description is not None and len(description) >= 255:
             description = description[:255]
 
         testcase_data = [
@@ -463,13 +470,14 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             )
             case_id = cursor.lastrowid
 
+        assert case_id is not None
         database_case = DbTestCase(
-            case_id,
-            problem_testcase.unique_name,
-            problem_testcase.description,
-            case_rank,
-            problem_testcase.input_md5,
-            problem_testcase.output_md5,
+            case_id=case_id,
+            name=problem_testcase.unique_name,
+            description=problem_testcase.description,
+            rank=case_rank,
+            input_md5=problem_testcase.input_md5,
+            output_md5=problem_testcase.output_md5,
         )
         existing_cases.append((problem_testcase, database_case))
         update_testcase_content.append((problem_testcase, database_case))
@@ -785,8 +793,8 @@ def create_problem_submissions(
     )
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
-    existing_submissions: Dict[int, Tuple[int, int, int, int, Tuple[Verdict, ...]]] = {}
-    submission_successor: Dict[int, int] = {}
+    existing_submissions: dict[int, tuple[int, int, int, int, tuple[Verdict, ...]]] = {}
+    submission_successor: dict[int, int] = {}
     for (
         submission_id,
         original_submission_id,
@@ -799,7 +807,7 @@ def create_problem_submissions(
             json.loads(expected_results_string) if expected_results_string else []
         )
         try:
-            expected_results: Tuple[Verdict, ...] = tuple(
+            expected_results: tuple[Verdict, ...] = tuple(
                 Verdict.parse_from_judge(verdict) for verdict in expected_results_list
             )
         except KeyError:
@@ -831,7 +839,7 @@ def create_problem_submissions(
             expected_results,
         )
 
-    submission_files: Dict[int, Dict[str, str]] = defaultdict(dict)
+    submission_files: dict[int, dict[str, str]] = defaultdict(dict)
     if existing_submissions:
         cursor.execute(
             f"SELECT submitid, submitfileid, filename, MD5(sourcecode) as source_md5 "
@@ -850,8 +858,8 @@ def create_problem_submissions(
     }
 
     # contest -> team -> file name(s) -> submission ids
-    submissions_by_contest_and_team: Dict[
-        int, Dict[int, Dict[Collection[str], List[int]]]
+    submissions_by_contest_and_team: dict[
+        int, dict[int, dict[Collection[str], list[int]]]
     ] = {
         contest_id: {team_id: defaultdict(list) for team_id in used_team_ids.keys()}
         for contest_id in contest_ids
@@ -861,8 +869,8 @@ def create_problem_submissions(
         _,
         team_id,
         contest_id,
-        expected_results,
         language_id,
+        expected_results,
     ) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
@@ -910,7 +918,7 @@ def create_problem_submissions(
                         most_recent = submission_successor[most_recent]
                         if most_recent in visited:
                             raise ValueError(
-                                f"Cyclic submission {' '.join(map(str, submission_ids))}"
+                                f"Cyclic submission {' '.join(str(i) for i in submission_ids)}"
                             )
                     current_submissions[contest_id][(team_id, file_names)] = most_recent
                 else:
@@ -924,6 +932,7 @@ def create_problem_submissions(
                 (team_id, file_names), None
             )
             language = submission.language
+            assert language is not None
             insert = False
 
             if existing_id is None:
@@ -954,6 +963,8 @@ def create_problem_submissions(
                         insert = True
                 if insert:
                     updated_submissions += 1
+
+            assert submission.expected_results
             expected_keys = [
                 expected_result.judge_key()
                 for expected_result in submission.expected_results
@@ -1009,7 +1020,7 @@ def create_problem_submissions(
         log.debug(
             "Deleting %d submissions (%s)",
             len(submissions_to_delete),
-            ",".join(map(str, submissions_to_delete)),
+            ",".join(str(i) for i in submissions_to_delete),
         )
         cursor.execute(
             "DELETE FROM submission_file "
@@ -1048,7 +1059,7 @@ def create_or_update_contest_problems(
             "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
         )
-        if cursor.fetchone()[0]:
+        if cursor.fetchone()[0]:  # ty:ignore[not-subscriptable]
             cursor.execute(
                 "UPDATE contestproblem SET "
                 "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
@@ -1184,7 +1195,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
         if team_categories:
             cursor.execute(
                 f"SELECT categoryid FROM team_category WHERE name IN {list_param(team_categories)}",
-                tuple(category.database_name for category in team_categories),
+                tuple(category_name for category_name in team_categories),
             )
             category_ids = cursor.fetchall()
             if len(category_ids) != len(team_categories):
@@ -1195,6 +1206,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
                     (contest_id, category_id),
                 )
 
+    assert contest_id is not None
     return contest_id
 
 
@@ -1246,6 +1258,7 @@ def create_or_update_affiliations(
                     affiliation.country,
                 ),
             )
+            assert cursor.lastrowid is not None
             affiliation_ids[affiliation] = cursor.lastrowid
     return affiliation_ids
 

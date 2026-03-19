@@ -1,13 +1,11 @@
-import dataclasses
+from pydantic import BaseModel
 import logging
-from typing import Optional
 
 
-@dataclasses.dataclass
-class DbTestCase(object):
+class DbTestCase(BaseModel):
     case_id: int
     name: str
-    description: Optional[str]
+    description: str | None
     rank: int
     input_md5: str
     output_md5: str

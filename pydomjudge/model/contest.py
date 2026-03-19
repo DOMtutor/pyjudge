@@ -1,36 +1,41 @@
-import dataclasses
 from datetime import datetime
-from typing import Optional, List, Set, Any
+from typing import Any, ClassVar
 
 import pytz
+from pydantic import (
+    BaseModel,
+    model_validator,
+    field_serializer,
+    field_validator,
+    ConfigDict,
+)
+from pydantic_core.core_schema import ValidationInfo, FieldSerializationInfo
 
 from .problem import Problem, ProblemLoader
-from .team import TeamCategory
 
 
-@dataclasses.dataclass
-class ContestProblem(object):
+class ContestProblem(BaseModel):
     name: str
     points: int
     color: str
     problem: Problem
 
-    @staticmethod
-    def parse(data, problem_loader: ProblemLoader):
-        return ContestProblem(
-            name=data["name"],
-            points=data["points"],
-            color=data["color"],
-            problem=problem_loader.load_problem(data["problem"]),
-        )
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def serialize(self, problem_loader: ProblemLoader):
-        return {
-            "name": self.name,
-            "points": self.points,
-            "color": self.color,
-            "problem": problem_loader.serialize_problem(self.problem),
-        }
+    @field_validator("problem", mode="before")
+    @classmethod
+    def _parse_problem_key(cls, v, info: ValidationInfo):
+        if not info.context:
+            raise ValueError("No context provided")
+        loader = info.context.get("problem_loader")
+        return loader.load_problem(v)
+
+    @field_serializer("problem", when_used="json")
+    def _serialize_problem(self, problem: Any, info: FieldSerializationInfo) -> Any:
+        if not info.context:
+            raise ValueError("No context provided")
+        loader = info.context.get("problem_loader")
+        return loader.serialize_problem(problem)
 
     def __hash__(self):
         return hash(self.problem)
@@ -39,33 +44,17 @@ class ContestProblem(object):
         return isinstance(other, ContestProblem) and self.problem == other.problem
 
 
-@dataclasses.dataclass
-class ContestAccess(object):
-    team_names: Set[str]
-    team_categories: Set[TeamCategory]
+class ContestAccess(BaseModel):
+    team_names: set[str]
+    team_categories: set[str]
+
+
+class Contest(BaseModel):
+    DATE_FORMAT: ClassVar[str] = "%Y-%m-%dT%H:%M:%S"
 
     @staticmethod
-    def parse(data):
-        team_names = set(data.get("teams", []))
-        team_categories = set(
-            TeamCategory.parse(key, data)
-            for key, data in data.get("categories", {}).items()
-        )
-        return ContestAccess(team_names=team_names, team_categories=team_categories)
-
-    def serialize(self):
-        return {
-            "teams": list(self.team_names),
-            "categories": {
-                category.json_ref(): category.serialize()
-                for category in self.team_categories
-            },
-        }
-
-
-@dataclasses.dataclass
-class Contest(object):
-    DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+    def load(data: str | bytes, loader: ProblemLoader):
+        return Contest.model_validate_json(data, context={"problem_loader": loader})
 
     key: str
     name: str
@@ -73,18 +62,16 @@ class Contest(object):
     activation_time: datetime
     start_time: datetime
     end_time: datetime
-    freeze_time: Optional[datetime]
-    deactivation_time: Optional[datetime]
+    freeze_time: datetime | None
+    deactivation_time: datetime | None
 
-    problems: List[ContestProblem]
-    access: Optional[ContestAccess]
+    problems: list[ContestProblem]
+    access: ContestAccess | None
 
     public_scoreboard: bool
 
-    def __post_init__(self):
-        self.validate()
-
-    def validate(self):
+    @model_validator(mode="after")
+    def validate_contest(self):
         if self.activation_time.tzinfo is None:
             raise ValueError("Activation has no timezone")
         if self.start_time < self.activation_time:
@@ -109,71 +96,30 @@ class Contest(object):
     def is_running(self, at: datetime):
         return self.start_time <= at <= self.end_time
 
-    @staticmethod
-    def _format_datetime(dt: datetime):
-        assert dt.tzinfo is not None
-        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
-
-    @staticmethod
-    def _parse_datetime(string: str):
-        dt, tz = string.split(" ")
+    @field_validator(
+        "activation_time",
+        "start_time",
+        "end_time",
+        "freeze_time",
+        "deactivation_time",
+        mode="before",
+    )
+    @classmethod
+    def _parse_datetime(cls, v: str):
+        dt, tz = v.split(" ")
         return pytz.timezone(tz).localize(datetime.strptime(dt, Contest.DATE_FORMAT))
 
-    @staticmethod
-    def parse(data, problem_loader: ProblemLoader):
-        public_scoreboard = data.get("public_scoreboard", False)
-        problems = [
-            ContestProblem.parse(problem, problem_loader)
-            for problem in data["problems"]
-        ]
-
-        activate = Contest._parse_datetime(data["activate"])
-        start = Contest._parse_datetime(data["start"])
-        end = Contest._parse_datetime(data["end"])
-        freeze = data.get("freeze", None)
-        if freeze is not None:
-            freeze = Contest._parse_datetime(freeze)
-        deactivation = data.get("deactivate", None)
-        if deactivation is not None:
-            deactivation = Contest._parse_datetime(deactivation)
-        access = (
-            ContestAccess.parse(data["access"])
-            if data.get("access", None) is not None
-            else None
-        )
-
-        return Contest(
-            key=data["key"],
-            name=data["name"],
-            activation_time=activate,
-            start_time=start,
-            end_time=end,
-            freeze_time=freeze,
-            deactivation_time=deactivation,
-            access=access,
-            public_scoreboard=public_scoreboard,
-            problems=problems,
-        )
-
-    def serialize(self, problem_loader: ProblemLoader):
-        self.validate()
-        data: dict[str, Any] = {
-            "key": self.key,
-            "name": self.name,
-            "activate": Contest._format_datetime(self.activation_time),
-            "start": Contest._format_datetime(self.start_time),
-            "end": Contest._format_datetime(self.end_time),
-            "problems": [
-                problem.serialize(problem_loader) for problem in self.problems
-            ],
-        }
-        if self.access is not None:
-            data["access"] = self.access.serialize()
-        if self.freeze_time is not None:
-            data["freeze"] = Contest._format_datetime(self.freeze_time)
-        if self.deactivation_time is not None:
-            data["deactivate"] = Contest._format_datetime(self.deactivation_time)
-        return data
+    @field_serializer(
+        "activation_time",
+        "start_time",
+        "end_time",
+        "freeze_time",
+        "deactivation_time",
+        when_used="json",
+    )
+    def _serialize_datetime(self, dt: datetime):
+        assert dt.tzinfo is not None
+        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
 
     def is_active(self, point: datetime):
         return self.activation_time <= point <= self.end_time

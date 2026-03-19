@@ -71,7 +71,7 @@ def main():
                 def add_content(data, name):
                     if isinstance(data, bytes):
                         with tar.open(name, mode="w") as d:
-                            d.write(data)
+                            d.write(data)  # ty:ignore[unresolved-attribute]
                     else:
                         tar.add(data, name, recursive=False)
 

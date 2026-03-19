@@ -1,19 +1,41 @@
 import base64
-import dataclasses
+from typing import Annotated, Union, Any
 
 import chardet
+from pydantic import (
+    BaseModel,
+    PlainSerializer,
+    BeforeValidator,
+    Field,
+    field_validator,
+    field_serializer,
+    Tag,
+    Discriminator,
+    model_validator,
+)
 
-from pydomjudge import util
-from pydomjudge.data.teams import TeamDto
-from pydomjudge.model import Verdict
-from pydomjudge.model.submission import TestcaseVerdict
-from pydomjudge.util import get_map_if_present, put_if_present
+from pydomjudge.data.teams import TeamDto, UserDto
+from pydomjudge.model.submission import PydanticTestcaseVerdict, PydanticVerdict
 
 
-@dataclasses.dataclass
-class SubmissionFileDto:
+def encode_b85(v: bytes) -> str:
+    return base64.b85encode(v).decode("ascii")
+
+
+def decode_b85(v: str | bytes) -> bytes:
+    if isinstance(v, bytes):
+        return v
+    return base64.b85decode(v)
+
+
+Base85Bytes = Annotated[
+    bytes, PlainSerializer(encode_b85, when_used="json"), BeforeValidator(decode_b85)
+]
+
+
+class SubmissionFileDto(BaseModel):
     filename: str
-    content: bytes
+    content: Base85Bytes
 
     @property
     def byte_size(self) -> int:
@@ -53,60 +75,28 @@ class SubmissionFileDto:
     def is_text_file(self):
         return self._decode() is not None
 
-    def serialize(self):
-        return {
-            "name": self.filename,
-            "content": base64.b85encode(self.content).decode("utf-8"),
-        }
 
-    @staticmethod
-    def parse(data):
-        return SubmissionFileDto(
-            filename=data["name"],
-            content=base64.b85decode(data["content"].encode("utf-8")),
-        )
-
-
-@dataclasses.dataclass
-class TestcaseResultDto:
+class TestcaseResultDto(BaseModel):
     runtime: float
-    verdict: TestcaseVerdict
-    is_sample: bool
-    test_name: str
-
-    def serialize(self):
-        return util.filter_none(
-            {
-                "time": self.runtime,
-                "verdict": self.verdict.serialize(),
-                "sample": self.is_sample,
-                "name": self.test_name,
-            }
-        )
-
-    @staticmethod
-    def parse(data):
-        return TestcaseResultDto(
-            runtime=data["time"],
-            verdict=TestcaseVerdict.parse(data["verdict"]),
-            is_sample=data["sample"],
-            test_name=data["name"],
-        )
+    verdict: PydanticTestcaseVerdict
+    is_sample: bool = Field(serialization_alias="sample")
+    test_name: str = Field(serialization_alias="name")
 
 
-@dataclasses.dataclass
-class SubmissionDto:
-    team_key: str
-    contest_key: str
-    contest_problem_key: str
-    problem_key: str
-    language_key: str
-    submission_time: float
+class SubmissionDto(BaseModel):
+    team_key: str = Field(serialization_alias="team")
+    contest_key: str = Field(serialization_alias="contest")
+    contest_problem_key: str = Field(serialization_alias="contest_problem")
+    problem_key: str = Field(serialization_alias="problem")
+    language_key: str = Field(serialization_alias="language")
+    submission_time: float = Field(serialization_alias="time")
 
-    verdict: Verdict | None
-    case_result: list[TestcaseResultDto]
+    verdict: PydanticVerdict | None
+    case_result: list[TestcaseResultDto] = Field(serialization_alias="results")
     too_late: bool
 
+
+class SubmissionWithFilesDto(SubmissionDto):
     files: list[SubmissionFileDto]
 
     @property
@@ -130,142 +120,109 @@ class SubmissionDto:
     def byte_size(self):
         return sum(file.byte_size for file in self.files)
 
-    def serialize(self, exclude_files_if_present=False):
-        data = {
-            "team": self.team_key,
-            "contest": self.contest_key,
-            "contest_problem": self.contest_problem_key,
-            "problem": self.problem_key,
-            "language": self.language_key,
-            "time": self.submission_time,
-            "too_late": self.too_late,
-            "results": [c.serialize() for c in self.case_result],
-        }
-        put_if_present(data, "runtime", self.maximum_runtime)
-        if self.verdict is not None:
-            data["verdict"] = self.verdict.serialize()
-        if self.files and not exclude_files_if_present:
-            data["files"] = [file.serialize() for file in self.files]
-        return data
 
-    @staticmethod
-    def parse(data):
-        return SubmissionDto(
-            team_key=data["team"],
-            contest_key=data["contest"],
-            contest_problem_key=data["contest_problem"],
-            problem_key=data["problem"],
-            language_key=data["language"],
-            submission_time=data["time"],
-            verdict=get_map_if_present(data, "verdict", Verdict.parse),
-            too_late=data["too_late"],
-            files=[SubmissionFileDto.parse(file) for file in data.get("files", [])],
-            case_result=[TestcaseResultDto.parse(result) for result in data["results"]],
-        )
+def submission_type(v) -> str:
+    if isinstance(v, SubmissionWithFilesDto):
+        return "files"
+    if isinstance(v, SubmissionDto):
+        return "no_files"
+    assert isinstance(v, dict), v
+    return "files" if "files" in v else "no_files"
 
 
-@dataclasses.dataclass
-class ContestProblemDto:
+PydanticSubmission = Annotated[
+    Union[
+        Annotated[SubmissionDto, Tag("no_files")],
+        Annotated[SubmissionWithFilesDto, Tag("files")],
+    ],
+    Discriminator(submission_type),
+]
+
+
+class ContestProblemDto(BaseModel):
     problem_key: str
     contest_problem_key: str
     points: int
     color: str | None
 
 
-@dataclasses.dataclass
-class ClarificationDto:
+class ClarificationDto(BaseModel):
     key: str
-    team_key: str
-    contest_key: str
-    contest_problem_key: str | None
+    team_key: str = Field(serialization_alias="team")
+    contest_key: str = Field(serialization_alias="contest")
+    contest_problem_key: str | None = Field(serialization_alias="contest_problem")
 
-    request_time: float
+    request_time: float = Field(serialization_alias="time")
     response_to: str | None
     from_jury: bool
     body: str
 
-    def serialize(self):
-        data = {
-            "key": self.key,
-            "team": self.team_key,
-            "contest": self.contest_key,
-            "time": self.request_time,
-            "jury": self.from_jury,
-            "body": self.body,
-        }
-        put_if_present(data, "contest_problem", self.contest_problem_key)
-        put_if_present(data, "response", self.response_to)
-        return data
 
-    @staticmethod
-    def parse(data):
-        response_to = data.get("response", None)
-        if response_to == "None":
-            response_to = None
-        return ClarificationDto(
-            key=data["key"],
-            team_key=data["team"],
-            contest_key=data["contest"],
-            contest_problem_key=data.get("contest_problem", None),
-            request_time=data["time"],
-            response_to=response_to,
-            from_jury=data["jury"],
-            body=data["body"],
-        )
-
-
-@dataclasses.dataclass
-class ContestDescriptionDto:
-    contest_key: str
+class ContestDescriptionDto(BaseModel):
+    contest_key: str = Field(serialization_alias="key")
     start: float | None
     end: float | None
 
-    def serialize(self):
-        data: dict[str, str | float] = {"key": self.contest_key}
-        put_if_present(data, "start", self.start)
-        put_if_present(data, "end", self.end)
-        return data
 
-    @staticmethod
-    def parse(data):
-        start = get_map_if_present(data, "start", float)
-        end = get_map_if_present(data, "end", float)
-        return ContestDescriptionDto(contest_key=data["key"], start=start, end=end)
-
-
-@dataclasses.dataclass
-class ContestDataDto:
+class ContestDataDto(BaseModel):
     description: ContestDescriptionDto
+    users: dict[str, UserDto] | None = Field(default=None, init=False)
     teams: dict[str, TeamDto]
     languages: dict[str, str]
     problems: dict[str, str]
-    submissions: list[SubmissionDto]
+    submissions: list[PydanticSubmission]
     clarifications: list[ClarificationDto]
 
-    def serialize(self):
+    @model_validator(mode="after")
+    def _populate_users(self):
+        assert self.users is None
+        users = set.union(*(set(team.members) for team in self.teams.values()))
+        self.users = {user.login_name: user for user in users}
+        return self
+
+    @field_validator("users", mode="before")
+    @classmethod
+    def _users_to_dict(cls, v: dict[str, Any] | None) -> dict[str, UserDto]:
+        assert isinstance(v, dict)
+        if all(isinstance(u, UserDto) for u in v.values()):
+            return v
         return {
-            "description": self.description.serialize(),
-            "teams": [team.serialize() for team in self.teams.values()],
-            "languages": self.languages,
-            "problems": self.problems,
-            "submissions": [submission.serialize() for submission in self.submissions],
-            "clarifications": [
-                clarification.serialize() for clarification in self.clarifications
-            ],
+            name: UserDto.model_validate({**user, "login_name": name}, by_alias=True)
+            for name, user in v.items()
         }
 
-    @staticmethod
-    def parse(data) -> "ContestDataDto":
-        return ContestDataDto(
-            description=ContestDescriptionDto.parse(data["description"]),
-            teams={team.key: team for team in map(TeamDto.parse, data["teams"])},
-            languages=data["languages"],
-            problems=data["problems"],
-            submissions=[
-                SubmissionDto.parse(submission) for submission in data["submissions"]
-            ],
-            clarifications=[
-                ClarificationDto.parse(clarification)
-                for clarification in data["clarifications"]
-            ],
-        )
+    @field_validator("teams", mode="before")
+    @classmethod
+    def _teams_to_dict(cls, v: dict[str, Any], info) -> dict[str, TeamDto]:
+        assert isinstance(v, dict)
+        if all(isinstance(t, TeamDto) for t in v.values()):
+            return v
+        users = info.data.get("users")
+        return {
+            key: TeamDto.model_validate(
+                {
+                    **data,
+                    "key": key,
+                    "members": [users.get(member) for member in data["members"]],
+                },
+                by_alias=True,
+            )
+            for key, data in v.items()
+        }
+
+    @field_serializer("users", when_used="json")
+    def _users_to_map(self, users: dict[str, UserDto]):
+        return {
+            user.login_name: user.model_dump(exclude={"login_name"}, by_alias=True)
+            for user in users.values()
+        }
+
+    @field_serializer("teams", when_used="json")
+    def _teams_to_map(self, teams: dict[str, TeamDto]):
+        return {
+            team.key: {
+                **team.model_dump(exclude={"key", "members"}, by_alias=True),
+                "members": [user.login_name for user in team.members],
+            }
+            for team in teams.values()
+        }

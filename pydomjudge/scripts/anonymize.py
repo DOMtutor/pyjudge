@@ -8,14 +8,14 @@ import string
 
 from pydomjudge.data.submission import ContestDataDto
 from pydomjudge.data.teams import TeamDto, UserDto
-from pydomjudge.util import read_json_from, write_json_to, default_wordlist
+from pydomjudge.util import read_str_from, write_str_to, default_wordlist
 
 
 def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
     if destination is not None and destination.exists():
         raise ValueError(f"Destination {destination} already exists")
 
-    contest = ContestDataDto.parse(read_json_from(source))
+    contest = ContestDataDto.model_validate_json(read_str_from(source))
     team_mapping = dict()
     team_names = set()
 
@@ -42,24 +42,32 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
                 key=key_name,
                 display_name=display_name,
                 category_name=team.category_name,
-                members=[UserDto(user_login, user_name, f"{user_name}@example.com")],
+                members=[
+                    UserDto(
+                        login_name=user_login,
+                        display_name=user_name,
+                        email=f"{user_name}@example.com",
+                    )
+                ],
             )
         )
 
     submissions = [
-        dataclasses.replace(
-            submission,
-            team_key=team_mapping[submission.team_key],
-            submission_time=submission.submission_time + time_delta,
+        submission.model_copy(
+            update={
+                "team_key": team_mapping[submission.team_key],
+                "submission_time": submission.submission_time + time_delta,
+            }
         )
         for submission in contest.submissions
     ]
 
     clarifications = [
-        dataclasses.replace(
-            clarification,
-            team_key=team_mapping[clarification.team_key],
-            request_time=clarification.request_time + time_delta,
+        clarification.model_copy(
+            update={
+                "team_key": team_mapping[clarification.team_key],
+                "request_time": clarification.request_time + time_delta,
+            }
         )
         for clarification in contest.clarifications
     ]
@@ -70,14 +78,15 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
         start=description.start + time_delta if description.start else None,
         end=description.end + time_delta if description.end else None,
     )
-    write_json_to(
-        dataclasses.replace(
-            contest,
-            teams={team.key: team for team in teams},
-            submissions=submissions,
-            clarifications=clarifications,
-            description=new_description,
-        ).serialize(),
+    write_str_to(
+        contest.model_copy(
+            update={
+                "teams": {team.key: team for team in teams},
+                "submissions": submissions,
+                "clarifications": clarifications,
+                "description": new_description,
+            }
+        ).model_dump_json(),
         destination,
     )
 

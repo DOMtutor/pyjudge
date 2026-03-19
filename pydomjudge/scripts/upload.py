@@ -9,7 +9,13 @@ import re
 import sys
 from typing import List, Tuple, Collection, Dict, Set
 
+from pydantic import BaseModel, field_validator, field_serializer
+from pydantic_core.core_schema import ValidationInfo
+
 import pydomjudge.action.update as update
+import pydomjudge.repository.kattis as kattis
+import pydomjudge.scripts.db as db
+import pydomjudge.scripts.util as script_util
 from problemtools.verifyproblem import VerifyError
 from pydomjudge.model import (
     Contest,
@@ -24,12 +30,8 @@ from pydomjudge.model import (
 from pydomjudge.model.settings import JudgeInstance
 from pydomjudge.model.team import SystemCategory
 from pydomjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
-import pydomjudge.scripts.db as db
 from pydomjudge.scripts.db import DBCursor as Cursor
-import pydomjudge.repository.kattis as kattis
 from pydomjudge.scripts.db import Database
-import pydomjudge.scripts.util as script_util
-
 
 log = logging.getLogger(__name__)
 
@@ -177,45 +179,56 @@ def upload_problems(
                     )
 
 
-@dataclasses.dataclass
-class UsersDescription(object):
-    users: List[User]
-    affiliations: List[Affiliation]
-    teams: List[Team]
+class UsersDescription(BaseModel):
+    users: list[User]
+    affiliations: list[Affiliation]
+    teams: list[Team]
 
-    @staticmethod
-    def parse(data, category_by_name: Dict[str, TeamCategory]):
-        users: List[User] = [
-            User.parse(key, value) for key, value in data["users"].items()
-        ]
-        user_by_login: Dict[str, User] = {user.login_name: user for user in users}
-        affiliations: List[Affiliation] = [
-            Affiliation.parse(key, value) for key, value in data["affiliations"].items()
-        ]
-        affiliation_by_name: Dict[str, Affiliation] = {
-            affiliation.short_name: affiliation for affiliation in affiliations
-        }
-        teams = [
-            Team.parse(key, value, user_by_login, affiliation_by_name, category_by_name)
-            for key, value in data["teams"].items()
-        ]
-        return UsersDescription(users, affiliations, teams)
-
-    def serialize(self):
+    @field_serializer("teams", when_used="json")
+    def _serialize_teams(self, teams: list[Team]):
         return {
-            "users": {
-                user.json_ref: user.serialize()
-                for user in sorted(self.users, key=lambda u: u.login_name)
-            },
-            "affiliations": {
-                affiliation.json_ref: affiliation.serialize()
-                for affiliation in sorted(self.affiliations, key=lambda a: a.short_name)
-            },
-            "teams": {
-                team.json_ref: team.serialize()
-                for team in sorted(self.teams, key=lambda t: t.name)
-            },
+            team.name: {
+                **vars(team),
+                "category": team.category.key if team.category is not None else None,
+                "members": [member.login_name for member in team.members],
+                "affiliation": team.affiliation.short_name
+                if team.affiliation is not None
+                else None,
+            }
+            for team in teams
         }
+
+    @field_validator("teams", mode="before")
+    @classmethod
+    def _resolve_team_data(cls, value, info: ValidationInfo):
+        if isinstance(value, list):
+            return value
+
+        if info.context is None:
+            raise ValueError("Context is None")
+        category_by_name: Dict[str, TeamCategory] = info.context.get("category_by_name")
+        user_by_login: dict[str, User] = {
+            user.login_name: user for user in info.data["users"]
+        }
+        affiliation_by_name: Dict[str, Affiliation] = {
+            affiliation.short_name: affiliation
+            for affiliation in info.data["affiliations"]
+        }
+        return [
+            {
+                **team,
+                "name": name,
+                "display_name": team["display_name"],
+                "category": category_by_name.get(team["category"])
+                if "category" in team
+                else None,
+                "affiliation": affiliation_by_name.get(team["affiliation"])
+                if "affiliation" in team
+                else None,
+                "members": [user_by_login.get(name) for name in team["members"]],
+            }
+            for name, team in value.items()
+        ]
 
 
 def upload_users(
@@ -273,7 +286,7 @@ def command_problem(config: PyjudgeConfig, args):
         contest_json: pathlib.Path
         with contest_json.open(mode="rt") as f:
             data = json.load(f)
-        contest = Contest.parse(data, config.repository.problems)
+        contest = Contest.load(data, config.repository.problems)
         problems.extend(contest_problem.problem for contest_problem in contest.problems)
 
     if not problems:
@@ -293,7 +306,7 @@ def command_contest(config: PyjudgeConfig, args):
         contest_upload_data = json.load(file)
     upload_contest(
         config,
-        Contest.parse(contest_upload_data, config.repository.problems),
+        Contest.load(contest_upload_data, config.repository.problems),
         force=args.force,
         update_problems=args.update_problems,
         verify_problems=args.verify,
@@ -303,13 +316,14 @@ def command_contest(config: PyjudgeConfig, args):
 
 
 def command_users(config: PyjudgeConfig, args):
-    with args.users.open("rt") as file:
-        user_data = json.load(file)
-    description = UsersDescription.parse(
-        user_data,
-        {
-            category.key: category
-            for category in config.judge.team_categories + [SystemCategory.Jury]
+    description = UsersDescription.model_validate_json(
+        args.users.read_text(),
+        context={
+            "category_by_name": {
+                category.key: category
+                for category in config.judge.team_categories
+                + [SystemCategory.Jury.value]
+            }
         },
     )
 
@@ -452,18 +466,16 @@ def main():
     arguments = parser.parse_args()
     script_util.apply_logging(arguments)
 
-    with arguments.instance.open(mode="rt") as f:
-        instance_data = json.load(f)
-    instance = JudgeInstance.parse_instance(instance_data)
+    instance = JudgeInstance.model_validate_json(arguments.instance.read_text())
     if not instance.team_categories:
         raise ValueError(
             "Instance has no defined categories, this is very likely not what you want"
         )
     category_keys = set(category.key for category in instance.team_categories)
     for system_category in SystemCategory:
-        if system_category.key in category_keys:
+        if system_category.value.key in category_keys:
             raise ValueError(
-                f"Reserved system category {system_category.key} declared!"
+                f"Reserved system category {system_category.value.key} declared!"
             )
 
     config = PyjudgeConfig(

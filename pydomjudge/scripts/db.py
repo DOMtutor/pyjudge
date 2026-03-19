@@ -23,16 +23,18 @@ class DBCursor(Protocol):
     description: Optional[Sequence[tuple]]
 
 
+# noinspection PyTypeChecker
 class DatabaseTransactionCursor(object):
     def __init__(
         self,
         connection: Connection,
     ):
         self.connection = connection
-        self.cursor: Optional[Cursor] = None
+        self.cursor: Cursor | None = None
 
     def __enter__(self) -> DBCursor:
         self.cursor = self.connection.cursor()
+        assert self.cursor is not None
         return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -40,7 +42,8 @@ class DatabaseTransactionCursor(object):
             self.connection.commit()
         else:
             self.connection.rollback()
-        self.cursor.close()
+        if self.cursor is not None:
+            self.cursor.close()
 
 
 class Database(object):
@@ -67,12 +70,14 @@ class Database(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._connection.close()
+        if self._connection is not None:
+            self._connection.close()
 
     def transaction_cursor(
         self,
         readonly: bool = False,  # TODO Implement
     ) -> DatabaseTransactionCursor:
+        assert self._connection is not None
         return DatabaseTransactionCursor(
             self._connection,
         )

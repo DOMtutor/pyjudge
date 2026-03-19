@@ -1,58 +1,21 @@
-import dataclasses
 import enum
-from typing import Optional
 
-from pydomjudge.util import filter_none
+from pydantic import BaseModel
 
 
-class UserRole(enum.Enum):
+class UserRole(enum.StrEnum):
     Participant = "participant"
     Admin = "admin"
     Organizer = "organizer"
     Jury = "jury"
 
-    @staticmethod
-    def parse(value):
-        for role in UserRole:
-            if value == role.serialize():
-                return role
-        raise KeyError(value)
 
-    def serialize(self):
-        return self.value
-
-
-@dataclasses.dataclass
-class User(object):
+class User(BaseModel):
     login_name: str
     display_name: str
-    email: Optional[str]
+    email: str | None
     role: UserRole
-    password_hash: Optional[str] = None
-
-    @property
-    def json_ref(self):
-        return self.login_name
-
-    @staticmethod
-    def parse(key, data):
-        return User(
-            key,
-            data["display_name"],
-            email=data.get("email", None),
-            password_hash=data.get("password_hash", None),
-            role=UserRole.parse(data["role"]),
-        )
-
-    def serialize(self):
-        return filter_none(
-            {
-                "display_name": self.display_name,
-                "email": self.email,
-                "role": self.role.serialize(),
-                "password_hash": self.password_hash,
-            }
-        )
+    password_hash: str | None = None
 
     @staticmethod
     def generate_salt() -> bytes:

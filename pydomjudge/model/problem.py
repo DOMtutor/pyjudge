@@ -126,7 +126,7 @@ P = TypeVar("P", bound=Problem)
 
 class ProblemLoader(abc.ABC, Generic[P]):
     @abc.abstractmethod
-    def load_problem(self, key) -> P:
+    def load_problem(self, key: str) -> P:
         pass
 
     def __getitem__(self, item):
