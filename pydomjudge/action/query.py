@@ -8,7 +8,6 @@ from pydomjudge.data.submission import (
     ContestProblemDto,
     ContestDescriptionDto,
     TestcaseResultDto,
-    SubmissionWithFilesDto,
     SubmissionDto,
 )
 from pydomjudge.data.teams import UserDto, TeamDto
@@ -262,7 +261,7 @@ def find_submissions(
                 judging_result,
             )
 
-        submission = SubmissionDto(
+        yield SubmissionDto(
             team_key=team_key,
             contest_key=contest_key,
             contest_problem_key=contest_problem_key,
@@ -272,18 +271,11 @@ def find_submissions(
             submission_time=submission_time,
             too_late=contest_end < submission_time,
             case_result=testcases,
+            files=[
+                SubmissionFileDto(filename=filename, content=content)
+                for (filename, content) in source_data[submission_id].items()
+            ],
         )
-
-        if include_files:
-            yield SubmissionWithFilesDto(
-                **submission.model_dump(),
-                files=[
-                    SubmissionFileDto(filename=filename, content=content)
-                    for (filename, content) in source_data[submission_id].items()
-                ],
-            )
-        else:
-            yield submission
 
 
 def find_clarifications(
@@ -387,14 +379,12 @@ def find_non_system_teams(database: Database) -> list[TeamDto]:
         )
         team_users = {team_id: [] for team_id in team_data.keys()}
         for name, username, email, team_id in cursor:
-            team_users[team_id].append(
-                UserDto(login_name=username, display_name=name, email=email)
-            )
+            team_users[team_id].append(UserDto(login=username, name=name, email=email))
         return [
             TeamDto(
                 key=team_key,
-                display_name=team_name,
-                category_name=category,
+                name=team_name,
+                category=category,
                 members=team_users[team_id],
             )
             for team_id, (team_key, team_name, category) in team_data.items()

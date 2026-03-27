@@ -2,9 +2,9 @@ from pydantic import BaseModel, Field
 
 
 class UserDto(BaseModel):
-    login_name: str = Field(serialization_alias="login")
-    display_name: str = Field(serialization_alias="name")
-    email: str | None = Field(exclude_if=lambda x: x is None)
+    login_name: str = Field(alias="login")
+    display_name: str = Field(alias="name")
+    email: str | None = Field(exclude_if=lambda x: x is None, default=None)
 
     def __str__(self):
         return self.display_name
@@ -18,8 +18,8 @@ class UserDto(BaseModel):
 
 class TeamDto(BaseModel):
     key: str
-    display_name: str = Field(serialization_alias="name")
-    category_name: str | None = Field(serialization_alias="category")
+    display_name: str = Field(alias="name")
+    category_name: str | None = Field(alias="category")
     members: list[UserDto]
 
     def __str__(self):

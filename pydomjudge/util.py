@@ -44,7 +44,7 @@ def filter_none(data: dict[str, Any], except_keys: set[str] | None = None):
     }
 
 
-def mkdir(path):
+def mkdir(path: pathlib.Path) -> pathlib.Path:
     path.mkdir(exist_ok=True, parents=True)
     return path
 
