@@ -94,6 +94,7 @@ class Affiliation(BaseModel):
 
 
 class Team(BaseModel):
+    key: str
     name: str
     display_name: str
     members: list[User]
@@ -104,7 +105,7 @@ class Team(BaseModel):
         return f"Team({self.name})"
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.key)
 
     def __eq__(self, other):
-        return isinstance(other, Team) and self.name == other.name
+        return isinstance(other, Team) and self.key == other.key

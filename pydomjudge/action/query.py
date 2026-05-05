@@ -335,9 +335,7 @@ def find_clarifications(
             if problem_id is None:
                 contest_problem_key = None
             else:
-                contest_problem_key = contest_problems_by_id[
-                    problem_id
-                ].contest_problem_key
+                contest_problem_key = contest_problems_by_id[problem_id].name
 
             clarification = ClarificationDto(
                 key=str(clarification_id),
