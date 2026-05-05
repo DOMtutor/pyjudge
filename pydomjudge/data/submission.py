@@ -116,13 +116,6 @@ class SubmissionDto(BaseModel):
         return sum(file.byte_size for file in self.files)
 
 
-class ContestProblemDto(BaseModel):
-    problem_key: str
-    contest_problem_key: str
-    points: int
-    color: str | None
-
-
 class ClarificationDto(BaseModel):
     key: str
     team_key: str = Field(serialization_alias="team")

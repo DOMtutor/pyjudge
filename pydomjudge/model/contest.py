@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import pytz
 from pydantic import (
@@ -7,41 +7,22 @@ from pydantic import (
     model_validator,
     field_serializer,
     field_validator,
-    ConfigDict,
 )
-from pydantic_core.core_schema import ValidationInfo, FieldSerializationInfo
-
-from .problem import Problem, ProblemLoader
 
 
 class ContestProblem(BaseModel):
     name: str
     points: int
     color: str
-    problem: Problem
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    @field_validator("problem", mode="before")
-    @classmethod
-    def _parse_problem_key(cls, v, info: ValidationInfo):
-        if not info.context:
-            raise ValueError("No context provided")
-        loader = info.context.get("problem_loader")
-        return loader.load_problem(v)
-
-    @field_serializer("problem", when_used="json")
-    def _serialize_problem(self, problem: Any, info: FieldSerializationInfo) -> Any:
-        if not info.context:
-            raise ValueError("No context provided")
-        loader = info.context.get("problem_loader")
-        return loader.serialize_problem(problem)
+    problem_key: str
 
     def __hash__(self):
-        return hash(self.problem)
+        return hash(self.problem_key)
 
     def __eq__(self, other):
-        return isinstance(other, ContestProblem) and self.problem == other.problem
+        return (
+            isinstance(other, ContestProblem) and self.problem_key == other.problem_key
+        )
 
 
 class ContestAccess(BaseModel):
@@ -51,10 +32,6 @@ class ContestAccess(BaseModel):
 
 class Contest(BaseModel):
     DATE_FORMAT: ClassVar[str] = "%Y-%m-%dT%H:%M:%S"
-
-    @staticmethod
-    def load(data: str | bytes, loader: ProblemLoader):
-        return Contest.model_validate_json(data, context={"problem_loader": loader})
 
     key: str
     name: str
@@ -92,6 +69,7 @@ class Contest(BaseModel):
                 raise ValueError("Freeze not during contest")
             if self.freeze_time.tzinfo is None:
                 raise ValueError("Start has no timezone")
+        return self
 
     def is_running(self, at: datetime):
         return self.start_time <= at <= self.end_time
@@ -105,9 +83,13 @@ class Contest(BaseModel):
         mode="before",
     )
     @classmethod
-    def _parse_datetime(cls, v: str):
-        dt, tz = v.split(" ")
-        return pytz.timezone(tz).localize(datetime.strptime(dt, Contest.DATE_FORMAT))
+    def _parse_datetime(cls, v: str | datetime):
+        if isinstance(v, str):
+            dt, tz = v.split(" ")
+            return pytz.timezone(tz).localize(
+                datetime.strptime(dt, Contest.DATE_FORMAT)
+            )
+        return v
 
     @field_serializer(
         "activation_time",
@@ -117,7 +99,9 @@ class Contest(BaseModel):
         "deactivation_time",
         when_used="json",
     )
-    def _serialize_datetime(self, dt: datetime):
+    def _serialize_datetime(self, dt: datetime | None):
+        if dt is None:
+            return None
         assert dt.tzinfo is not None
         return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
 

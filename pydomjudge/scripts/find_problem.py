@@ -43,12 +43,14 @@ def find_problems(
     keyword_patterns = [re.compile(pattern) for pattern in args.keyword]
     exclude_patterns = [re.compile(pattern) for pattern in args.exclude]
 
-    problem_candidates = set()
+    problem_candidates: set[RepositoryProblem] = set()
     if args.contest:
         for contest_file in args.contest:
-            contest = Contest.load(contest_file.read_bytes(), repository.problems)
+            contest: Contest = Contest.model_validate_json(contest_file.read_bytes())
             for contest_problem in contest.problems:
-                problem_candidates.add(contest_problem.problem)
+                problem_candidates.add(
+                    repository.problems.load_problem(contest_problem.problem_key)
+                )
     else:
         problem_candidates = repository.problems.load_all_problems()
 

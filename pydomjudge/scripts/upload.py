@@ -20,7 +20,6 @@ from problemtools.verifyproblem import VerifyError
 from pydomjudge.model import (
     Contest,
     Verdict,
-    Problem,
     ProblemSubmission,
     Team,
     User,
@@ -102,13 +101,20 @@ def upload_contest(
         log.warning(
             "Contest is in the past (ends at %s), is this correct?", contest.end_time
         )
+    repository = config.repository
+    problems_by_key = {
+        contest_problem.problem_key: repository.problems.load_problem(
+            contest_problem.problem
+        )
+        for contest_problem in contest.problems
+    }
 
     if update_problems:
         if verify_problems:
             log.info("Checking problems")
             try:
-                for contest_problem in contest.problems:
-                    contest_problem.problem.check()
+                for problem in problems_by_key.values():
+                    problem.check()
             except VerifyError as e:
                 log.error("Problem verification failed", exc_info=e)
                 return
@@ -120,12 +126,14 @@ def upload_contest(
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
         if update_problems:
-            problem_ids: Dict[Problem, int] = {}
+            problem_ids: Dict[str, int] = {}
             for contest_problem in contest.problems:
                 with connection.transaction_cursor() as cursor:
-                    problem_ids[contest_problem.problem] = (
+                    problem_ids[contest_problem.problem_key] = (
                         update.create_or_update_problem_data(
-                            cursor, config.judge, contest_problem.problem
+                            cursor,
+                            config.judge,
+                            problems_by_key[contest_problem.problem_key],
                         )
                     )
                     if update_test_cases:
@@ -139,11 +147,11 @@ def upload_contest(
                 )
 
         if update_submissions:
-            for contest_problem in contest.problems:
-                assert isinstance(contest_problem.problem, RepositoryProblem)
+            for problem in problems_by_key.values():
+                assert isinstance(problem, RepositoryProblem)
                 with connection.transaction_cursor() as cursor:
                     _update_problem_submissions(
-                        cursor, contest_problem.problem, config.repository, [contest_id]
+                        cursor, problem, config.repository, [contest_id]
                     )
 
     log.info("Updated contest %s", contest)

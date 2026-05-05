@@ -1,17 +1,16 @@
 import logging
 from collections import defaultdict
-from typing import List, Collection, Tuple, Dict, Generator, Optional
+from typing import Collection, Generator
 
 from pydomjudge.data.submission import (
     SubmissionFileDto,
     ClarificationDto,
-    ContestProblemDto,
     ContestDescriptionDto,
     TestcaseResultDto,
     SubmissionDto,
 )
 from pydomjudge.data.teams import UserDto, TeamDto
-from pydomjudge.model import Verdict
+from pydomjudge.model import Verdict, ContestProblem
 from pydomjudge.model.submission import TestcaseVerdict
 from pydomjudge.model.team import SystemCategory
 from pydomjudge.scripts.db import (
@@ -41,7 +40,7 @@ def parse_judging_verdict(key):
 
 def _find_contest_with_problems_by_key(
     cursor: Cursor, contest_key: str
-) -> Tuple[str, Dict[int, ContestProblemDto]]:
+) -> tuple[str, dict[int, ContestProblem]]:
     cursor.execute("SELECT cid FROM contest WHERE shortname = %s", (contest_key,))
     contest_id = get_unique(cursor)[0]
     cursor.execute(
@@ -52,9 +51,9 @@ def _find_contest_with_problems_by_key(
         (contest_id,),
     )
     problems = {
-        problem_id: ContestProblemDto(
+        problem_id: ContestProblem(
+            name=contest_name,
             problem_key=problem_key,
-            contest_problem_key=contest_name,
             points=points,
             color=color,
         )
@@ -63,7 +62,7 @@ def _find_contest_with_problems_by_key(
     return contest_id, problems
 
 
-def _find_contest_end(cursor: Cursor, contest_key: str) -> Tuple[str, float]:
+def _find_contest_end(cursor: Cursor, contest_key: str) -> tuple[str, float]:
     cursor.execute(
         "SELECT cid, endtime FROM contest WHERE shortname = %s", (contest_key,)
     )
@@ -71,9 +70,7 @@ def _find_contest_end(cursor: Cursor, contest_key: str) -> Tuple[str, float]:
     return contest_id, float(contest_end)
 
 
-def find_contest_problems(
-    database: Database, contest_key: str
-) -> List[ContestProblemDto]:
+def find_contest_problems(database: Database, contest_key: str) -> list[ContestProblem]:
     with database.transaction_cursor(readonly=True) as cursor:
         _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
         return list(problems.values())
@@ -127,7 +124,7 @@ def find_submissions(
             contest_problem = contest_problems_by_id[problem_id]
             submission_data[submission_id] = (
                 float(submission_time),
-                contest_problem.contest_problem_key,
+                contest_problem.name,
                 contest_problem.problem_key,
                 language_key,
                 team_key,
@@ -155,7 +152,7 @@ def find_submissions(
                 tuple(submission_data.keys()),
             )
         judging_ids = set()
-        judging_data: dict[int, tuple[int, Optional[Verdict]]] = {}
+        judging_data: dict[int, tuple[int, Verdict | None]] = {}
         for submission_id, judging_id, judging_result in cursor:
             if submission_id in judging_data:
                 logging.warning("Multiple runs for submission %s", submission_id)
@@ -391,7 +388,7 @@ def find_non_system_teams(database: Database) -> list[TeamDto]:
         ]
 
 
-def find_languages(database: Database) -> Dict[str, str]:
+def find_languages(database: Database) -> dict[str, str]:
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute("SELECT langid, name FROM language")
         return {language_key: name for language_key, name in cursor}

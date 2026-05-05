@@ -59,10 +59,10 @@ class ClarificationSettings(BaseModel):
 
 
 class JudgeSettings(BaseModel):
-    judging: JudgingSettings
-    scoring: ScoringSettings
-    display: DisplaySettings
-    clarification: ClarificationSettings
+    judging: JudgingSettings = JudgingSettings()
+    scoring: ScoringSettings = ScoringSettings()
+    display: DisplaySettings = DisplaySettings()
+    clarification: ClarificationSettings = ClarificationSettings()
 
 
 class JudgeInstance(BaseModel):

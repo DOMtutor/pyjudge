@@ -131,7 +131,3 @@ class ProblemLoader(abc.ABC, Generic[P]):
 
     def __getitem__(self, item):
         return self.load_problem(item)
-
-    @abc.abstractmethod
-    def serialize_problem(self, problem: P):
-        pass

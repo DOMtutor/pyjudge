@@ -21,9 +21,7 @@ class SubmissionsExport(BaseModel):
     submissions: list[SubmissionDto]
 
 
-def write_contest(
-    database: Database, contest_key: str, destination: pathlib.Path | None
-):
+def fetch_contest(database: Database, contest_key: str):
     with database as connection:
         teams = query.find_non_system_teams(connection)
         teams_by_key = {team.key: team for team in teams}
@@ -33,8 +31,7 @@ def write_contest(
 
         contest_problems = query.find_contest_problems(connection, contest_key)
         problem_key_by_contest_problem_key = {
-            problem.contest_problem_key: problem.problem_key
-            for problem in contest_problems
+            problem.name: problem.problem_key for problem in contest_problems
         }
 
         logging.info("Fetching submissions")
@@ -49,18 +46,20 @@ def write_contest(
             for clarification in query.find_clarifications(connection, contest_key)
             if clarification.team_key in teams_by_key
         ]
-
-    write_str_to(
-        ContestDataDto(
-            description=contest_description,
-            teams=teams_by_key,
-            languages=language_name_by_key,
-            problems=problem_key_by_contest_problem_key,
-            submissions=submissions,
-            clarifications=clarifications,
-        ).model_dump_json(),
-        destination,
+    return ContestDataDto(
+        description=contest_description,
+        teams=teams_by_key,
+        languages=language_name_by_key,
+        problems=problem_key_by_contest_problem_key,
+        submissions=submissions,
+        clarifications=clarifications,
     )
+
+
+def write_contest(
+    database: Database, contest_key: str, destination: pathlib.Path | None
+):
+    write_str_to(fetch_contest(database, contest_key).model_dump_json(), destination)
 
 
 def write_submission_files(

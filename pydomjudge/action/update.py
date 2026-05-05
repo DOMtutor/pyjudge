@@ -2,11 +2,9 @@ import datetime
 import json
 import logging
 import time
-
 from collections import defaultdict
-from typing import Dict, Collection, Optional, List, Tuple, Set, Mapping
+from typing import Collection, Mapping
 
-from pydomjudge.scripts.db import DBCursor as Cursor, list_param, field_not_in_list
 from pydomjudge.model import (
     TeamCategory,
     Team,
@@ -23,7 +21,7 @@ from pydomjudge.model import (
     User,
     Affiliation,
 )
-
+from pydomjudge.scripts.db import DBCursor as Cursor, list_param, field_not_in_list
 from .data import DbTestCase, test_case_compare_key
 from ..model.settings import JudgeInstance
 from ..model.team import SystemCategory
@@ -39,12 +37,12 @@ user_role_to_database = {
 
 
 def find_all_categories(
-    cursor: Cursor, categories: List[TeamCategory]
+    cursor: Cursor, categories: list[TeamCategory]
 ) -> Mapping[TeamCategory, int]:
     cursor.execute("SELECT categoryid, name FROM team_category")
 
     all_categories = list(categories) + list(SystemCategory)
-    database_to_category: Dict[str, TeamCategory] = {
+    database_to_category: dict[str, TeamCategory] = {
         category.name: category for category in all_categories
     }
 
@@ -65,7 +63,7 @@ def find_system_categories(cursor: Cursor) -> Mapping[TeamCategory, int]:
 
 
 def update_categories(
-    cursor: Cursor, categories: List[TeamCategory], lazy=False
+    cursor: Cursor, categories: list[TeamCategory], lazy=False
 ) -> Mapping[TeamCategory, int]:
     expected_categories = set(categories) | set(SystemCategory)
     expected_categories_by_name = {
@@ -138,9 +136,9 @@ def update_categories(
 def create_or_update_teams(
     cursor: Cursor,
     teams: Collection[Team],
-    affiliation_ids: Dict[Affiliation, int],
-    user_ids: Dict[User, int],
-) -> Dict[Team, int]:
+    affiliation_ids: dict[Affiliation, int],
+    user_ids: dict[User, int],
+) -> dict[Team, int]:
     log.info("Updating %d teams", len(teams))
     if not teams:
         return {}
@@ -148,12 +146,12 @@ def create_or_update_teams(
     categories = set(team.category for team in teams if team.category is not None)
     category_ids = find_all_categories(cursor, list(categories))
 
-    teams_by_name: Dict[str, Team] = {team.name: team for team in teams}
+    teams_by_name: dict[str, Team] = {team.name: team for team in teams}
     cursor.execute(
         f"SELECT teamid, name FROM team WHERE name IN {list_param(teams)}",
         tuple(team.name for team in teams),
     )
-    existing_teams: Dict[Team, int] = {
+    existing_teams: dict[Team, int] = {
         teams_by_name[name]: team_id for team_id, name in cursor
     }
 
@@ -336,7 +334,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
 
     problem_testcases = problem.testcases
 
-    testcases_by_name: Dict[str, DbTestCase] = {}
+    testcases_by_name: dict[str, DbTestCase] = {}
     leftover_cases = []
     cursor.execute(
         "SELECT t.testcaseid, t.orig_input_filename, t.description, t.`rank`, "
@@ -370,8 +368,8 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
         len(leftover_cases),
     )
 
-    matched_cases: List[Tuple[ProblemTestCase, DbTestCase]] = []
-    missing_cases: List[ProblemTestCase] = []
+    matched_cases: list[tuple[ProblemTestCase, DbTestCase]] = []
+    missing_cases: list[ProblemTestCase] = []
 
     for problem_testcase in problem_testcases:
         testcase_name = problem_testcase.unique_name
@@ -430,7 +428,7 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             )
             update_testcase_content.append((problem_testcase, database_case))
 
-    existing_cases: List[Tuple[ProblemTestCase, DbTestCase]] = matched_cases.copy()
+    existing_cases: list[tuple[ProblemTestCase, DbTestCase]] = matched_cases.copy()
 
     for problem_testcase in missing_cases:
         description = problem_testcase.description
@@ -504,11 +502,11 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
     # if database_testcase_count != len(existing_cases):
     #     raise ValueError(f"Expected {len(existing_cases)} cases in DB, got {database_testcase_count}")
 
-    sorted_cases: List[DbTestCase] = sorted(
+    sorted_cases: list[DbTestCase] = sorted(
         [database_case for _, database_case in existing_cases],
         key=test_case_compare_key,
     )
-    rank_update: List[Tuple[int, DbTestCase]] = []
+    rank_update: list[tuple[int, DbTestCase]] = []
     for i, case in enumerate(sorted_cases):
         rank = i + 1
         if rank != case.rank:
@@ -635,7 +633,7 @@ def update_settings(cursor: Cursor, settings: JudgeSettings):
 def set_languages(
     cursor: Cursor,
     languages: Collection[Language],
-    allowed_for_submission: Optional[Set[str]],
+    allowed_for_submission: set[str] | None,
 ):
     if allowed_for_submission is None:
         log.debug("Using all available languages")
@@ -728,8 +726,8 @@ def clear_invalid_submissions(cursor):
 def create_problem_submissions(
     cursor: Cursor,
     problem: Problem,
-    existing_submissions: Collection[Tuple[Team, ProblemSubmission]],
-    team_ids: Dict[Team, int],
+    existing_submissions: Collection[tuple[Team, ProblemSubmission]],
+    team_ids: dict[Team, int],
     contest_ids: Collection[int] | None = None,
 ):
     log.info("Updating submissions of problem %s", problem.name)
@@ -768,7 +766,7 @@ def create_problem_submissions(
             raise KeyError("Not all given contests exist")
     log.debug("Updating for contests with ids %s", ",".join(map(str, contest_ids)))
 
-    submissions_grouped: Dict[Tuple[int, Tuple[str, ...]], ProblemSubmission] = dict()
+    submissions_grouped: dict[tuple[int, tuple[str, ...]], ProblemSubmission] = dict()
     used_team_ids = dict()
     for team, submission in existing_submissions:
         team_id = team_ids[team]
@@ -900,8 +898,8 @@ def create_problem_submissions(
         len(invalid_submission_ids),
     )
 
-    old_submission_ids: List[int] = []
-    current_submissions: Dict[int, Dict[Tuple[int, Collection[str]], int]] = {
+    old_submission_ids: list[int] = []
+    current_submissions: dict[int, dict[tuple[int, Collection[str]], int]] = {
         contest_id: dict() for contest_id in contest_ids
     }
 
@@ -1048,13 +1046,13 @@ def create_or_update_contest_problems(
     cursor: Cursor,
     contest: Contest,
     contest_id: int,
-    problem_ids: Dict[Problem, int],
+    problem_ids: dict[str, int],
 ):
     # TODO Does not yet handle the case when contest problem is changed
 
     for contest_problem in contest.problems:
         # Cannot REPLACE INTO because of database triggers
-        problem_id = problem_ids[contest_problem.problem]
+        problem_id = problem_ids[contest_problem.problem_key]
         cursor.execute(
             "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
@@ -1090,7 +1088,7 @@ def create_or_update_contest_problems(
 def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> int:
     date_format = "%Y-%m-%d %H:%M:%S"
 
-    def format_datetime(dt: Optional[datetime.datetime]):
+    def format_datetime(dt: datetime.datetime | None):
         if dt is None:
             return None
         return f"{dt.strftime(date_format)} {dt.tzinfo}"
@@ -1210,14 +1208,14 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
     return contest_id
 
 
-def fetch_user_roles(cursor: Cursor) -> Dict[str, int]:
+def fetch_user_roles(cursor: Cursor) -> dict[str, int]:
     cursor.execute("SELECT roleid, role FROM role")
     return {role: role_id for role_id, role in cursor}
 
 
 def create_or_update_affiliations(
     cursor: Cursor, affiliations: Collection[Affiliation]
-) -> Dict[Affiliation, int]:
+) -> dict[Affiliation, int]:
     log.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
         return {}
@@ -1230,7 +1228,7 @@ def create_or_update_affiliations(
         f"WHERE externalid IN {list_param(affiliations)}",
         tuple(affiliation.short_name for affiliation in affiliations),
     )
-    affiliation_ids: Dict[Affiliation, int] = {
+    affiliation_ids: dict[Affiliation, int] = {
         affiliations_by_id[key]: affiliation_id for affiliation_id, key in cursor
     }
     for affiliation in affiliations:
@@ -1265,7 +1263,7 @@ def create_or_update_affiliations(
 
 def create_or_update_users(
     cursor: Cursor, users: Collection[User], overwrite_passwords=False
-) -> Dict[User, int]:
+) -> dict[User, int]:
     log.info("Updating %d users", len(users))
     if not users:
         return {}
@@ -1324,7 +1322,7 @@ def create_or_update_users(
     return user_ids
 
 
-def disable_unknown_users(cursor: Cursor, user_login_names: Set[str]):
+def disable_unknown_users(cursor: Cursor, user_login_names: set[str]):
     valid_users = {"admin", "judgehost"}
     valid_users.update(user_login_names)
     cursor.execute(

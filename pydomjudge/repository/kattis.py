@@ -808,9 +808,6 @@ class RepositoryProblems(ProblemLoader[RepositoryProblem]):
         self._problems[path.name] = problem
         return problem
 
-    def serialize_problem(self, problem: RepositoryProblem):
-        return problem.repository_key
-
     def load_all_problems(self):
         if not self._all_loaded:
             for path in self.base_path.iterdir():
