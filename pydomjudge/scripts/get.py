@@ -43,7 +43,7 @@ def main():
         help="Folder or .tar/.zip file to write the statements to",
     )
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
 
     statements_parser = subparsers.add_parser("problems")
     statements_parser.add_argument("--language", action="append", default=["en"])

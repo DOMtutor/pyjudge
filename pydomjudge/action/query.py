@@ -76,6 +76,12 @@ def find_contest_problems(database: Database, contest_key: str) -> list[ContestP
         return list(problems.values())
 
 
+def find_contest_keys(database: Database):
+    with database.transaction_cursor(readonly=True) as cursor:
+        cursor.execute("SELECT shortname FROM contest")
+        return set(name for (name,) in cursor)
+
+
 def find_contest_description(
     database: Database, contest_key: str
 ) -> ContestDescriptionDto:
@@ -353,7 +359,7 @@ def find_clarifications(
 
 
 def find_non_system_teams(database: Database) -> list[TeamDto]:
-    system_categories: set[str] = {category.value.key for category in SystemCategory}
+    system_categories: set[str] = {category.key for category in SystemCategory.values()}
 
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(

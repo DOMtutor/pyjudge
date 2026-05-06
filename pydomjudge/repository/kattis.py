@@ -166,10 +166,10 @@ class JurySubmission(JuryProblemSubmission):
         "compile_error": {Verdict.COMPILER_ERROR},
     }
 
-    def __init__(self, path: pathlib.Path, config: "Repository"):
+    def __init__(self, path: pathlib.Path, repository: "Repository"):
         assert path.is_file()
         self.path: pathlib.Path = path
-        self.config = config
+        self.repository = repository
         self._extension = path.suffix
         if self._extension and self._extension[0] == ".":
             self._extension = self._extension[1:]
@@ -177,19 +177,18 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def name(self) -> str:
-        return self.path.stem.lower()
+        return f"{self.category}/{self.file_name}"
 
     @property
     def file_name(self) -> str:
         return self.path.name
 
+    def last_modified(self) -> float:
+        return self.path.stat().st_mtime
+
     @property
     def extension(self) -> str:
         return self._extension
-
-    @property
-    def problem_unique_name(self) -> str:
-        return f"{self.category}/{self.name}.{self.extension}"
 
     @property
     def category(self) -> str:
@@ -201,11 +200,11 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def language(self) -> Optional[Language]:
-        return self.config.find_language_of_submission(self)
+        return self.repository.find_language_of_submission(self)
 
     @property
     def author(self) -> Optional[RepositoryAuthor]:
-        return self.config.find_author_of(self)
+        return self.repository.find_author_of(self)
 
     @property
     def source(self):
@@ -331,7 +330,7 @@ class RepositoryProblem(Problem):
 
     @property
     def type(self) -> int:
-        # Defaults to 1, which is pass-fail type
+        # Defaults to 1, which is the pass-fail type
         return self.description.get("type", 1)
 
     @property
@@ -428,7 +427,10 @@ class RepositoryProblem(Problem):
     def kattis_problem(self) -> problemtools.verifyproblem.Problem:
         return self._problemtools
 
+    # noinspection PyProtectedMember
     def check(self, force=False):
+        # This here emulates problem.check() but customized to our use case
+
         last_verified = self.directory / ".last_verified"
         if last_verified.exists() and not force:
             date = last_verified.stat().st_mtime
@@ -445,24 +447,28 @@ class RepositoryProblem(Problem):
 
         limit.check_limit_capabilities(self)
 
-        verify.ProblemAspect.bail_on_error = True
+        context = verify.Context(
+            argparse.Namespace(
+                data_filter=re.compile(".*"),
+                submission_filter=re.compile(".*"),
+                fixed_timelim=None,
+            ),
+            None,
+        )
 
         with self as p:
             self._load_testcases()
 
-            p.config.check(None)
-            p.attachments.check(None)
-            # input_format_validators is outdated
-            p.input_validators.check(None)
-            p.output_validators.check(None)
-            p.graders.check(None)
+            p._check_symlinks()
+            p._check_file_and_directory_names()
+            p._check_submission_directory_names()
 
-            args = argparse.Namespace(
-                data_filter=re.compile(".*"),
-                submission_filter=re.compile(".*"),
-                fixed_timelim=None,
-            )
-            context = verify.Context(args, None)
+            # Do not check the statement here
+            p.config.check(context)
+            p.attachments.check(context)
+            p.input_validators.check(context)
+            p.output_validators.check(context)
+            p.graders.check(context)
             p.testdata.check(context)
             p.submissions.check(context)
 
@@ -475,7 +481,7 @@ class RepositoryProblem(Problem):
         return self.repository_key
 
     @property
-    def checker(self) -> Optional[Executable]:
+    def checker(self) -> Executable | None:
         return self.repository.get_checker_of(self)
 
     def generate_problem_text_if_required(self, lang="en", force=False):
@@ -1138,7 +1144,7 @@ class Repository(object):
         assert checker_language is not None
         return checker_language, checker_directory
 
-    def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:
+    def get_checker_of(self, problem: RepositoryProblem) -> Executable | None:
         checker_data = self.get_checker_data_of(problem)
         if checker_data is None:
             return None
@@ -1161,7 +1167,7 @@ class Repository(object):
             key=f"sol_lang_{language.key}",
             name=f"sol_lang_{language.key}",
             display_name=f"Sample Solution {language.name}",
-            category=SystemCategory.Solution.value,
+            category=SystemCategory.Solution,
             affiliation=None,
             members=[],
         )
@@ -1173,7 +1179,7 @@ class Repository(object):
                 key="sol_author_unknown",
                 name="sol_author_unknown",
                 display_name="Author Unknown",
-                category=SystemCategory.Author.value,
+                category=SystemCategory.Author,
                 affiliation=None,
                 members=[],
             )
@@ -1182,7 +1188,7 @@ class Repository(object):
             key=f"sol_author_{author.key}",
             name=f"sol_author_{author.key}",
             display_name=f"Author {author.name}",
-            category=SystemCategory.Author.value,
+            category=SystemCategory.Author,
             affiliation=author.affiliation,
             members=[],
         )

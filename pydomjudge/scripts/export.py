@@ -27,6 +27,12 @@ def fetch_contest(database: Database, contest_key: str):
         teams_by_key = {team.key: team for team in teams}
         language_name_by_key = query.find_languages(connection)
 
+        contest_keys = query.find_contest_keys(connection)
+        if contest_key not in contest_keys:
+            raise ValueError(
+                f"Contest {contest_key} not found, known contests: {' '.join(contest_keys)}"
+            )
+
         contest_description = query.find_contest_description(connection, contest_key)
 
         contest_problems = query.find_contest_problems(connection, contest_key)
@@ -93,7 +99,7 @@ def main():
     parser = argparse.ArgumentParser()
     db.make_argparse(parser)
 
-    subparsers = parser.add_subparsers(help="Help for commands")
+    subparsers = parser.add_subparsers(help="Help for commands", required=True)
     contest_data_parser = subparsers.add_parser(
         "contest", help="Relevant data of a contest"
     )

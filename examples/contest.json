@@ -1,0 +1,19 @@
+{
+  "key": "sample",
+  "name": "Sample Contest",
+  "activation_time": "2026-05-06T10:00:00 Europe/Berlin",
+  "start_time": "2026-05-06T11:00:00 Europe/Berlin",
+  "end_time": "2026-05-20T10:00:00 Europe/Berlin",
+  "freeze_time": null,
+  "deactivation_time": "2026-05-21T10:00:00 Europe/Berlin",
+  "problems": [
+    {
+      "name": "helloworld",
+      "points": 4,
+      "color": "blue",
+      "problem_key": "helloworld"
+    }
+  ],
+  "access": null,
+  "public_scoreboard": false
+}

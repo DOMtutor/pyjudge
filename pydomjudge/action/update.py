@@ -44,7 +44,7 @@ def find_all_categories(
 ) -> Mapping[TeamCategory, int]:
     cursor.execute("SELECT categoryid, name FROM team_category")
 
-    all_categories = list(categories) + list(SystemCategory)
+    all_categories = list(categories) + list(SystemCategory.values())
     database_to_category: dict[str, TeamCategory] = {
         category.name: category for category in all_categories
     }
@@ -68,7 +68,7 @@ def find_system_categories(cursor: Cursor) -> Mapping[TeamCategory, int]:
 def update_categories(
     cursor: Cursor, categories: list[TeamCategory], lazy=False
 ) -> Mapping[TeamCategory, int]:
-    expected_categories = set(categories) | set(SystemCategory)
+    expected_categories = set(categories) | set(SystemCategory.values())
     expected_categories_by_name = {
         category.name: category for category in expected_categories
     }
@@ -114,7 +114,6 @@ def update_categories(
             category_id = cursor.lastrowid
 
         category_ids[category] = category_id
-        # + externalid
         cursor.execute(
             "UPDATE team_category "
             "SET sortorder = %s, color = %s, visible = %s, allow_self_registration = %s, externalid = %s "
@@ -171,15 +170,12 @@ def create_or_update_teams(
 
         if team in existing_teams:
             team_id = existing_teams[team]
-            # externalid required for team
-            # Reference to domjudge/webapp/src/Entity/Team.php
             cursor.execute(
                 "UPDATE team SET display_name = %s, categoryid = %s, affilid = %s, externalid = %s WHERE teamid = %s",
                 (team.display_name, team_category, affiliation_id, team.key, team_id),
             )
         else:
             log.debug("Creating team %s", team.name)
-            # + externalid
             cursor.execute(
                 "INSERT INTO team (name, display_name, categoryid, affilid, externalid) "
                 "VALUES (%s, %s, %s, %s, %s)",
@@ -205,16 +201,13 @@ def create_or_update_teams(
 
 
 def create_or_update_executable(cursor: Cursor, executable: Executable):
-    # Immutable executable is introduced for v9
-    # Reference to domjudge/webapp/src/Entity/ImmutableExecutable.php, for the combined hash logic
     log.debug("Updating executable %s", executable)
 
     file_info = executable.file_info()
-
+    # See domjudge/webapp/src/Entity/ImmutableExecutable.php for the combined hash logic
     combined = "".join(
         f"{f['hash']}{f['filename']}{f['is_executable']}" for f in file_info
     )
-
     immutable_hash = hashlib.md5(combined.encode()).hexdigest()
 
     cursor.execute(
@@ -261,8 +254,7 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
     )
 
     # Deletes every immutable_execid that does not appear in the `executable` table.
-    # It automatically deletes from the `executable_file` too? (ON DELETE CASCADE)
-    # Reference to domjudge/webapp/migrations/Version20201219154651.php
+    # Also deletes from the `executable_file` (ON DELETE CASCADE)
     cursor.execute(
         "DELETE FROM immutable_executable "
         "WHERE immutable_execid NOT IN "
@@ -314,14 +306,20 @@ def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
         raise KeyError(f"Problem {problem.key} does not exist in database")
 
     problem_id = id_query[0]
-    cursor.execute(
-        "UPDATE problem SET name = %s WHERE probid = %s", (problem.name, problem_id)
-    )
 
     text_data, text_type = problem.problem_text()
+
     cursor.execute(
-        "UPDATE problem SET problem_statement_content = %s, problemstatement_type = %s WHERE probid = %s",
-        (text_data, text_type, problem_id),
+        "UPDATE problem SET name = %s, problemstatement_type = %s WHERE probid = %s",
+        (
+            problem.name,
+            text_type,
+            problem_id,
+        ),
+    )
+    cursor.execute(
+        "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
+        (problem_id, text_data),
     )
     return problem_id
 
@@ -341,8 +339,7 @@ def create_or_update_problem_data(
         )
     else:
         log.debug("Creating problem %s in database", problem)
-        # Need to initialize 'types' value (default: 1 [pass-fail])
-        # Reference to domjudge/webapp/src/Entity/Problem.php and pyjudge/pydomjudge/repository/kattis.py
+        # Type 1 = [pass-fail], see domjudge/webapp/src/Entity/Problem.php
         cursor.execute(
             "INSERT INTO problem (externalid, name, types) VALUES (%s, %s, %s)",
             (problem.key, problem.name, 1),
@@ -374,11 +371,10 @@ def create_or_update_problem_data(
         ),
     )
 
-    if text_data is not None:
-        cursor.execute(
-            "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
-            (problem_id, text_data),
-        )
+    cursor.execute(
+        "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
+        (problem_id, text_data),
+    )
 
     checker = problem.checker
     if checker is None:
@@ -612,16 +608,11 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             else:
                 image, thumbnail = image_data
 
-            # Cannot `REPLACE INTO` or `ON DUPLICATE KEY UPDATE`,
-            # because the primary key is `tc_contentid` (auto-increment).
-            # It would result in always inserting a new row instead of replacing.
-            # Delete testcase content
+            # Cannot `REPLACE INTO` or `ON DUPLICATE KEY UPDATE`, because the primary key is auto-incrementing, so we delete and re-insert
             cursor.execute(
                 "DELETE FROM testcase_content WHERE testcaseid = %s",
                 (database_case.case_id,),
             )
-
-            # Insert new content
             cursor.execute(
                 "INSERT INTO testcase_content (testcaseid, input, output, image, image_thumb)"
                 "VALUES (%s, %s, %s, %s, %s)",
@@ -806,7 +797,7 @@ def clear_invalid_submissions(cursor):
 def create_problem_submissions(
     cursor: Cursor,
     problem: Problem,
-    existing_submissions: Collection[tuple[Team, ProblemSubmission]],
+    submissions: Collection[tuple[Team, ProblemSubmission]],
     team_ids: dict[Team, int],
     contest_ids: Collection[int] | None = None,
 ):
@@ -850,7 +841,7 @@ def create_problem_submissions(
 
     submissions_grouped: dict[tuple[int, tuple[str, ...]], ProblemSubmission] = dict()
     used_team_ids = dict()
-    for team, submission in existing_submissions:
+    for team, submission in submissions:
         team_id = team_ids[team]
         key = team_id, (submission.file_name,)
         if key in submissions_grouped:
@@ -863,7 +854,7 @@ def create_problem_submissions(
 
     cursor.execute(
         f"SELECT "
-        f"  submitid, origsubmitid, teamid, cid, expected_results, langid "
+        f"  submitid, origsubmitid, teamid, cid, expected_results, langid, externalid "
         f"FROM submission s "
         f"WHERE "
         f"  probid = %s AND "
@@ -873,7 +864,9 @@ def create_problem_submissions(
     )
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
-    existing_submissions: dict[int, tuple[int, int, int, int, tuple[Verdict, ...]]] = {}
+    existing_submissions: dict[
+        int, tuple[int, int, int, int, tuple[Verdict, ...], str]
+    ] = {}
     submission_successor: dict[int, int] = {}
     for (
         submission_id,
@@ -882,6 +875,7 @@ def create_problem_submissions(
         contest_id,
         expected_results_string,
         language_id,
+        external_id,
     ) in cursor:
         expected_results_list = (
             json.loads(expected_results_string) if expected_results_string else []
@@ -904,7 +898,7 @@ def create_problem_submissions(
 
         if original_submission_id is not None:
             if original_submission_id in submission_successor:
-                # TODO I think this is not allowed by domjudge, so raise exception
+                # TODO I think this is not allowed by domjudge, so raise an exception
                 raise ValueError(
                     f"Multiple successors for submission {original_submission_id}: "
                     f"{submission_id} and {submission_successor[original_submission_id]}"
@@ -917,6 +911,7 @@ def create_problem_submissions(
             contest_id,
             language_id,
             expected_results,
+            external_id,
         )
 
     submission_files: dict[int, dict[str, str]] = defaultdict(dict)
@@ -951,6 +946,7 @@ def create_problem_submissions(
         contest_id,
         language_id,
         expected_results,
+        external_id,
     ) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
@@ -1202,10 +1198,16 @@ def create_problem_submissions(
                     }
                 )
 
+                external_id = (
+                    f"{team_id} {submission.name} {int(submission.last_modified())}"
+                )
+                if len(external_id) > 255:
+                    external_id = external_id[:256]
+
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
-                    "langid, submittime, valid, expected_results) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s)",
+                    "langid, submittime, valid, expected_results, externalid, source) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, 'pyjudge')",
                     (
                         existing_id,
                         contest_id,
@@ -1214,6 +1216,7 @@ def create_problem_submissions(
                         language.key,
                         contest_start[contest_id],
                         expected_results_string,
+                        external_id,
                     ),
                 )
                 new_submission_id = cursor.lastrowid
@@ -1274,11 +1277,11 @@ def create_problem_submissions(
                         ),
                     )
 
-                    # Create corresponding judging_run entry
-                    judgetask_id = cursor.lastrowid
+                    # Create a corresponding judging_run entry
+                    judge_task_id = cursor.lastrowid
                     cursor.execute(
                         "INSERT INTO judging_run (judgingid, judgetaskid, testcaseid) VALUES (%s, %s, %s)",
-                        (judging_id, judgetask_id, testcase_id),
+                        (judging_id, judge_task_id, testcase_id),
                     )
 
                 # Create queuetask
@@ -1331,7 +1334,7 @@ def create_or_update_contest_problems(
     contest_id: int,
     problem_ids: dict[str, int],
 ):
-    # TODO Does not yet handle the case when contest problem is changed
+    # TODO Does not yet handle the case when a contest problem is changed
 
     for contest_problem in contest.problems:
         # Cannot REPLACE INTO because of database triggers
@@ -1357,7 +1360,6 @@ def create_or_update_contest_problems(
                 ),
             )
         else:
-            # lazy_eval_results cannot be NULL
             cursor.execute(
                 "INSERT INTO contestproblem (cid, probid, shortname, points, allow_submit, "
                 "allow_judge, color, lazy_eval_results) VALUES (%s, %s, %s, %s, TRUE, TRUE, %s, 0)",

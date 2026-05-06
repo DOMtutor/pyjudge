@@ -1,6 +1,6 @@
 import abc
 import enum
-from typing import Optional, Annotated
+from typing import Annotated
 
 from pydantic import PlainSerializer, BeforeValidator, BaseModel
 
@@ -95,6 +95,10 @@ class ProblemSubmission(abc.ABC):
     def name(self) -> str:
         pass
 
+    @abc.abstractmethod
+    def last_modified(self) -> float:
+        pass
+
     @property
     @abc.abstractmethod
     def file_name(self) -> str:
@@ -119,9 +123,7 @@ class ProblemSubmission(abc.ABC):
         return get_md5(self.source.encode("utf-8"))
 
     def __str__(self):
-        if self.expected_results is None:
-            return self.file_name
-        return f"S({self.file_name}@{','.join(map(str, self.expected_results))})"
+        return f"S({self.name}@{','.join(str(x) for x in self.expected_results) if self.expected_results else '?'})"
 
 
 class SubmissionAuthor(BaseModel):
@@ -141,13 +143,5 @@ class SubmissionAuthor(BaseModel):
 class JuryProblemSubmission(ProblemSubmission):
     @property
     @abc.abstractmethod
-    def author(self) -> Optional[SubmissionAuthor]:
+    def author(self) -> SubmissionAuthor | None:
         pass
-
-    @property
-    @abc.abstractmethod
-    def problem_unique_name(self) -> str:
-        pass
-
-    def __str__(self):
-        return f"S({self.problem_unique_name}@{','.join(str(x) for x in self.expected_results) if self.expected_results else '?'})"

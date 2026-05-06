@@ -1,5 +1,3 @@
-import enum
-
 from pydantic import BaseModel
 
 from .user import User
@@ -20,7 +18,7 @@ class TeamCategory(BaseModel):
         return isinstance(other, TeamCategory) and self.key == other.key
 
 
-class SystemCategory(enum.Enum):
+class SystemCategory:
     Jury = TeamCategory(
         key="jury",
         name="Jury",
@@ -54,8 +52,12 @@ class SystemCategory(enum.Enum):
         self_registration=False,
     )
 
+    @classmethod
+    def values(cls):
+        return [cls.Jury, cls.Solution, cls.Author, cls.System]
 
-class DefaultCategory(enum.Enum):
+
+class DefaultCategory:
     Participants = TeamCategory(
         key="participants",
         name="Participants",
@@ -72,6 +74,10 @@ class DefaultCategory(enum.Enum):
         order=5,
         self_registration=False,
     )
+
+    @classmethod
+    def all(cls):
+        return [cls.Participants, cls.Hidden]
 
 
 class Affiliation(BaseModel):

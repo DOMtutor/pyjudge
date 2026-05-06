@@ -102,8 +102,8 @@ class Contest(BaseModel):
     def _serialize_datetime(self, dt: datetime | None):
         if dt is None:
             return None
-        assert dt.tzinfo is not None
-        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.tzname(dt)}"
+        assert dt.tzinfo is not None and hasattr(dt.tzinfo, "key")
+        return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.key}"
 
     def is_active(self, point: datetime):
         return self.activation_time <= point <= self.end_time

@@ -2,7 +2,6 @@ import argparse
 import dataclasses
 import datetime
 import itertools
-import json
 import logging
 import pathlib
 import re
@@ -104,7 +103,7 @@ def upload_contest(
     repository = config.repository
     problems_by_key = {
         contest_problem.problem_key: repository.problems.load_problem(
-            contest_problem.problem
+            contest_problem.problem_key
         )
         for contest_problem in contest.problems
     }
@@ -138,7 +137,7 @@ def upload_contest(
                     )
                     if update_test_cases:
                         update.create_or_update_problem_testcases(
-                            cursor, contest_problem.problem
+                            cursor, problems_by_key[contest_problem.problem_key]
                         )
 
             with connection.transaction_cursor() as cursor:
@@ -292,10 +291,11 @@ def command_problem(config: PyjudgeConfig, args):
     problems.extend(config.repository.problems.load_problem(name) for name in args.name)
     for contest_json in args.contest:
         contest_json: pathlib.Path
-        with contest_json.open(mode="rt") as f:
-            data = json.load(f)
-        contest = Contest.load(data, config.repository.problems)
-        problems.extend(contest_problem.problem for contest_problem in contest.problems)
+        contest = Contest.model_validate_json(contest_json.read_text())
+        problems.extend(
+            config.repository.problems.load_problem(contest_problem.problem_key)
+            for contest_problem in contest.problems
+        )
 
     if not problems:
         sys.exit("No problems found")
@@ -310,11 +310,9 @@ def command_problem(config: PyjudgeConfig, args):
 
 
 def command_contest(config: PyjudgeConfig, args):
-    with args.contest.open(mode="rt") as file:
-        contest_upload_data = json.load(file)
     upload_contest(
         config,
-        Contest.load(contest_upload_data, config.repository.problems),
+        Contest.model_validate_json(args.contest.read_text()),
         force=args.force,
         update_problems=args.update_problems,
         verify_problems=args.verify,
@@ -329,8 +327,7 @@ def command_users(config: PyjudgeConfig, args):
         context={
             "category_by_name": {
                 category.key: category
-                for category in config.judge.team_categories
-                + [SystemCategory.Jury.value]
+                for category in config.judge.team_categories + [SystemCategory.Jury]
             }
         },
     )
@@ -373,7 +370,7 @@ def main():
         help="Path to instance specification",
     )
 
-    subparsers = parser.add_subparsers(help="Help for commands")
+    subparsers = parser.add_subparsers(help="Help for commands", required=True)
     problem_parser = subparsers.add_parser("problem", help="Upload problems")
     problem_parser.add_argument(
         "--regex", nargs="*", help="Regexes to match problem name", default=[]
@@ -480,10 +477,10 @@ def main():
             "Instance has no defined categories, this is very likely not what you want"
         )
     category_keys = set(category.key for category in instance.team_categories)
-    for system_category in SystemCategory:
-        if system_category.value.key in category_keys:
+    for system_category in SystemCategory.values():
+        if system_category.key in category_keys:
             raise ValueError(
-                f"Reserved system category {system_category.value.key} declared!"
+                f"Reserved system category {system_category.key} declared!"
             )
 
     config = PyjudgeConfig(
