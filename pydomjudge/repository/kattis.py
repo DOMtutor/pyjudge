@@ -166,10 +166,10 @@ class JurySubmission(JuryProblemSubmission):
         "compile_error": {Verdict.COMPILER_ERROR},
     }
 
-    def __init__(self, path: pathlib.Path, config: "Repository"):
+    def __init__(self, path: pathlib.Path, repository: "Repository"):
         assert path.is_file()
         self.path: pathlib.Path = path
-        self.config = config
+        self.repository = repository
         self._extension = path.suffix
         if self._extension and self._extension[0] == ".":
             self._extension = self._extension[1:]
@@ -177,19 +177,18 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def name(self) -> str:
-        return self.path.stem.lower()
+        return f"{self.category}/{self.file_name}"
 
     @property
     def file_name(self) -> str:
         return self.path.name
 
+    def last_modified(self) -> float:
+        return self.path.stat().st_mtime
+
     @property
     def extension(self) -> str:
         return self._extension
-
-    @property
-    def problem_unique_name(self) -> str:
-        return f"{self.category}/{self.name}.{self.extension}"
 
     @property
     def category(self) -> str:
@@ -201,11 +200,11 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def language(self) -> Optional[Language]:
-        return self.config.find_language_of_submission(self)
+        return self.repository.find_language_of_submission(self)
 
     @property
     def author(self) -> Optional[RepositoryAuthor]:
-        return self.config.find_author_of(self)
+        return self.repository.find_author_of(self)
 
     @property
     def source(self):
@@ -241,7 +240,7 @@ class RepositoryProblem(Problem):
     def link_or_copy_problem_statement(
         problem: "RepositoryProblem", destination: pathlib.Path, force=False
     ):
-        problem_paths = ["problem_statement", "data/sample"]
+        problem_paths = ["problem_statement", "data/sample", "problem.yaml"]
 
         repository_path = problem.directory
         for sub_path in problem_paths:
@@ -307,7 +306,17 @@ class RepositoryProblem(Problem):
         self._submissions = None
         self._generator = None
         self._generate_function = None
-        self._problemtools = verify.Problem(str(self.directory.absolute()))
+        self._args = argparse.Namespace(
+            # might need attributes later?
+            # some attributes include:
+            # threads: int
+            # parts: list[str] ?
+            bail_on_error=False,
+            werror=False,
+            max_additional_info=15,
+        )
+        # self._args added as the second param
+        self._problemtools = verify.Problem(str(self.directory.absolute()), self._args)
         self._problemtools_loaded = False
         self._reference_submission = None
         self.log = log.getChild(self.repository_key)
@@ -320,11 +329,19 @@ class RepositoryProblem(Problem):
         return self._name
 
     @property
+    def type(self) -> int:
+        # Defaults to 1, which is the pass-fail type
+        return self.description.get("type", 1)
+
+    @property
     def limits(self) -> ProblemLimits:
         return self._limits
 
     def __enter__(self) -> problemtools.verifyproblem.Problem:
         p = self._problemtools.__enter__()
+
+        # Call load() for submissions to access submission data
+        self._problemtools.load()
 
         self._validator_temporary_directory = None
         if self.validation == "custom":
@@ -410,7 +427,10 @@ class RepositoryProblem(Problem):
     def kattis_problem(self) -> problemtools.verifyproblem.Problem:
         return self._problemtools
 
+    # noinspection PyProtectedMember
     def check(self, force=False):
+        # This here emulates problem.check() but customized to our use case
+
         last_verified = self.directory / ".last_verified"
         if last_verified.exists() and not force:
             date = last_verified.stat().st_mtime
@@ -423,24 +443,34 @@ class RepositoryProblem(Problem):
                 return
             last_verified.unlink()
 
-        self._load_testcases()
-
         import problemtools.run.limit as limit
 
         limit.check_limit_capabilities(self)
 
-        verify.ProblemAspect.bail_on_error = True
-        with self as p:
-            p.config.check(None)
-            p.attachments.check(None)
-            p.input_format_validators.check(None)
-            p.output_validators.check(None)
-            p.graders.check(None)
+        context = verify.Context(
+            argparse.Namespace(
+                data_filter=re.compile(".*"),
+                submission_filter=re.compile(".*"),
+                fixed_timelim=None,
+            ),
+            None,
+        )
 
-            args = verify.default_args()
-            p.testdata.check(args)
-            p.submissions.check(args)
-        last_verified.touch()
+        with self as p:
+            self._load_testcases()
+
+            p._check_symlinks()
+            p._check_file_and_directory_names()
+            p._check_submission_directory_names()
+
+            # Do not check the statement here
+            p.config.check(context)
+            p.attachments.check(context)
+            p.input_validators.check(context)
+            p.output_validators.check(context)
+            p.graders.check(context)
+            p.testdata.check(context)
+            p.submissions.check(context)
 
     @property
     def checker_flags(self) -> Optional[str]:
@@ -451,7 +481,7 @@ class RepositoryProblem(Problem):
         return self.repository_key
 
     @property
-    def checker(self) -> Optional[Executable]:
+    def checker(self) -> Executable | None:
         return self.repository.get_checker_of(self)
 
     def generate_problem_text_if_required(self, lang="en", force=False):
@@ -492,15 +522,15 @@ class RepositoryProblem(Problem):
                 build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
-                options = problemtools.problem2pdf.ConvertOptions()
-                options.language = lang  # ty:ignore[unresolved-attribute]
-                # noinspection SpellCheckingInspection
-                options.destfile = str(build_pdf.absolute())  # ty:ignore[unresolved-attribute]
-                options.quiet = not log.isEnabledFor(logging.DEBUG)  # ty:ignore[unresolved-attribute]
-
-                problemtools.problem2pdf.convert(
-                    str(problem_directory.absolute()), options
+                options = argparse.Namespace(
+                    language=lang,
+                    destfile=str(build_pdf.absolute()),
+                    quiet=not log.isEnabledFor(logging.DEBUG),
+                    nopdf=False,
+                    problem=str(problem_directory.absolute()),
                 )
+
+                problemtools.problem2pdf.convert(options)
 
                 # TODO Wait till problemtools allows extracting the output
                 if not build_pdf.exists():
@@ -712,42 +742,41 @@ class RepositoryProblem(Problem):
         if self._test_cases is None:
             self._test_cases = []
 
-            with self:
-                for category_directory in (self.directory / "data").iterdir():
-                    if not category_directory.is_dir():
+            for category_directory in (self.directory / "data").iterdir():
+                if not category_directory.is_dir():
+                    continue
+                for seed_file in category_directory.glob("*.seed"):
+                    self.generate_input_if_required(seed_file)
+
+                for input_file in category_directory.glob("*.in"):
+                    if not input_file.is_file():
                         continue
-                    for seed_file in category_directory.glob("*.seed"):
-                        self.generate_input_if_required(seed_file)
-
-                    for input_file in category_directory.glob("*.in"):
-                        if not input_file.is_file():
-                            continue
-                        if (
-                            any(
-                                input_file.name.startswith(s)
-                                for s in [
-                                    "small_",
-                                    "medium_",
-                                    "large_",
-                                    "huge_",
-                                    "tiny_",
-                                ]
-                            )
-                            and not input_file.with_suffix(".seed").exists()
-                        ):
-                            log.warning(
-                                "Input file %s has reserved name but no matching seed file",
-                                input_file,
-                            )
-
-                        answer_file = input_file.with_suffix(".ans")
-                        self.generate_answer_if_required(input_file, answer_file)
-                        if not answer_file.stat().st_size:
-                            answer_file.unlink(missing_ok=True)
-                            continue
-                        self._test_cases.append(
-                            RepositoryTestCase(category_directory / input_file.stem)
+                    if (
+                        any(
+                            input_file.name.startswith(s)
+                            for s in [
+                                "small_",
+                                "medium_",
+                                "large_",
+                                "huge_",
+                                "tiny_",
+                            ]
                         )
+                        and not input_file.with_suffix(".seed").exists()
+                    ):
+                        log.warning(
+                            "Input file %s has reserved name but no matching seed file",
+                            input_file,
+                        )
+
+                    answer_file = input_file.with_suffix(".ans")
+                    self.generate_answer_if_required(input_file, answer_file)
+                    if not answer_file.stat().st_size:
+                        answer_file.unlink(missing_ok=True)
+                        continue
+                    self._test_cases.append(
+                        RepositoryTestCase(category_directory / input_file.stem)
+                    )
 
         return self._test_cases
 
@@ -1115,7 +1144,7 @@ class Repository(object):
         assert checker_language is not None
         return checker_language, checker_directory
 
-    def get_checker_of(self, problem: RepositoryProblem) -> Optional[Executable]:
+    def get_checker_of(self, problem: RepositoryProblem) -> Executable | None:
         checker_data = self.get_checker_data_of(problem)
         if checker_data is None:
             return None
@@ -1135,9 +1164,10 @@ class Repository(object):
     # noinspection PyMethodMayBeStatic
     def get_solution_team_of_language(self, language: Language):
         return Team(
+            key=f"sol_lang_{language.key}",
             name=f"sol_lang_{language.key}",
             display_name=f"Sample Solution {language.name}",
-            category=SystemCategory.Solution.value,
+            category=SystemCategory.Solution,
             affiliation=None,
             members=[],
         )
@@ -1146,17 +1176,19 @@ class Repository(object):
     def get_team_of_author(self, author: Optional[RepositoryAuthor]):
         if author is None:
             return Team(
+                key="sol_author_unknown",
                 name="sol_author_unknown",
                 display_name="Author Unknown",
-                category=SystemCategory.Author.value,
+                category=SystemCategory.Author,
                 affiliation=None,
                 members=[],
             )
 
         return Team(
+            key=f"sol_author_{author.key}",
             name=f"sol_author_{author.key}",
             display_name=f"Author {author.name}",
-            category=SystemCategory.Author.value,
+            category=SystemCategory.Author,
             affiliation=author.affiliation,
             members=[],
         )

@@ -1,10 +1,5 @@
 # PyDOMJudge
 
-A library to help interaction with DOMjudge
-
-With venv active, run `pip install -e ./` to add
-
-## Segfaults of mysql
-
-See [here](https://bugs.mysql.com/bug.php?id=97220).
-Adding `LD_PRELOAD=` seems to help.
+PyJudge is a Python library to automate interaction with the [DOMjudge](https://www.domjudge.org/) programming contest jury system.
+It is the centerpiece of **DOMtutor**, but requires other tools (in particular `problemtools`) to fully function.
+See the [documentation](https://github.com/DOMtutor/documentation) for setup and usage examples.
