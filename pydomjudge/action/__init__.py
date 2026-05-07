@@ -13,7 +13,7 @@ from .update import (
     create_or_update_teams as create_or_update_teams,
     create_or_update_executable as create_or_update_executable,
     create_or_update_affiliations as create_or_update_affiliations,
-    set_languages as set_languages,
+    set_global_languages as set_global_languages,
     update_categories as update_categories,
     update_settings as update_settings,
 )

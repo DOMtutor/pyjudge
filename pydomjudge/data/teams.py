@@ -2,8 +2,9 @@ from pydantic import BaseModel, Field
 
 
 class UserDto(BaseModel):
-    login_name: str = Field(alias="login")
-    display_name: str = Field(alias="name")
+    key: str = Field(serialization_alias="key")
+    login_name: str = Field(serialization_alias="login")
+    display_name: str = Field(serialization_alias="name")
     email: str | None = Field(exclude_if=lambda x: x is None, default=None)
 
     def __str__(self):
@@ -13,13 +14,14 @@ class UserDto(BaseModel):
         return hash(self.login_name)
 
     def __eq__(self, other):
-        return isinstance(other, UserDto) and self.login_name == other.login_name
+        return isinstance(other, UserDto) and self.key == other.key
 
 
 class TeamDto(BaseModel):
-    key: str
-    display_name: str = Field(alias="name")
-    category_name: str | None = Field(alias="category")
+    key: str = Field(serialization_alias="key")
+    display_name: str = Field(serialization_alias="name")
+    category_name: str | None = Field(serialization_alias="category")
+    affiliation_name: str | None = Field(serialization_alias="affiliation")
     members: list[UserDto]
 
     def __str__(self):
@@ -29,4 +31,4 @@ class TeamDto(BaseModel):
         return hash(self.key)
 
     def __eq__(self, other):
-        return isinstance(other, UserDto) and self.key == other.key
+        return isinstance(other, TeamDto) and self.key == other.key

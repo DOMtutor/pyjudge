@@ -81,22 +81,15 @@ class DefaultCategory:
 
 
 class Affiliation(BaseModel):
-    short_name: str
+    key: str
     name: str
     country: str | None
 
-    @staticmethod
-    def json_key_name():
-        return "short_name"
-
-    def json_key(self):
-        return self.short_name
-
     def __hash__(self):
-        return hash(self.short_name)
+        return hash(self.key)
 
     def __eq__(self, other):
-        return isinstance(other, Affiliation) and self.short_name == other.short_name
+        return isinstance(other, Affiliation) and self.key == other.key
 
 
 class Team(BaseModel):

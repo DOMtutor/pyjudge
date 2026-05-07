@@ -363,32 +363,42 @@ def find_non_system_teams(database: Database) -> list[TeamDto]:
 
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
-            f"SELECT t.teamid, t.name, t.display_name, tc.name FROM team t "
+            f"SELECT t.teamid, t.name, t.display_name, tc.name, ta.name FROM team t "
             f"  JOIN team_category tc on t.categoryid = tc.categoryid "
+            f"  JOIN team_affiliation ta on t.affilid = ta.affilid "
             f"WHERE "
             f"  tc.name NOT IN {list_param(system_categories)} ",
             tuple(system_categories),
         )
         team_data = {
-            team_id: (key, name, category) for team_id, key, name, category in cursor
+            team_id: (key, name, category, affiliation)
+            for team_id, key, name, category, affiliation in cursor
         }
         cursor.execute(
-            f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
+            f"SELECT u.externalid, u.name, u.username, u.email, u.teamid FROM user u "
             f"WHERE "
             f"  {field_in_list('u.teamid', team_data)}",
             tuple(team_data.keys()),
         )
         team_users = {team_id: [] for team_id in team_data.keys()}
-        for name, username, email, team_id in cursor:
-            team_users[team_id].append(UserDto(login=username, name=name, email=email))
+        for key, name, username, email, team_id in cursor:
+            team_users[team_id].append(
+                UserDto(key=key, login_name=username, display_name=name, email=email)
+            )
         return [
             TeamDto(
                 key=team_key,
-                name=team_name,
-                category=category,
+                display_name=team_name,
+                category_name=category,
+                affiliation_name=affiliation,
                 members=team_users[team_id],
             )
-            for team_id, (team_key, team_name, category) in team_data.items()
+            for team_id, (
+                team_key,
+                team_name,
+                category,
+                affiliation,
+            ) in team_data.items()
         ]
 
 

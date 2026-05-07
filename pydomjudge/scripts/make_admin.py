@@ -17,6 +17,7 @@ def main():
         sys.exit("Empty password")
 
     admin = User(
+        key=name,
         login_name=name,
         display_name=name,
         email=None,

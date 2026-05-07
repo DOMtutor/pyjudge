@@ -19,7 +19,7 @@ def func_statements(args, problems, add_content):
                 add_content(problem_pdf, name)
 
 
-def func_samples(args, problems, add_content):
+def func_samples(_, problems, add_content):
     for problem in problems:
         for case in problem.testcases:
             if case.is_sample():

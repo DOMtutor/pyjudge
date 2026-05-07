@@ -11,6 +11,7 @@ class UserRole(enum.StrEnum):
 
 
 class User(BaseModel):
+    key: str
     login_name: str
     display_name: str
     email: str | None

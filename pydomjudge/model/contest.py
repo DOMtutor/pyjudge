@@ -26,8 +26,8 @@ class ContestProblem(BaseModel):
 
 
 class ContestAccess(BaseModel):
-    team_names: set[str]
-    team_categories: set[str]
+    team_keys: set[str]
+    team_category_keys: set[str]
 
 
 class Contest(BaseModel):
@@ -103,6 +103,7 @@ class Contest(BaseModel):
         if dt is None:
             return None
         assert dt.tzinfo is not None and hasattr(dt.tzinfo, "key")
+        # noinspection PyUnresolvedReferences
         return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.key}"
 
     def is_active(self, point: datetime):

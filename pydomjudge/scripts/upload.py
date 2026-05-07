@@ -48,7 +48,7 @@ def _update_problem_submissions(
     contest_ids: Collection[int] | None = None,
 ):
     problem_submissions: Collection[JurySubmission] = problem.submissions
-    submissions: List[Tuple[Team, ProblemSubmission]] = []
+    submissions: list[tuple[Team, ProblemSubmission]] = []
     for submission in sorted(problem_submissions, key=lambda s: s.path):
         language = submission.language
         if language is None:
@@ -197,8 +197,8 @@ class UsersDescription(BaseModel):
             team.name: {
                 **vars(team),
                 "category": team.category.key if team.category is not None else None,
-                "members": [member.login_name for member in team.members],
-                "affiliation": team.affiliation.short_name
+                "members": [member.key for member in team.members],
+                "affiliation": team.affiliation.key
                 if team.affiliation is not None
                 else None,
             }
@@ -213,26 +213,23 @@ class UsersDescription(BaseModel):
 
         if info.context is None:
             raise ValueError("Context is None")
-        category_by_name: Dict[str, TeamCategory] = info.context.get("category_by_name")
-        user_by_login: dict[str, User] = {
-            user.login_name: user for user in info.data["users"]
-        }
-        affiliation_by_name: Dict[str, Affiliation] = {
-            affiliation.short_name: affiliation
-            for affiliation in info.data["affiliations"]
+        category_by_key: Dict[str, TeamCategory] = info.context.get("category_by_key")
+        user_by_key: dict[str, User] = {user.key: user for user in info.data["users"]}
+        affiliation_by_key: Dict[str, Affiliation] = {
+            affiliation.key: affiliation for affiliation in info.data["affiliations"]
         }
         return [
             {
                 **team,
                 "name": name,
                 "display_name": team["display_name"],
-                "category": category_by_name.get(team["category"])
+                "category": category_by_key.get(team["category"])
                 if "category" in team
                 else None,
-                "affiliation": affiliation_by_name.get(team["affiliation"])
+                "affiliation": affiliation_by_key.get(team["affiliation"])
                 if "affiliation" in team
                 else None,
-                "members": [user_by_login.get(name) for name in team["members"]],
+                "members": [user_by_key.get(name) for name in team["members"]],
             }
             for name, team in value.items()
         ]
@@ -270,7 +267,7 @@ def update_settings(config: PyjudgeConfig):
         with connection.transaction_cursor() as cursor:
             update.update_settings(cursor, config.judge.settings)
             update.update_categories(cursor, config.judge.team_categories, lazy=False)
-            update.set_languages(
+            update.set_global_languages(
                 cursor, config.repository.languages, config.judge.allowed_language_keys
             )
 
@@ -292,10 +289,10 @@ def command_problem(config: PyjudgeConfig, args):
     for contest_json in args.contest:
         contest_json: pathlib.Path
         contest = Contest.model_validate_json(contest_json.read_text())
-        problems.extend(
-            config.repository.problems.load_problem(contest_problem.problem_key)
-            for contest_problem in contest.problems
-        )
+        for contest_problem in contest.problems:
+            problems.append(
+                config.repository.problems.load_problem(contest_problem.problem_key)
+            )
 
     if not problems:
         sys.exit("No problems found")
@@ -325,7 +322,7 @@ def command_users(config: PyjudgeConfig, args):
     description = UsersDescription.model_validate_json(
         args.users.read_text(),
         context={
-            "category_by_name": {
+            "category_by_key": {
                 category.key: category
                 for category in config.judge.team_categories + [SystemCategory.Jury]
             }

@@ -1,6 +1,6 @@
 [project]
 name = "PyDOMjudge"
-version = "0.2.15"
+version = "0.3.1"
 description = "A library to ease interaction with DOMjudge"
 authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
 

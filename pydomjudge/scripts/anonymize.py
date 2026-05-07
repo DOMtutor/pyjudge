@@ -40,12 +40,14 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
         teams.append(
             TeamDto(
                 key=key_name,
-                name=display_name,
-                category=team.category_name,
+                display_name=display_name,
+                category_name=team.category_name,
+                affiliation_name=team.affiliation_name,
                 members=[
                     UserDto(
-                        login=user_login,
-                        name=user_name,
+                        key=user_login,
+                        login_name=user_login,
+                        display_name=user_name,
                         email=f"{user_name}@example.com",
                     )
                 ],
