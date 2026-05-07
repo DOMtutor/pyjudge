@@ -10,18 +10,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pydomjudge.evaluate.statistics import ProblemStatistics, SummaryStatistics
-from pydomjudge.model import Verdict
+from pydomjudge.model import SubmissionVerdict
 
 verdict_formats = [
-    ({Verdict.CORRECT}, {"label": "AC", "color": "green"}),
-    ({Verdict.WRONG_ANSWER}, {"label": "WA", "color": "red"}),
-    ({Verdict.RUN_ERROR}, {"label": "RTE", "color": "orange"}),
-    ({Verdict.TIME_LIMIT}, {"label": "TLE", "color": "purple"}),
+    ({SubmissionVerdict.CORRECT}, {"label": "AC", "color": "green"}),
+    ({SubmissionVerdict.WRONG_ANSWER}, {"label": "WA", "color": "red"}),
+    ({SubmissionVerdict.RUN_ERROR}, {"label": "RTE", "color": "orange"}),
+    ({SubmissionVerdict.TIME_LIMIT}, {"label": "TLE", "color": "purple"}),
 ]
 fallback_format = {"label": "Other", "color": "gray"}
 
 
-class ProblemRenderer(object):
+class ProblemRenderer:
     def __init__(self, start_time: datetime.datetime, end_time: datetime.datetime):
         self.start_time = start_time
         self.end_time = end_time
@@ -61,7 +61,7 @@ class ProblemRenderer(object):
     ):
         x_axis = np.arange(0, stop=self.submission_buckets)
 
-        verdict_data = {verdict: np.zeros(len(x_axis)) for verdict in Verdict}
+        verdict_data = {verdict: np.zeros(len(x_axis)) for verdict in SubmissionVerdict}
         for (
             verdict,
             timestamps,
@@ -85,17 +85,19 @@ class ProblemRenderer(object):
         for verdicts, verdict_format in verdict_formats:
             handled_verdicts.update(verdicts)
             values = sum(verdict_data[verdict] for verdict in verdicts)
-            if values.any():
+            # noinspection PyUnresolvedReferences
+            if values.any():  # ty:ignore[unresolved-attribute]
                 graph_data.append(
                     (values, verdict_format["label"], verdict_format["color"])
                 )
-        if len(Verdict) > len(handled_verdicts):
+        if len(SubmissionVerdict) > len(handled_verdicts):
             other_verdict_values = sum(
                 verdict_data[verdict]
-                for verdict in Verdict
+                for verdict in SubmissionVerdict
                 if verdict not in handled_verdicts
             )
-            if other_verdict_values.any():
+            # noinspection PyUnresolvedReferences
+            if other_verdict_values.any():  # ty:ignore[unresolved-attribute]
                 graph_data.append(
                     (
                         other_verdict_values,
@@ -132,7 +134,7 @@ class ProblemRenderer(object):
             plt.savefig(f, format="png", transparent=True)
 
 
-class SummaryRenderer(object):
+class SummaryRenderer:
     def __init__(self, data: SummaryStatistics):
         self.data = data
 
@@ -202,6 +204,7 @@ class SummaryRenderer(object):
         formatter = matplotlib.ticker.StrMethodFormatter("{x:d}")
         for day, hour_submissions in enumerate(self.data.submissions_per_day_hour):
             for hour, count in enumerate(hour_submissions):
+                # noinspection PyUnresolvedReferences
                 im.axes.text(
                     hour,
                     day,

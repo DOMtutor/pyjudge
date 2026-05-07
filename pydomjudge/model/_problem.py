@@ -2,9 +2,9 @@ import abc
 import dataclasses
 from typing import Collection, TypeVar, Generic
 
-from .language import Executable
-from .submission import JuryProblemSubmission
-from .util import get_md5
+from ._language import Executable
+from ._submission import JuryProblemSubmission
+from ._util import get_md5
 
 
 class ProblemTestCase(abc.ABC):

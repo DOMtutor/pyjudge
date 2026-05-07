@@ -1,4 +1,4 @@
-import dataclasses
+from dataclasses import dataclass
 import datetime
 import itertools
 import logging
@@ -9,9 +9,14 @@ from typing import Callable, Any
 
 import pytz
 
-from pydomjudge.data.submission import SubmissionDto, ContestDataDto
-from pydomjudge.data.teams import TeamDto
-from pydomjudge.model import Verdict
+from pydomjudge.database import (
+    ClarificationDto,
+    ContestDataExport,
+    SubmissionDto,
+    TeamDto,
+)
+from pydomjudge.exc import InconsistentDataError
+from pydomjudge.model import SubmissionVerdict
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +25,8 @@ def all_false(_: Any) -> bool:
     return False
 
 
-@dataclasses.dataclass
-class ProblemGroupStatistics(object):
+@dataclass
+class ProblemGroupStatistics:
     submission_count: int
     correct_submission_count: int
     teams_with_attempt: set[str]
@@ -33,28 +38,28 @@ class ProblemGroupStatistics(object):
     shortest_teams: list[tuple[str, SubmissionDto]]
     smallest_teams: list[tuple[str, SubmissionDto]]
 
-    verdict_count: dict[Verdict, int]
-    verdicts_by_time: dict[Verdict, list[float]]
+    verdict_count: dict[SubmissionVerdict, int]
+    verdicts_by_time: dict[SubmissionVerdict, list[float]]
 
     @staticmethod
     def of(submissions: list[SubmissionDto]):
         correct_submissions = [
             submission
             for submission in submissions
-            if submission.verdict == Verdict.CORRECT
+            if submission.verdict == SubmissionVerdict.CORRECT
         ]
         submission_count: int = len(submissions)
         correct_submission_count: int = len(correct_submissions)
         teams_with_attempt: set[str] = set(
-            submission.team_key for submission in submissions
+            submission.team_name for submission in submissions
         )
         teams_with_solution: set[str] = set(
-            submission.team_key for submission in correct_submissions
+            submission.team_name for submission in correct_submissions
         )
 
         submissions_by_team = defaultdict(list)
         for submission in submissions:
-            submissions_by_team[submission.team_key].append(submission)
+            submissions_by_team[submission.team_name].append(submission)
 
         submissions_by_team_sorted = {
             team_key: sorted(team_submissions, key=lambda s: s.submission_time)
@@ -66,7 +71,7 @@ class ProblemGroupStatistics(object):
             correct_submissions = [
                 submission
                 for submission in team_submissions
-                if submission.verdict == Verdict.CORRECT
+                if submission.verdict == SubmissionVerdict.CORRECT
             ]
             if correct_submissions:
                 correct_submissions_by_team[team_key] = correct_submissions
@@ -116,11 +121,12 @@ class ProblemGroupStatistics(object):
             key=lambda item: item[1].byte_size,
         )
 
-        verdict_count: dict[Verdict, int] = defaultdict(lambda: 0)
-        verdicts_by_time: dict[Verdict, list[float]] = defaultdict(list)
+        verdict_count: dict[SubmissionVerdict, int] = defaultdict(lambda: 0)
+        verdicts_by_time: dict[SubmissionVerdict, list[float]] = defaultdict(list)
         for submission in submissions:
             assert submission.verdict is not None
             verdicts_by_time[submission.verdict].append(submission.submission_time)
+            verdict_count[submission.verdict] += 1
 
         return ProblemGroupStatistics(
             submission_count=submission_count,
@@ -137,8 +143,8 @@ class ProblemGroupStatistics(object):
         )
 
 
-@dataclasses.dataclass
-class ProblemStatistics(object):
+@dataclass
+class ProblemStatistics:
     by_language: dict[str, ProblemGroupStatistics]
     overall: ProblemGroupStatistics
 
@@ -156,15 +162,15 @@ class ProblemStatistics(object):
         return ProblemStatistics(by_language=by_language, overall=overall)
 
 
-@dataclasses.dataclass
-class ContestStatistics(object):
+@dataclass
+class ContestStatistics:
     team_name_by_key: dict[str, str]
     language_name_by_key: dict[str, str]
     problem_statistics_by_key: dict[str, ProblemStatistics]
 
     @staticmethod
     def of(
-        contest_data: ContestDataDto,
+        contest_data: ContestDataExport,
         team_filter: Callable[[TeamDto], bool] | None = None,
     ):
         if team_filter is None:
@@ -173,7 +179,7 @@ class ContestStatistics(object):
                 return True
 
         team_name_by_key = {
-            team.key: team.display_name
+            team.name: team.display_name
             for team in contest_data.teams.values()
             if team_filter(team)
         }
@@ -182,7 +188,7 @@ class ContestStatistics(object):
         submissions = [
             submission
             for submission in contest_data.submissions
-            if not submission.too_late and submission.team_key in team_name_by_key
+            if not submission.too_late and submission.team_name in team_name_by_key
         ]
         submissions_by_problem = defaultdict(list)
         for submission in submissions:
@@ -200,8 +206,8 @@ class ContestStatistics(object):
         )
 
 
-@dataclasses.dataclass
-class SummaryStatistics(object):
+@dataclass
+class SummaryStatistics:
     contest_keys: list[str]
 
     total_active_users: int
@@ -231,13 +237,13 @@ class SummaryStatistics(object):
     clarifications_per_day: list[int]
     clarifications_per_hour: list[int]
     clarifications_by_contest: dict[str, int]
-    clarification_response_times: list[int]
-    clarifications_by_key: dict[str, int]
+    clarification_response_times: list[float]
+    clarifications_by_key: dict[str, ClarificationDto]
     clarifications_by_problem: dict[str, int]
 
     @staticmethod
     def of(
-        contests_data: list[ContestDataDto],
+        contests_data: list[ContestDataExport],
         timezone: pytz.BaseTzInfo,
         submission_filter=None,
     ) -> "SummaryStatistics":
@@ -246,8 +252,17 @@ class SummaryStatistics(object):
             contest_data.description.contest_key: contest_data
             for contest_data in contests_data
         }
+        for contest_data in contests_data:
+            if contest_data.description.start is None:
+                raise InconsistentDataError(
+                    f"Given contest {contest_data.description.contest_key} has no start time"
+                )
+            if contest_data.description.end is None:
+                raise InconsistentDataError(
+                    f"Given contest {contest_data.description.contest_key} has no end time"
+                )
 
-        all_clarifications = list(
+        all_clarifications: list[ClarificationDto] = list(
             itertools.chain(
                 *[contest_data.clarifications for contest_data in contests_data]
             )
@@ -280,10 +295,8 @@ class SummaryStatistics(object):
             if not submission.is_source_submission:
                 continue
             submission_team = contest_data_by_key[submission.contest_key].teams[
-                submission.team_key
+                submission.team_name
             ]
-            if submission_team is None:
-                continue
             if submission_filter is not None and not submission_filter(
                 submission, submission_team
             ):
@@ -311,9 +324,7 @@ class SummaryStatistics(object):
             submissions_per_contest[submission.contest_key] += 1
             submissions_by_problem[problem_unique_key] += 1
             submissions_by_language[submission.language_key] += 1
-            active_users.update(
-                set(user.login_name for user in submission_team.members)
-            )
+            active_users.update(set(submission_team.member_login_names))
 
             submissions_by_time_remaining[
                 int(
@@ -325,7 +336,7 @@ class SummaryStatistics(object):
                 )
             ] += 1
 
-            if submission.verdict == Verdict.CORRECT:
+            if submission.verdict == SubmissionVerdict.CORRECT:
                 submissions_by_language_correct[submission.language_key] += 1
                 solved_problems.add(problem_unique_key)
                 smallest_solution_by_problem[problem_unique_key] = min(
@@ -336,14 +347,17 @@ class SummaryStatistics(object):
         clarifications_per_day = [0] * 7
         clarifications_per_hour = [0] * 24
         clarifications_per_contest = defaultdict(lambda: 0)
-        clarification_response_times = []
+        clarification_response_times: list[float] = []
         clarifications_by_key = {
-            clarification.key: clarification for clarification in all_clarifications
+            clarification.identifier: clarification
+            for clarification in all_clarifications
         }
         clarifications_by_problem = defaultdict(lambda: 0)
 
         clarification_responses = {
-            clarifications_by_key[clarification.response_to].key: clarification.key
+            clarifications_by_key[
+                clarification.response_to
+            ].identifier: clarification.identifier
             for clarification in all_clarifications
             if clarification.response_to is not None
         }
@@ -351,14 +365,15 @@ class SummaryStatistics(object):
         for clarification in all_clarifications:
             if (
                 clarification.from_jury
-                or clarification.key not in clarification_responses
+                or clarification.identifier not in clarification_responses
             ):
                 continue
             contest_data = contest_data_by_key[clarification.contest_key]
             description = contest_data.description
+            assert description.start is not None and description.end is not None
             if description.start <= clarification.request_time <= description.end:
                 response = clarifications_by_key[
-                    clarification_responses[clarification.key]
+                    clarification_responses[clarification.identifier]
                 ]
                 if description.start <= response.request_time <= description.end:
                     clarification_time = datetime.datetime.fromtimestamp(
@@ -375,8 +390,12 @@ class SummaryStatistics(object):
                         (clarification.contest_key, clarification.contest_problem_key)
                     ] += 1
 
-        average_clarification_time = statistics.mean(clarification_response_times) / 60
-        median_clarification_time = statistics.median(clarification_response_times) / 60
+        average_clarification_time: float = (
+            statistics.mean(clarification_response_times) / 60
+        )
+        median_clarification_time: float = (
+            statistics.median(clarification_response_times) / 60
+        )
         average_submissions_per_contest = statistics.mean(
             submissions_per_contest.values()
         )

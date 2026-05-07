@@ -4,8 +4,10 @@ import sys
 import pydomjudge.repository.kattis as kattis
 import pydomjudge.scripts.util as script_util
 import pydomjudge.scripts.find_problem as find_problem
+from pydomjudge.exc import error_handler_wrapper
 
 
+@error_handler_wrapper
 def main():
     parser = argparse.ArgumentParser()
     script_util.add_logging(parser)

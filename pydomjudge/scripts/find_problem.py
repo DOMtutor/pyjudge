@@ -5,6 +5,7 @@ from typing import List
 
 import pydomjudge.repository.kattis as kattis
 import pydomjudge.scripts.util as script_util
+from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import Contest
 from pydomjudge.repository.kattis import RepositoryProblem
 
@@ -71,6 +72,7 @@ def find_problems(
     return filtered_problems
 
 
+@error_handler_wrapper
 def main():
     parser = argparse.ArgumentParser()
     script_util.add_logging(parser)

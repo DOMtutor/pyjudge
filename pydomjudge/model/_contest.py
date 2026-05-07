@@ -16,24 +16,17 @@ class ContestProblem(BaseModel):
     color: str
     problem_key: str
 
-    def __hash__(self):
-        return hash(self.problem_key)
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, ContestProblem) and self.problem_key == other.problem_key
-        )
-
 
 class ContestAccess(BaseModel):
-    team_names: set[str]
-    team_categories: set[str]
+    team_keys: set[str]
+    category_keys: set[str]
 
 
 class Contest(BaseModel):
     DATE_FORMAT: ClassVar[str] = "%Y-%m-%dT%H:%M:%S"
 
     key: str
+    short_name: str
     name: str
 
     activation_time: datetime
@@ -43,9 +36,11 @@ class Contest(BaseModel):
     deactivation_time: datetime | None
 
     problems: list[ContestProblem]
-    access: ContestAccess | None
 
     public_scoreboard: bool
+
+    access: ContestAccess | None = None
+    warning_message: str = ""
 
     @model_validator(mode="after")
     def validate_contest(self):
@@ -103,10 +98,11 @@ class Contest(BaseModel):
         if dt is None:
             return None
         assert dt.tzinfo is not None and hasattr(dt.tzinfo, "key")
+        # noinspection PyUnresolvedReferences
         return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.key}"
 
     def is_active(self, point: datetime):
         return self.activation_time <= point <= self.end_time
 
     def __str__(self):
-        return f"C({self.key})"
+        return f"C({self.short_name})"

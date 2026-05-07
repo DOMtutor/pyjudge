@@ -11,8 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from pydomjudge.data.teams import TeamDto, UserDto
-from pydomjudge.model.submission import PydanticTestcaseVerdict, PydanticVerdict
+from pydomjudge.model import PydanticTestcaseVerdict, PydanticVerdict
 
 
 def encode_b85(v: bytes) -> str:
@@ -28,6 +27,29 @@ def decode_b85(v: str | bytes) -> bytes:
 Base85Bytes = Annotated[
     bytes, PlainSerializer(encode_b85, when_used="json"), BeforeValidator(decode_b85)
 ]
+
+
+class UserDto(BaseModel, frozen=True):
+    login_name: str = Field(serialization_alias="login")
+    display_name: str = Field(serialization_alias="name")
+    external_id: str | None = Field(exclude_if=lambda x: x is None)
+    email: str | None = Field(exclude_if=lambda x: x is None)
+
+    def __str__(self):
+        return self.display_name
+
+
+class TeamDto(BaseModel, frozen=True):
+    name: str
+    display_name: str = Field(serialization_alias="name")
+    category_name: str | None = Field(serialization_alias="category")
+    affiliation_name: str | None = Field(serialization_alias="affiliation")
+    external_id: str | None = Field(exclude_if=lambda x: x is None)
+    label: str | None = Field(exclude_if=lambda x: x is None)
+    member_login_names: list[str] = Field(serialization_alias="members")
+
+    def __str__(self):
+        return f"{self.display_name}"
 
 
 class SubmissionFileDto(BaseModel):
@@ -73,20 +95,44 @@ class SubmissionFileDto(BaseModel):
         return self._decode() is not None
 
 
-class TestcaseResultDto(BaseModel):
+class TeamCategoryDto(BaseModel, frozen=True):
+    name: str
+    color: str
+    visible: bool
+    order: int
+    self_registration: bool
+    external_id: str | None = Field(
+        exclude_if=lambda x: x is None,
+        description="External ID of the submission, if any. Must be unique per contest.",
+    )
+
+
+class TestcaseResultDto(BaseModel, frozen=True):
     runtime: float
     verdict: PydanticTestcaseVerdict
     is_sample: bool = Field(serialization_alias="sample")
     test_name: str = Field(serialization_alias="name")
 
 
-class SubmissionDto(BaseModel):
-    team_key: str = Field(serialization_alias="team")
+class ContestProblemDto(BaseModel, frozen=True):
+    short_name: str = Field(description="The short_name of the problem")
+    points: int
+    color: str
+    problem_name: str
+    problem_external_id: str | None
+
+
+class SubmissionDto(BaseModel, frozen=True):
+    team_name: str = Field(serialization_alias="team")
     contest_key: str = Field(serialization_alias="contest")
     contest_problem_key: str = Field(serialization_alias="contest_problem")
-    problem_key: str = Field(serialization_alias="problem")
+    problem_name: str = Field(serialization_alias="problem")
     language_key: str = Field(serialization_alias="language")
     submission_time: float = Field(serialization_alias="time")
+    external_id: str | None = Field(
+        exclude_if=lambda x: x is None,
+        description="External ID of the submission, if any. Must be unique per contest.",
+    )
 
     verdict: PydanticVerdict | None
     case_result: list[TestcaseResultDto] = Field(serialization_alias="results")
@@ -116,27 +162,33 @@ class SubmissionDto(BaseModel):
         return sum(file.byte_size for file in self.files)
 
 
-class ClarificationDto(BaseModel):
-    key: str
-    team_key: str = Field(serialization_alias="team")
-    contest_key: str = Field(serialization_alias="contest")
-    contest_problem_key: str | None = Field(serialization_alias="contest_problem")
+class ClarificationDto(BaseModel, frozen=True):
+    team_name: str = Field(serialization_alias="team")
+    contest_key: str = Field(
+        serialization_alias="contest", description="The short_name of the contest"
+    )
+    contest_problem_key: str | None = Field(
+        serialization_alias="contest_problem",
+        description="The short_name of the contest",
+    )
+    external_id: str | None = Field(exclude_if=lambda x: x is None)
 
     request_time: float = Field(serialization_alias="time")
+    identifier: str
     response_to: str | None
     from_jury: bool
     body: str
 
 
-class ContestDescriptionDto(BaseModel):
+class ContestDescriptionDto(BaseModel, frozen=True):
     contest_key: str = Field(serialization_alias="key")
     start: float | None
     end: float | None
 
 
-class ContestDataDto(BaseModel):
+class ContestDataExport(BaseModel):
     description: ContestDescriptionDto
-    users: dict[str, UserDto] = Field(init=False)
+    users: dict[str, UserDto]
     teams: dict[str, TeamDto]
     languages: dict[str, str]
     problems: dict[str, str]
@@ -146,32 +198,21 @@ class ContestDataDto(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _resolve_users_and_teams(cls, data):
-        users = data.get("users", {})
-        if users:
-            parsed_users = {
+        if any(not isinstance(v, UserDto) for v in data["users"].values()):
+            data["users"] = {
                 login_name: UserDto.model_validate(
                     {**user, "login": login_name}, by_alias=True
                 )
-                for login_name, user in users.items()
+                for login_name, user in data["users"].items()
             }
-            data["users"] = parsed_users
+        if any(not isinstance(v, TeamDto) for v in data["teams"].values()):
             data["teams"] = {
-                key: TeamDto.model_validate(
-                    {
-                        **data,
-                        "key": key,
-                        "members": [
-                            parsed_users.get(member) for member in data["members"]
-                        ],
-                    },
+                name: TeamDto.model_validate(
+                    {**data, "name": name},
                     by_alias=True,
                 )
-                for key, data in data["teams"].items()
+                for name, data in data["teams"].items()
             }
-        else:
-            teams: dict[str, TeamDto] = data["teams"]
-            users = set.union(*(set(team.members) for team in teams.values()))
-            data["users"] = {user.login_name: user for user in users}
         return data
 
     @field_serializer("users", when_used="json")
@@ -184,9 +225,9 @@ class ContestDataDto(BaseModel):
     @field_serializer("teams", when_used="json")
     def _teams_to_map(self, teams: dict[str, TeamDto]):
         return {
-            team.key: {
-                **team.model_dump(exclude={"key", "members"}, by_alias=True),
-                "members": [user.login_name for user in team.members],
+            team.name: {
+                **team.model_dump(exclude={"name"}, by_alias=True),
+                "members": team.member_login_names,
             }
             for team in teams.values()
         }

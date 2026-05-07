@@ -1,7 +1,7 @@
-from pydantic import BaseModel, model_validator
 import argparse
 import dataclasses
 import filecmp
+import importlib.resources as res
 import logging
 import mimetypes
 import pathlib
@@ -10,23 +10,21 @@ import shutil
 import stat
 import subprocess
 import tempfile
-import importlib.resources as res
 from importlib.abc import Traversable
-from typing import Optional, List, Dict, Tuple, Collection, Any, Mapping, Callable
+from typing import Collection, Any, Mapping, Callable
 
 import yaml
-
-from pydomjudge.util import link_or_copy
-from pydomjudge.model.language import FileData
+from pydantic import BaseModel, model_validator
 
 import problemtools.run as run
 import problemtools.verifyproblem
 import problemtools.verifyproblem as verify
+from problemtools.run import BuildRun
 from pydomjudge.model import (
     ProblemTestCase,
     Affiliation,
     JuryProblemSubmission,
-    Verdict,
+    SubmissionVerdict,
     Language,
     Problem,
     ProblemLimits,
@@ -34,11 +32,11 @@ from pydomjudge.model import (
     ProblemLoader,
     ExecutableType,
     Team,
+    FileData,
+    SystemCategory,
+    get_md5,
 )
-from pydomjudge.model.team import SystemCategory
-from pydomjudge.model.util import get_md5
-
-from problemtools.run import BuildRun
+from pydomjudge.util import link_or_copy
 from pydomjudge.util import rasterize_pdf
 
 log = logging.getLogger(__name__)
@@ -108,7 +106,7 @@ class RepositoryTestCase(ProblemTestCase):
     def unique_name(self):
         return f"{self.input_file.parent.name}/{self.input_file.name[:-3]}"
 
-    def _load_image(self) -> Optional[bytes]:
+    def _load_image(self) -> bytes | None:
         if not self._image_path:
             return None
         with self._image_path.open(mode="rb") as f:
@@ -130,7 +128,7 @@ class RepositoryTestCase(ProblemTestCase):
 class RepositoryAuthor(BaseModel):
     key: str
     name: str
-    patterns: List[re.Pattern]
+    patterns: list[re.Pattern]
     affiliation: Affiliation | None
 
     @model_validator(mode="before")
@@ -140,13 +138,14 @@ class RepositoryAuthor(BaseModel):
             regexes = data["regex"]
             if isinstance(regexes, str):
                 regexes = [regexes]
-            patterns = [re.compile(regex) for regex in regexes]
+            patterns = [re.compile(regex, re.IGNORECASE) for regex in regexes]
         else:
             regexes = data["basic_regex"]
             if isinstance(regexes, str):
                 regexes = [regexes]
             patterns = [
-                re.compile(rf"^[a-zA-z\d_-]*{regex}[a-zA-z\d_-]*$") for regex in regexes
+                re.compile(rf"^[a-z\d_-]*{regex}[a-z\d_-]*\.[a-z]*$", re.IGNORECASE)
+                for regex in regexes
             ]
         data["patterns"] = patterns
         return data
@@ -154,16 +153,16 @@ class RepositoryAuthor(BaseModel):
 
 class JurySubmission(JuryProblemSubmission):
     EXPECTED_RESULTS = {
-        "accepted": {Verdict.CORRECT},
-        "too_slow": {Verdict.TIME_LIMIT},
-        "time_limit_exceeded": {Verdict.TIME_LIMIT},
-        "timelimit_exceeded": {Verdict.TIME_LIMIT},
-        "slow_input": {Verdict.CORRECT, Verdict.TIME_LIMIT},
-        "slow": {Verdict.CORRECT, Verdict.TIME_LIMIT},
-        "run_time_error": {Verdict.RUN_ERROR},
-        "runtime_error": {Verdict.RUN_ERROR},
-        "wrong_answer": {Verdict.WRONG_ANSWER},
-        "compile_error": {Verdict.COMPILER_ERROR},
+        "accepted": {SubmissionVerdict.CORRECT},
+        "too_slow": {SubmissionVerdict.TIME_LIMIT},
+        "time_limit_exceeded": {SubmissionVerdict.TIME_LIMIT},
+        "timelimit_exceeded": {SubmissionVerdict.TIME_LIMIT},
+        "slow_input": {SubmissionVerdict.CORRECT, SubmissionVerdict.TIME_LIMIT},
+        "slow": {SubmissionVerdict.CORRECT, SubmissionVerdict.TIME_LIMIT},
+        "run_time_error": {SubmissionVerdict.RUN_ERROR},
+        "runtime_error": {SubmissionVerdict.RUN_ERROR},
+        "wrong_answer": {SubmissionVerdict.WRONG_ANSWER},
+        "compile_error": {SubmissionVerdict.COMPILER_ERROR},
     }
 
     def __init__(self, path: pathlib.Path, repository: "Repository"):
@@ -195,15 +194,15 @@ class JurySubmission(JuryProblemSubmission):
         return self.path.parent.name
 
     @property
-    def expected_results(self) -> set[Verdict]:
+    def expected_results(self) -> set[SubmissionVerdict]:
         return JurySubmission.EXPECTED_RESULTS[self.category]
 
     @property
-    def language(self) -> Optional[Language]:
+    def language(self) -> Language | None:
         return self.repository.find_language_of_submission(self)
 
     @property
-    def author(self) -> Optional[RepositoryAuthor]:
+    def author(self) -> RepositoryAuthor | None:
         return self.repository.find_author_of(self)
 
     @property
@@ -395,7 +394,7 @@ class RepositoryProblem(Problem):
         submissions_by_type = self._problemtools.submissions._submissions
         for submissions in submissions_by_type.values():
             for submission in submissions:
-                submission: run.SourceCode
+                assert isinstance(submission, run.SourceCode)
                 if (
                     submission.name.startswith("reference_")
                     or "_reference_" in submission.name
@@ -409,7 +408,7 @@ class RepositoryProblem(Problem):
         if reference_submission is None:
             for candidate in ["AC", "SL", "TLE"]:
                 if candidate in submissions_by_type and submissions_by_type[candidate]:
-                    reference_submission = submissions_by_type[candidate][0]
+                    reference_submission = submissions_by_type[candidate][0]  # ty:ignore[invalid-assignment]
                     break
         self._reference_submission = reference_submission
 
@@ -473,7 +472,7 @@ class RepositoryProblem(Problem):
             p.submissions.check(context)
 
     @property
-    def checker_flags(self) -> Optional[str]:
+    def checker_flags(self) -> str | None:
         return self._validator_flags
 
     @property
@@ -546,7 +545,7 @@ class RepositoryProblem(Problem):
                     shutil.copy(build_pdf, destination_pdf)
         return destination_pdf
 
-    def problem_text(self, lang="en") -> Tuple[bytes, str]:
+    def problem_text(self, lang="en") -> tuple[bytes, str]:
         problem_pdf = self.generate_problem_text_if_required(lang)
         with problem_pdf.open(mode="rb") as f:
             return f.read(), "pdf"
@@ -555,7 +554,7 @@ class RepositoryProblem(Problem):
         generator_dir = self.directory / "generators"
 
         python_files = list(generator_dir.glob("*.py"))
-        python_generator: Optional[pathlib.Path] = None
+        python_generator: pathlib.Path | None = None
         if len(python_files) == 1:
             python_generator = python_files[0]
         else:
@@ -595,6 +594,7 @@ class RepositoryProblem(Problem):
 
     def generate_input_if_required(self, seed, input_=None):
         if self._generate_function is not None:
+            # noinspection PyCallingNonCallable
             self._generate_function(self, seed, input_)
             return
 
@@ -681,7 +681,7 @@ class RepositoryProblem(Problem):
         generate(self, seed, input_)
 
     def generate_answer_if_required(
-        self, input_file: pathlib.Path, answer_file: Optional[pathlib.Path] = None
+        self, input_file: pathlib.Path, answer_file: pathlib.Path | None = None
     ):
         if answer_file is None:
             answer_file = input_file.with_suffix(".ans")
@@ -900,7 +900,7 @@ def get_components_of_traversable(traversable: Traversable) -> Collection[FileDa
     return files
 
 
-class Repository(object):
+class Repository:
     @staticmethod
     def _default_checker_files() -> Mapping[str, Collection[FileData]]:
         standard_checkers = res.files("pydomjudge.repository.checker")
@@ -1040,7 +1040,7 @@ class Repository(object):
             languages.append(language)
 
         self.languages: Collection[Language] = tuple(languages)
-        self.languages_by_extension: Dict[str, Language] = dict()
+        self.languages_by_extension: dict[str, Language] = dict()
         for lang in self.languages:
             for extension in lang.extensions:
                 if extension in self.languages_by_extension:
@@ -1069,17 +1069,17 @@ class Repository(object):
             return get_components_of_traversable(default_directory)
         return []
 
-    def find_author_of(self, submission: JurySubmission) -> Optional[RepositoryAuthor]:
-        match = None
-        for author in self.authors:
-            if any(pattern.match(submission.name) for pattern in author.patterns):
-                if match is not None:
-                    raise KattisRepositoryError(
-                        f"Found multiple matching authors ({author}, {match}) for submission {submission}"
-                    )
-                else:
-                    match = author
-        return match
+    def find_author_of(self, submission: JurySubmission) -> RepositoryAuthor | None:
+        matches = [
+            author
+            for author in self.authors
+            if any(pattern.match(submission.file_name) for pattern in author.patterns)
+        ]
+        if len(matches) > 1:
+            raise KattisRepositoryError(
+                f"Found multiple matching authors ({', '.join(author.name for author in matches)}) for submission {submission}"
+            )
+        return matches[0] if matches else None
 
     @staticmethod
     def get_checker_data_of(
@@ -1155,8 +1155,8 @@ class Repository(object):
         if not checker_files:
             raise ValueError("Empty checker")
         return Executable(
-            f"cmp_{problem.repository_key}",
-            f"checker for {problem.repository_key}",
+            key=f"cmp_{problem.repository_key}",
+            description=f"checker for {problem.repository_key}",
             executable_type=ExecutableType.Compare,
             contents=checker_files,
         )
@@ -1173,7 +1173,7 @@ class Repository(object):
         )
 
     # noinspection PyMethodMayBeStatic
-    def get_team_of_author(self, author: Optional[RepositoryAuthor]):
+    def get_team_of_author(self, author: RepositoryAuthor | None):
         if author is None:
             return Team(
                 key="sol_author_unknown",
@@ -1181,7 +1181,7 @@ class Repository(object):
                 display_name="Author Unknown",
                 category=SystemCategory.Author,
                 affiliation=None,
-                members=[],
+                members=(),
             )
 
         return Team(
@@ -1190,7 +1190,7 @@ class Repository(object):
             display_name=f"Author {author.name}",
             category=SystemCategory.Author,
             affiliation=author.affiliation,
-            members=[],
+            members=(),
         )
 
     def find_language_of_submission(
@@ -1207,7 +1207,7 @@ def add_arguments(parser: argparse.ArgumentParser):
 
 
 def from_args(args: argparse.Namespace) -> Repository:
-    candidates: List[pathlib.Path]
+    candidates: list[pathlib.Path]
     cwd = pathlib.Path.cwd()
     if args.repository is None:
         candidates = [cwd / "repository", cwd] + list(cwd.resolve().absolute().parents)

@@ -10,7 +10,8 @@ class UserRole(enum.StrEnum):
     Jury = "jury"
 
 
-class User(BaseModel):
+class User(BaseModel, frozen=True):
+    key: str
     login_name: str
     display_name: str
     email: str | None
@@ -28,9 +29,3 @@ class User(BaseModel):
         import bcrypt
 
         return bcrypt.hashpw(password.encode(), salt).decode()
-
-    def __hash__(self):
-        return hash(self.login_name)
-
-    def __eq__(self, other):
-        return isinstance(other, User) and self.login_name == other.login_name

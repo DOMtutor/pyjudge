@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import json
 import time
@@ -6,7 +7,7 @@ import hashlib
 import logging
 
 from collections import defaultdict
-from typing import Collection, Mapping
+from typing import Collection, Mapping, Callable, Any
 
 from pydomjudge.model import (
     TeamCategory,
@@ -17,17 +18,16 @@ from pydomjudge.model import (
     ProblemTestCase,
     ExecutableType,
     JudgeSettings,
-    Verdict,
     ProblemSubmission,
     Contest,
     UserRole,
     User,
     Affiliation,
+    JudgeInstance,
+    SystemCategory,
+    SubmissionVerdict,
 )
-from pydomjudge.scripts.db import DBCursor as Cursor, list_param, field_not_in_list
-from .data import DbTestCase, test_case_compare_key
-from ..model.settings import JudgeInstance
-from ..model.team import SystemCategory
+from ._db import DBCursor as Cursor, list_param, field_not_in_list
 
 log = logging.getLogger(__name__)
 
@@ -39,91 +39,86 @@ user_role_to_database = {
 }
 
 
-def find_all_categories(
+def _find_category_ids(
     cursor: Cursor, categories: list[TeamCategory]
 ) -> Mapping[TeamCategory, int]:
-    cursor.execute("SELECT categoryid, name FROM team_category")
+    cursor.execute("SELECT categoryid, externalid FROM team_category")
 
-    all_categories = list(categories) + list(SystemCategory.values())
     database_to_category: dict[str, TeamCategory] = {
-        category.name: category for category in all_categories
+        category.key: category for category in categories
     }
-
-    category_ids_by_name: Mapping[str, int] = {
-        name: category_id for category_id, name in cursor
+    category_ids_by_key: Mapping[str, int] = {
+        key: category_id for category_id, key in cursor
     }
     category_ids: Mapping[TeamCategory, int] = {
-        database_to_category[name]: category_id
-        for name, category_id in category_ids_by_name.items()
-        if name in database_to_category
+        database_to_category[key]: category_id
+        for key, category_id in category_ids_by_key.items()
+        if key in database_to_category
     }
-    log.debug("Found existing categories %s", ", ".join(category_ids_by_name.keys()))
+    log.debug("Found existing categories %s", ", ".join(category_ids_by_key.keys()))
     return category_ids
 
 
-def find_system_categories(cursor: Cursor) -> Mapping[TeamCategory, int]:
-    return find_all_categories(cursor, [])
+def _find_system_category_ids(cursor: Cursor) -> Mapping[TeamCategory, int]:
+    return _find_category_ids(cursor, list(SystemCategory.values()))
 
 
 def update_categories(
     cursor: Cursor, categories: list[TeamCategory], lazy=False
 ) -> Mapping[TeamCategory, int]:
     expected_categories = set(categories) | set(SystemCategory.values())
-    expected_categories_by_name = {
-        category.name: category for category in expected_categories
+    expected_categories_by_key = {
+        category.key: category for category in expected_categories
     }
 
-    cursor.execute("SELECT categoryid, name FROM team_category")
-    existing_ids_by_name: Mapping[str, int] = {
-        name: category_id for category_id, name in cursor
+    cursor.execute("SELECT categoryid, externalid FROM team_category")
+    existing_ids_by_key: Mapping[str, int] = {
+        key: category_id for category_id, key in cursor
     }
 
-    if lazy and existing_ids_by_name.keys() == expected_categories_by_name.keys():
+    if lazy and existing_ids_by_key.keys() == expected_categories_by_key.keys():
         return {
-            expected_categories_by_name[name]: category_id
-            for name, category_id in existing_ids_by_name.items()
+            expected_categories_by_key[name]: category_id
+            for name, category_id in existing_ids_by_key.items()
         }
-
-    log.info("Updating judge categories")
 
     category_ids_to_delete: Collection[int] = {
         category_id
-        for category_name, category_id in existing_ids_by_name.items()
-        if category_name not in expected_categories_by_name
+        for category_key, category_id in existing_ids_by_key.items()
+        if category_key not in expected_categories_by_key
     }
 
-    category_ids = {}
+    category_ids: dict[TeamCategory, int] = {}
 
     for category in expected_categories:
-        name = category.name
-        cursor.execute("SELECT categoryid FROM team_category WHERE name = %s", (name,))
+        key = category.key
+        cursor.execute(
+            "SELECT categoryid FROM team_category WHERE externalid = %s", (key,)
+        )
         result = cursor.fetchall()
         if result:
-            if len(result) > 1:
-                raise ValueError(f"Multiple categories with name {name}")
             category_id = result[0][0]
-            log.debug("Found category %s", name)
+            log.debug("Found category %s", key)
         else:
-            log.debug("Creating category %s", name)
-            # externalid required for team_category
-            # Reference to domjudge/webapp/src/Entity/TeamCategory.php
+            log.debug("Creating category %s", key)
             cursor.execute(
                 "INSERT INTO team_category (name, externalid) VALUES (%s, %s)",
-                (name, category.key),
+                (category.name, key),
             )
             category_id = cursor.lastrowid
 
+        assert isinstance(category_id, int)
         category_ids[category] = category_id
         cursor.execute(
             "UPDATE team_category "
-            "SET sortorder = %s, color = %s, visible = %s, allow_self_registration = %s, externalid = %s "
+            "SET name = %s, sortorder = %s, color = %s, visible = %s, allow_self_registration = %s "
             "WHERE categoryid = %s",
             (
+                category.name,
                 category.order,
                 category.color,
                 category.visible,
                 category.self_registration,
-                category.key,
                 category_id,
             ),
         )
@@ -153,26 +148,29 @@ def create_or_update_teams(
         return {}
 
     categories = set(team.category for team in teams if team.category is not None)
-    category_ids = find_all_categories(cursor, list(categories))
+    category_ids = _find_category_ids(cursor, list(categories))
 
-    teams_by_name: dict[str, Team] = {team.name: team for team in teams}
+    teams_by_key: dict[str, Team] = {team.key: team for team in teams}
+    # noinspection SqlType
     cursor.execute(
-        f"SELECT teamid, name FROM team WHERE name IN {list_param(teams)}",
-        tuple(team.name for team in teams),
+        f"SELECT teamid, externalid FROM team WHERE externalid IN {list_param(teams)}",
+        tuple(team.key for team in teams),
     )
     existing_teams: dict[Team, int] = {
-        teams_by_name[name]: team_id for team_id, name in cursor
+        teams_by_key[key]: team_id for team_id, key in cursor
     }
 
+    assigned_users = set()
+    for team in teams:
+        assigned_users.update(set(team.members))
     for team in teams:
         team_category = category_ids[team.category] if team.category else None
         affiliation_id = affiliation_ids[team.affiliation] if team.affiliation else None
-
         if team in existing_teams:
             team_id = existing_teams[team]
             cursor.execute(
-                "UPDATE team SET display_name = %s, categoryid = %s, affilid = %s, externalid = %s WHERE teamid = %s",
-                (team.display_name, team_category, affiliation_id, team.key, team_id),
+                "UPDATE team SET name = %s, display_name = %s, categoryid = %s, affilid = %s WHERE teamid = %s",
+                (team.name, team.display_name, team_category, affiliation_id, team_id),
             )
         else:
             log.debug("Creating team %s", team.name)
@@ -191,11 +189,13 @@ def create_or_update_teams(
                 f"UPDATE `user` SET teamid = %s WHERE userid IN {list_param(member_ids)}",
                 (team_id, *member_ids),
             )
-            cursor.execute(
-                f"UPDATE `user` SET teamid = NULL "
-                f"WHERE teamid = %s AND userid NOT IN {list_param(team.members)}",
-                (team_id, *member_ids),
-            )
+            unassigned = set(team.members) - assigned_users
+            if unassigned:
+                cursor.execute(
+                    f"UPDATE `user` SET teamid = NULL "
+                    f"WHERE teamid = %s AND userid NOT IN {list_param(unassigned)}",
+                    (team_id, *[user_ids[user] for user in unassigned]),
+                )
 
     return existing_teams
 
@@ -203,10 +203,26 @@ def create_or_update_teams(
 def create_or_update_executable(cursor: Cursor, executable: Executable):
     log.debug("Updating executable %s", executable)
 
-    file_info = executable.file_info()
     # See domjudge/webapp/src/Entity/ImmutableExecutable.php for the combined hash logic
+    file_info = []
+    for file_data in executable.contents:
+        with file_data.open() as f:
+            file_content = f.read()
+
+        filename = file_data.relative_path[-1]
+        file_info.append(
+            {
+                "filename": filename,
+                "content": file_content,
+                "hash": (hashlib.md5(file_content).hexdigest()),
+                "is_executable": filename in ("build", "run"),
+            }
+        )
+
+    file_info.sort(key=lambda x: x["filename"])
     combined = "".join(
-        f"{f['hash']}{f['filename']}{f['is_executable']}" for f in file_info
+        f"{f['hash']}{f['filename']}{'1' if f['is_executable'] else ''}"
+        for f in file_info
     )
     immutable_hash = hashlib.md5(combined.encode()).hexdigest()
 
@@ -217,23 +233,23 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
     result = cursor.fetchone()
 
     if result:
-        immutable_execid = result[0]
-        log.debug("Reusing existing immutable_execid: %s", immutable_execid)
+        immutable_exec_id = result[0]
+        log.debug("Reusing existing executable: %s", immutable_exec_id)
     else:
         cursor.execute(
             "INSERT INTO immutable_executable (hash) VALUES (%s) ", (immutable_hash,)
         )
-        immutable_execid = cursor.lastrowid
-        log.debug("Created new immutable_execid: %s", immutable_execid)
+        immutable_exec_id = cursor.lastrowid
+        log.debug("Created new executable with id %s", immutable_exec_id)
 
-        for ranknumber, file in enumerate(file_info):
+        for rank_number, file in enumerate(file_info):
             cursor.execute(
                 "INSERT INTO executable_file (immutable_execid, filename, ranknumber, file_content, hash, is_executable) "
                 "VALUES (%s, %s, %s, %s, %s, %s) ",
                 (
-                    immutable_execid,
+                    immutable_exec_id,
                     file["filename"],
-                    ranknumber,
+                    rank_number,
                     file["content"],
                     file["hash"],
                     file["is_executable"],
@@ -249,11 +265,11 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
             executable.key,
             executable.executable_type.value,
             executable.description,
-            immutable_execid,
+            immutable_exec_id,
         ),
     )
 
-    # Deletes every immutable_execid that does not appear in the `executable` table.
+    # Deletes every executable that does not appear in the `executable` table.
     # Also deletes from the `executable_file` (ON DELETE CASCADE)
     cursor.execute(
         "DELETE FROM immutable_executable "
@@ -278,7 +294,7 @@ def create_or_update_language(
         "time_factor = %s, entry_point_description = %s, require_entry_point = %s,"
         "allow_submit = %s, allow_judge = TRUE",
         (
-            language.key,
+            language.key[:32],
             language.key,
             language.compile_script.key,
             language.name,
@@ -393,7 +409,45 @@ def create_or_update_problem_data(
     return problem_id
 
 
-def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
+@dataclass
+class DbTestCase:
+    case_id: int
+    name: str
+    description: str | None
+    rank: int
+    input_md5: str
+    output_md5: str
+
+    def __str__(self):
+        return f"TC({self.name})"
+
+
+def test_case_compare_key(case: DbTestCase):
+    order = [
+        "sample",
+        "secret/tiny",
+        "secret/small",
+        "secret/medium",
+        "secret/large",
+        "secret/huge",
+        "secret/xlarge",
+        "secret/test-",
+        "secret/special",
+        "secret/sparse",
+    ]
+    for i, prefix in enumerate(order):
+        if case.name.startswith(prefix):
+            return i, case.name[len(prefix) :]
+    if case.description is None:
+        logging.debug("Case %s name does not start with regular key", case)
+    return len(order), case.name
+
+
+def create_or_update_problem_testcases(
+    cursor: Cursor,
+    problem: Problem,
+    test_case_sort_order: Callable[[DbTestCase], Any] = test_case_compare_key,
+) -> int:
     log.debug("Updating problem test cases %s", problem)
     cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
     problem_id = cursor.fetchone()[0]  # ty:ignore[not-subscriptable]
@@ -457,8 +511,6 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
     update_testcase_content = []
     for problem_testcase, database_case in matched_cases:
         description = problem_testcase.description
-        if description and len(description) >= 255:
-            description = description[:255]
         if description != database_case.description:
             cursor.execute(
                 "UPDATE testcase SET description = %s WHERE testcaseid = %s",
@@ -563,14 +615,9 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
             f"Expected {len(problem_testcases)} cases, got {len(existing_cases)}"
         )
 
-    # cursor.execute("SELECT COUNT(*) FROM testcase WHERE probid = %s", (problem_id,))
-    # database_testcase_count = cursor.next()[0]
-    # if database_testcase_count != len(existing_cases):
-    #     raise ValueError(f"Expected {len(existing_cases)} cases in DB, got {database_testcase_count}")
-
     sorted_cases: list[DbTestCase] = sorted(
         [database_case for _, database_case in existing_cases],
-        key=test_case_compare_key,
+        key=test_case_sort_order,
     )
     rank_update: list[tuple[int, DbTestCase]] = []
     for i, case in enumerate(sorted_cases):
@@ -645,15 +692,15 @@ def create_or_update_problem_testcases(cursor: Cursor, problem: Problem) -> int:
 def update_settings(cursor: Cursor, settings: JudgeSettings):
     log.info("Updating judge settings")
     verdict_names = {
-        Verdict.COMPILER_ERROR: "compiler-error",
-        Verdict.PRESENTATION_ERROR: "presentation-error",
-        Verdict.CORRECT: "correct",
-        Verdict.WRONG_ANSWER: "wrong-answer",
-        Verdict.OUTPUT_LIMIT: "output-limit",
-        Verdict.RUN_ERROR: "run-error",
-        Verdict.TIME_LIMIT: "timelimit",
-        Verdict.MEMORY_LIMIT: "memory-limit",
-        Verdict.NO_OUTPUT: "no-output",
+        SubmissionVerdict.COMPILER_ERROR: "compiler-error",
+        SubmissionVerdict.PRESENTATION_ERROR: "presentation-error",
+        SubmissionVerdict.CORRECT: "correct",
+        SubmissionVerdict.WRONG_ANSWER: "wrong-answer",
+        SubmissionVerdict.OUTPUT_LIMIT: "output-limit",
+        SubmissionVerdict.RUN_ERROR: "run-error",
+        SubmissionVerdict.TIME_LIMIT: "timelimit",
+        SubmissionVerdict.MEMORY_LIMIT: "memory-limit",
+        SubmissionVerdict.NO_OUTPUT: "no-output",
     }
 
     def write(key, value):
@@ -701,7 +748,7 @@ def update_settings(cursor: Cursor, settings: JudgeSettings):
     write("clar_answers", json.dumps(clarification.answers))
 
 
-def set_languages(
+def set_global_languages(
     cursor: Cursor,
     languages: Collection[Language],
     allowed_for_submission: set[str] | None,
@@ -719,47 +766,53 @@ def set_languages(
                 )
             allowed_keys.add(key)
 
+    cursor.execute("SELECT langid FROM contestlanguage")
+    used_keys = set(row[0] for row in cursor)
+    cursor.execute("SELECT langid FROM submission")
+    used_keys.update({row[0] for row in cursor})
+    languages_to_disallow = used_keys - allowed_keys
+
     log.info(
-        "Setting the list of languages to %s", [language.name for language in languages]
+        "Setting the list of languages to %s",
+        ", ".join(sorted(language.name for language in languages)),
     )
-    cursor.execute("UPDATE language SET externalid = langid WHERE externalid != langid")
     for language in languages:
         create_or_update_language(
             cursor, language, allow_submit=language.key in allowed_keys
         )
 
     cursor.execute(
-        "SELECT langid, compile_script, EXISTS(SELECT * FROM submission "
-        "  WHERE submission.langid = language.langid) as has_submission "
+        "SELECT langid, compile_script "
         f"FROM language WHERE {field_not_in_list('langid', languages)}",
         tuple(language.key for language in languages),
     )
     languages_to_delete = []
     scripts_to_delete = []
-    languages_to_disallow = []
-    for language_id, script, has_submission in cursor:
-        if has_submission:
-            languages_to_disallow.append(language_id)
-        else:
-            languages_to_delete.append(language_id)
-            if script:
-                scripts_to_delete.append(script)
+    for language_key, script in cursor:
+        if language_key in languages_to_disallow:
+            continue
+        languages_to_delete.append(language_key)
+        if script:
+            scripts_to_delete.append(script)
     if scripts_to_delete:
+        # noinspection SqlType
         cursor.execute(
             f"DELETE FROM executable WHERE execid IN {list_param(scripts_to_delete)} "
             f"AND type = 'compile'",
             tuple(scripts_to_delete),
         )  # Safeguard
     if languages_to_delete:
+        # noinspection SqlType
         cursor.execute(
             f"DELETE FROM language WHERE langid IN {list_param(languages_to_delete)}",
             tuple(languages_to_delete),
         )
     if languages_to_disallow:
         log.warning(
-            "There are some non-configured languages with submissions: %s",
+            "There are some non-configured languages with submissions or configured in contests: %s",
             ",".join(languages_to_disallow),
         )
+        # noinspection SqlType
         cursor.execute(
             f"UPDATE language SET allow_submit = FALSE "
             f"WHERE langid IN {list_param(languages_to_disallow)}",
@@ -788,10 +841,6 @@ def clear_invalid_submissions(cursor):
     )
     if cursor.rowcount:
         log.warning("Dropped %d submissions without judging", cursor.rowcount)
-
-
-# TODO Should be for multiple problems :-)
-# TODO Submission time
 
 
 def create_problem_submissions(
@@ -854,7 +903,7 @@ def create_problem_submissions(
 
     cursor.execute(
         f"SELECT "
-        f"  submitid, origsubmitid, teamid, cid, expected_results, langid, externalid "
+        f"  submitid, origsubmitid, teamid, cid, expected_results, langid "
         f"FROM submission s "
         f"WHERE "
         f"  probid = %s AND "
@@ -865,7 +914,7 @@ def create_problem_submissions(
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
     existing_submissions: dict[
-        int, tuple[int, int, int, int, tuple[Verdict, ...], str]
+        int, tuple[int, int, int, int, tuple[SubmissionVerdict, ...]]
     ] = {}
     submission_successor: dict[int, int] = {}
     for (
@@ -875,14 +924,14 @@ def create_problem_submissions(
         contest_id,
         expected_results_string,
         language_id,
-        external_id,
     ) in cursor:
         expected_results_list = (
             json.loads(expected_results_string) if expected_results_string else []
         )
         try:
-            expected_results: tuple[Verdict, ...] = tuple(
-                Verdict.parse_from_judge(verdict) for verdict in expected_results_list
+            expected_results: tuple[SubmissionVerdict, ...] = tuple(
+                SubmissionVerdict.parse_from_expected_result(verdict)
+                for verdict in expected_results_list
             )
         except KeyError:
             log.warning(
@@ -905,13 +954,18 @@ def create_problem_submissions(
                 )
             submission_successor[original_submission_id] = submission_id
 
+        assert (
+            isinstance(original_submission_id, int)
+            and isinstance(team_id, int)
+            and isinstance(contest_id, int)
+            and isinstance(language_id, int)
+        )
         existing_submissions[submission_id] = (
             original_submission_id,
             team_id,
             contest_id,
             language_id,
             expected_results,
-            external_id,
         )
 
     submission_files: dict[int, dict[str, str]] = defaultdict(dict)
@@ -946,7 +1000,6 @@ def create_problem_submissions(
         contest_id,
         language_id,
         expected_results,
-        external_id,
     ) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:
@@ -1040,9 +1093,9 @@ def create_problem_submissions(
                 if insert:
                     updated_submissions += 1
 
-            assert submission.expected_results
+            assert submission.expected_results is not None
             expected_keys = [
-                expected_result.judge_key()
+                expected_result.expected_result_key()
                 for expected_result in submission.expected_results
             ]
             expected_results_string = json.dumps(expected_keys)
@@ -1093,10 +1146,6 @@ def create_problem_submissions(
                     "FROM problem p WHERE p.probid = %s",
                     (problem_id,),
                 )
-                prob_result = cursor.fetchone()
-
-                if not prob_result:
-                    raise ValueError(f"Problem {problem_id} not found")
                 (
                     time_limit,
                     mem_limit,
@@ -1104,7 +1153,7 @@ def create_problem_submissions(
                     compare_args,
                     special_compare,
                     multipass_limit,
-                ) = prob_result
+                ) = cursor.fetchone()  # ty:ignore[not-iterable]
 
                 # Some default values if not set
                 if not mem_limit:
@@ -1141,7 +1190,6 @@ def create_problem_submissions(
                     compare_result if compare_result else (None, None)
                 )
 
-                # In preparation for building judgetask
                 cursor.execute(
                     "SELECT testcaseid, md5sum_input, md5sum_output FROM testcase WHERE probid = %s AND deleted = 0 ORDER BY ranknumber",
                     (problem_id,),
@@ -1207,7 +1255,7 @@ def create_problem_submissions(
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
                     "langid, submittime, valid, expected_results, externalid, source) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, 'pyjudge')",
+                    "VALUES (%s, %s, %s, %s, %s, %s, 1, %s, %s, 'unknown')",
                     (
                         existing_id,
                         contest_id,
@@ -1233,8 +1281,7 @@ def create_problem_submissions(
                     (new_submission_id, submission.file_name, source_bytes),
                 )
 
-                # Since judgehost does not automatically create judging for you from the submission,
-                # you have to manually fill up judging, judgetask, judging_run, and queuetask.
+                # Manually insert the judging tasks
                 # Reference to domjudge/webapp/src/Entity/{Judging, Judgetask, JudgingRun, QueueTask}.php
                 judging_uuid = str(uuid.uuid4())
                 cursor.execute(
@@ -1249,7 +1296,7 @@ def create_problem_submissions(
                 )
                 judging_id = cursor.lastrowid
 
-                # Create judgetask for each testcase
+                # Create a judging task for each testcase
                 for testcase_id, input_hash, output_hash in testcases:
                     testcase_hash = (
                         input_hash + "_" + output_hash
@@ -1284,13 +1331,12 @@ def create_problem_submissions(
                         (judging_id, judge_task_id, testcase_id),
                     )
 
-                # Create queuetask
+                # Insert task into queue
                 cursor.execute(
                     "INSERT INTO queuetask (judgingid, priority, teampriority, starttime) "
                     "VALUES (%s, 0, 0, NULL)",
                     (judging_id,),
                 )
-
             else:
                 cursor.execute(
                     "UPDATE submission "
@@ -1344,8 +1390,7 @@ def create_or_update_contest_problems(
             (contest_id, problem_id),
         )
         if cursor.fetchone()[0]:  # ty:ignore[not-subscriptable]
-            # Setting lazy_eval_results to EVAL_DEFAULT, which is 0.
-            # Reference to domjudge/webapp/src/Service/DOMJudgeService.php
+            # Setting lazy_eval_results to EVAL_DEFAULT, which is 0, see domjudge/webapp/src/Service/DOMJudgeService.php
             cursor.execute(
                 "UPDATE contestproblem SET "
                 "shortname = %s, points = %s, allow_submit = TRUE, allow_judge = TRUE,"
@@ -1382,7 +1427,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
         return f"{dt.strftime(date_format)} {dt.tzinfo}"
 
     cursor.execute(
-        "SELECT cid, starttime, endtime FROM contest WHERE shortname = %s",
+        "SELECT cid, starttime, endtime FROM contest WHERE externalid = %s",
         (contest.key,),
     )
     id_query = cursor.fetchone()
@@ -1435,12 +1480,12 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
             "starttime, starttime_string, "
             "endtime, endtime_string, "
             "freezetime, freezetime_string, "
-            "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, TRUE, TRUE, FALSE, %s, %s)",
+            "b, enabled, starttime_enabled, process_balloons, public, open_to_all_teams, warning_message) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, TRUE, TRUE, FALSE, %s, %s, %s)",
             (
                 contest.key,
                 contest.name,
-                contest.key,
+                contest.short_name,
                 str(contest.activation_time.timestamp()),
                 format_datetime(contest.activation_time),
                 str(contest.deactivation_time.timestamp())
@@ -1455,6 +1500,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
                 format_datetime(contest.freeze_time),
                 contest.public_scoreboard,
                 contest.access is None,
+                contest.warning_message,
             ),
         )
         contest_id = cursor.lastrowid
@@ -1463,28 +1509,30 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
     cursor.execute("DELETE FROM contestteamcategory WHERE cid = %s", (contest_id,))
 
     if contest.access is not None:
-        team_names = contest.access.team_names
-        if team_names:
+        team_keys = contest.access.team_keys
+        if team_keys:
+            # noinspection SqlType
             cursor.execute(
-                f"SELECT teamid FROM team WHERE name IN {list_param(team_names)}",
-                tuple(team_names),
+                f"SELECT teamid FROM team WHERE externalid IN {list_param(team_keys)}",
+                tuple(team_keys),
             )
             team_ids = cursor.fetchall()
-            if len(team_ids) != len(team_names):
+            if len(team_ids) != len(team_keys):
                 raise ValueError("Non-existing teams specified")
             for (team_id,) in team_ids:
                 cursor.execute(
                     "INSERT INTO contestteam (cid, teamid) VALUES (%s, %s)",
                     (contest_id, team_id),
                 )
-        team_categories = contest.access.team_categories
-        if team_categories:
+        category_keys = contest.access.category_keys
+        if category_keys:
+            # noinspection SqlType
             cursor.execute(
-                f"SELECT categoryid FROM team_category WHERE name IN {list_param(team_categories)}",
-                tuple(category_name for category_name in team_categories),
+                f"SELECT categoryid FROM team_category WHERE externalid IN {list_param(category_keys)}",
+                tuple(category_keys),
             )
             category_ids = cursor.fetchall()
-            if len(category_ids) != len(team_categories):
+            if len(category_ids) != len(category_keys):
                 raise ValueError("Non-existing teams specified")
             for (category_id,) in category_ids:
                 cursor.execute(
@@ -1507,17 +1555,16 @@ def create_or_update_affiliations(
     log.info("Updating %d affiliations", len(affiliations))
     if not affiliations:
         return {}
-    affiliations_by_id = {
-        affiliation.short_name: affiliation for affiliation in affiliations
-    }
+    affiliations_by_key = {affiliation.key: affiliation for affiliation in affiliations}
 
+    # noinspection SqlType
     cursor.execute(
         f"SELECT affilid, externalid FROM team_affiliation "
         f"WHERE externalid IN {list_param(affiliations)}",
-        tuple(affiliation.short_name for affiliation in affiliations),
+        tuple(affiliation.key for affiliation in affiliations),
     )
     affiliation_ids: dict[Affiliation, int] = {
-        affiliations_by_id[key]: affiliation_id for affiliation_id, key in cursor
+        affiliations_by_key[key]: affiliation_id for affiliation_id, key in cursor
     }
     for affiliation in affiliations:
         if affiliation in affiliation_ids:
@@ -1526,7 +1573,7 @@ def create_or_update_affiliations(
                 "externalid = %s, shortname = %s, name = %s, country = %s, internalcomments = NULL "
                 "WHERE affilid = %s",
                 (
-                    affiliation.short_name,
+                    affiliation.key,
                     affiliation.short_name,
                     affiliation.name,
                     affiliation.country,
@@ -1538,7 +1585,7 @@ def create_or_update_affiliations(
                 "INSERT INTO team_affiliation (externalid, shortname, name, country, internalcomments) "
                 "VALUES (%s, %s, %s, %s, NULL) ",
                 (
-                    affiliation.short_name,
+                    affiliation.key,
                     affiliation.short_name,
                     affiliation.name,
                     affiliation.country,
@@ -1561,12 +1608,13 @@ def create_or_update_users(
 
     role_ids_by_name = fetch_user_roles(cursor)
 
-    users_by_login = {user.login_name: user for user in users}
+    users_by_key = {user.key: user for user in users}
+    # noinspection SqlType
     cursor.execute(
-        f"SELECT userid, username FROM `user` WHERE username IN {list_param(users)}",
-        tuple(user.login_name for user in users),
+        f"SELECT userid, externalid FROM `user` WHERE externalid IN {list_param(users)}",
+        tuple(user.key for user in users),
     )
-    user_ids = {users_by_login[name]: user_id for user_id, name in cursor}
+    user_ids = {users_by_key[key]: user_id for user_id, key in cursor}
 
     for user in users:
         if user in user_ids:
@@ -1583,8 +1631,14 @@ def create_or_update_users(
                 )
         else:
             cursor.execute(
-                "INSERT INTO `user` (username, name, email, password, enabled) VALUES (%s, %s, %s, %s, TRUE)",
-                (user.login_name, user.display_name, user.email, user.password_hash),
+                "INSERT INTO `user` (externalid, username, name, email, password, enabled) VALUES (%s, %s, %s, %s, %s, TRUE)",
+                (
+                    user.key,
+                    user.login_name,
+                    user.display_name,
+                    user.email,
+                    user.password_hash,
+                ),
             )
             user_id = cursor.lastrowid
             user_ids[user] = user_id
@@ -1613,9 +1667,21 @@ def create_or_update_users(
 def disable_unknown_users(cursor: Cursor, user_login_names: set[str]):
     valid_users = {"admin", "judgehost"}
     valid_users.update(user_login_names)
+    # noinspection SqlType
     cursor.execute(
         f"UPDATE `user` SET enabled = FALSE WHERE username NOT IN {list_param(valid_users)}",
         tuple(valid_users),
     )
     if cursor.rowcount:
         log.warning("Disabled %d users", cursor.rowcount)
+
+
+def update_user_password(cursor: Cursor, user: User):
+    if not user.password_hash:
+        raise ValueError("Cannot update password of user without password hash")
+    cursor.execute(
+        "UPDATE `user` SET password = %s WHERE externalid = %s",
+        (user.password_hash, user.key),
+    )
+    if cursor.rowcount != 1:
+        raise ValueError(f"User {user.key} not found")
