@@ -1,6 +1,6 @@
 [project]
 name = "PyDOMjudge"
-version = "0.2.15"
+version = "0.3.1"
 description = "A library to ease interaction with DOMjudge"
 authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
 
@@ -23,7 +23,9 @@ dependencies = [
     "bcrypt>=4",
     "chardet>=5",
     "matplotlib",
-    "pydantic"
+    "pydantic",
+    "tzlocal",
+    "numpy"
 ]
 
 [project.scripts]
@@ -34,6 +36,7 @@ dt_kattis_check = "pydomjudge.scripts.check:main"
 dt_kattis_get = "pydomjudge.scripts.get:main"
 dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
 dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
+dt_default_settings = "pydomjudge.scripts.default_instance:main"
 
 [tool.setuptools.packages.find]
 include = ["pydomjudge*"]

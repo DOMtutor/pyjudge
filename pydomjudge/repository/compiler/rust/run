@@ -5,4 +5,9 @@ destination="$1"
 shift 2
 # main_source="$1"
 
-exec rustc --cfg 'DOMJUDGE' -O -o "$destination" --crate-type bin --edition=2018 "$@"
+temp_dir="$(mktemp -d --tmpdir=$(pwd) javac_output.XXXXXX)" || exit 1
+export TMPDIR="${temp_dir}"
+rustc --cfg 'DOMJUDGE' -C opt-level=3 -o "$destination" --crate-type bin --edition=2024 "$@"
+rustc_exit_code=$?
+rm -rf "${temp_dir}"
+exit $rustc_exit_code

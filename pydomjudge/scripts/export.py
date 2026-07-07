@@ -5,14 +5,14 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+import pydomjudge.database as query
 import pydomjudge.scripts.db as db
-from pydomjudge.action import query
-from pydomjudge.data.submission import (
-    ContestDataDto,
-    SubmissionDto,
-)
+from pydomjudge.database import SubmissionDto, ContestDataExport, TeamDto
+from pydomjudge.exc import error_handler_wrapper, ElementNotFoundError
+from pydomjudge.model import SystemCategory
 from pydomjudge.scripts.db import Database
 from pydomjudge.util import write_str_to
+import pydomjudge.scripts.util as util
 
 log = logging.getLogger(__name__)
 
@@ -23,38 +23,56 @@ class SubmissionsExport(BaseModel):
 
 def fetch_contest(database: Database, contest_key: str):
     with database as connection:
-        teams = query.find_non_system_teams(connection)
-        teams_by_key = {team.key: team for team in teams}
-        language_name_by_key = query.find_languages(connection)
-
         contest_keys = query.find_contest_keys(connection)
         if contest_key not in contest_keys:
-            raise ValueError(
+            raise ElementNotFoundError(
                 f"Contest {contest_key} not found, known contests: {' '.join(contest_keys)}"
             )
 
         contest_description = query.find_contest_description(connection, contest_key)
 
         contest_problems = query.find_contest_problems(connection, contest_key)
-        problem_key_by_contest_problem_key = {
-            problem.name: problem.problem_key for problem in contest_problems
+        problem_key_by_contest_problem_key: dict[str, str] = {
+            contest_problem.short_name: contest_problem.problem_external_id
+            if contest_problem.problem_external_id
+            else contest_problem.problem_name
+            for contest_problem in contest_problems
         }
 
+        teams = query.find_teams(connection, SystemCategory.values())
+        teams_by_name: dict[str, TeamDto] = {team.name: team for team in teams}
+        log.info(teams_by_name)
+
+        language_name_by_key = query.find_languages(connection)
+
         logging.info("Fetching submissions")
+        find_submissions = query.find_submissions(connection, contest_key)
+        logging.info("Submissions %s", find_submissions)
+        logging.info(
+            "Submissions %s", [submission.team_name for submission in find_submissions]
+        )
+        logging.info("Teams %s", teams_by_name)
         submissions = [
             submission
-            for submission in query.find_submissions(connection, contest_key)
-            if submission.team_key in teams_by_key
+            for submission in find_submissions
+            if submission.team_name in teams_by_name
         ]
         logging.info("Fetching clarifications")
         clarifications = [
             clarification
             for clarification in query.find_clarifications(connection, contest_key)
-            if clarification.team_key in teams_by_key
+            if clarification.team_name in teams_by_name
         ]
-    return ContestDataDto(
+
+        user_names = set()
+        for team in teams:
+            user_names.update(set(team.member_login_names))
+        users = query.find_users_by_login(connection, user_names)
+
+    return ContestDataExport(
+        users={user.login_name: user for user in users},
         description=contest_description,
-        teams=teams_by_key,
+        teams=teams_by_name,
         languages=language_name_by_key,
         problems=problem_key_by_contest_problem_key,
         submissions=submissions,
@@ -72,12 +90,14 @@ def write_submission_files(
     database: Database, contest_key: str, destination: Optional[pathlib.Path]
 ):
     with database as connection:
-        teams = query.find_non_system_teams(connection)
-        team_keys = {team.key for team in teams}
+        teams = query.find_teams(
+            connection, except_categories=list(SystemCategory.values())
+        )
+        team_keys = {team.name for team in teams}
         submissions = [
             submission
             for submission in query.find_submissions(connection, contest_key)
-            if submission.team_key in team_keys
+            if submission.team_name in team_keys
         ]
 
     write_str_to(
@@ -93,11 +113,11 @@ def command_submissions(database: Database, args):
     write_submission_files(database, args.contest, args.destination)
 
 
+@error_handler_wrapper
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-
     parser = argparse.ArgumentParser()
     db.make_argparse(parser)
+    util.add_logging(parser)
 
     subparsers = parser.add_subparsers(help="Help for commands", required=True)
     contest_data_parser = subparsers.add_parser(
@@ -118,4 +138,5 @@ def main():
     )
 
     arguments = parser.parse_args()
+    util.apply_logging(arguments)
     arguments.func(db.from_args(arguments), arguments)

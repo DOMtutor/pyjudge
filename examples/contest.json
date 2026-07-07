@@ -1,11 +1,12 @@
 {
   "key": "sample",
+  "short_name": "sample",
   "name": "Sample Contest",
-  "activation_time": "2026-05-06T10:00:00 Europe/Berlin",
-  "start_time": "2026-05-06T11:00:00 Europe/Berlin",
-  "end_time": "2026-05-20T10:00:00 Europe/Berlin",
+  "activation_time": "2026-07-07T12:00:00 Europe/Berlin",
+  "start_time": "2026-07-07T13:00:00 Europe/Berlin",
+  "end_time": "2026-07-21T12:00:00 Europe/Berlin",
   "freeze_time": null,
-  "deactivation_time": "2026-05-21T10:00:00 Europe/Berlin",
+  "deactivation_time": "2026-07-22T12:00:00 Europe/Berlin",
   "problems": [
     {
       "name": "helloworld",
@@ -14,6 +15,7 @@
       "problem_key": "helloworld"
     }
   ],
+  "public_scoreboard": false,
   "access": null,
-  "public_scoreboard": false
+  "warning_message": ""
 }

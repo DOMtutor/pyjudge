@@ -1,22 +1,25 @@
 {
   "users": [
     {
+      "key": "user",
       "login_name": "user",
       "display_name": "User",
       "email": "user@localhost",
       "role": "participant",
-      "password_hash": "$2b$12$8fpjxWUKW2FeYuXLutGvjeMFvMqnxPhqsh47AemO3MhE5vFUrEbXS"
+      "password_hash": "$2b$12$T1YsWPBWJOxRj4p0zRtZTeKg7skaFtwUU3/hccR6rX5yqUTub0fle"
     },
     {
+      "key": "admin",
       "login_name": "admin",
       "display_name": "Admin",
       "email": "admin@localhost",
       "role": "admin",
-      "password_hash": "$2b$12$8fpjxWUKW2FeYuXLutGvjeBZpTJ77CAydctxJCGaTCxaupBKeSYW6"
+      "password_hash": "$2b$12$T1YsWPBWJOxRj4p0zRtZTeCXiMeBb5Pfcy.vMZs69i0mHJW2g3/o2"
     }
   ],
   "affiliations": [
     {
+      "key": "foo",
       "short_name": "foo",
       "name": "Foo University of Bar",
       "country": null

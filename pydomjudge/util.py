@@ -5,7 +5,9 @@ import platform
 import shutil
 import subprocess
 import sys
-from typing import Any, Iterable
+from contextlib import contextmanager
+from typing import Any, Iterable, Sequence, TypeVar, Annotated
+from pydantic import AfterValidator
 
 force_copy = platform.system() == "Windows"
 _wordlist_cache: list[str] | None = None
@@ -25,6 +27,7 @@ def default_wordlist() -> list[str]:
             .decode()
             .splitlines()
         )
+    assert _wordlist_cache is not None
     return _wordlist_cache
 
 
@@ -181,3 +184,19 @@ def rasterize_pdf(
     output_writer.metadata = metadata
     with destination.open("wb") as f:
         output_writer.write(f)
+
+
+@contextmanager
+def open_file_or_stdout(filename: str | None, mode="w", encoding="utf-8"):
+    if filename is None or filename == "-":
+        yield sys.stdout
+    else:
+        # Standard context manager handles opening and closing automatically
+        with open(filename, mode, encoding=encoding) as f:
+            yield f
+
+
+AsTuple = AfterValidator(tuple)
+
+T = TypeVar("T")
+FrozenSequence = Annotated[Sequence[T], AsTuple]

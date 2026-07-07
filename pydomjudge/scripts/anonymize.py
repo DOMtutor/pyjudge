@@ -6,8 +6,9 @@ import pathlib
 import random
 import string
 
-from pydomjudge.data.submission import ContestDataDto
-from pydomjudge.data.teams import TeamDto, UserDto
+from pydomjudge.database import ContestDataExport, TeamDto, UserDto
+from pydomjudge.exc import error_handler_wrapper
+
 from pydomjudge.util import read_str_from, write_str_to, default_wordlist
 
 
@@ -15,7 +16,7 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
     if destination is not None and destination.exists():
         raise ValueError(f"Destination {destination} already exists")
 
-    contest = ContestDataDto.model_validate_json(read_str_from(source))
+    contest = ContestDataExport.model_validate_json(read_str_from(source))
     team_mapping = dict()
     team_names = set()
 
@@ -27,35 +28,41 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
 
     word_list = default_wordlist()
     teams = []
-    for key, team in contest.teams.items():
+    users = []
+    for name, team in contest.teams.items():
         while True:
-            new_name = tuple(rng.choices(word_list, k=3))
-            if new_name not in team_names:
+            new_name_words = tuple(rng.choices(word_list, k=3))
+            if new_name_words not in team_names:
                 break
-        key_name = "_".join(new_name)
-        team_mapping[key] = key_name
-        display_name = "".join(w.title() for w in new_name)
+        new_name = "_".join(new_name_words)
+        team_mapping[name] = new_name
+        display_name = "".join(w.title() for w in new_name_words)
         user_login = "".join(rng.sample(string.ascii_lowercase + "-_", k=16))
         user_name = " ".join(rng.choices(word_list, k=2))
         teams.append(
             TeamDto(
-                key=key_name,
-                name=display_name,
-                category=team.category_name,
-                members=[
-                    UserDto(
-                        login=user_login,
-                        name=user_name,
-                        email=f"{user_name}@example.com",
-                    )
-                ],
+                name=new_name,
+                display_name=display_name,
+                category_name=team.category_name,
+                affiliation_name=team.affiliation_name,
+                external_id=new_name,
+                label=None,
+                member_login_names=[user_login],
+            )
+        )
+        users.append(
+            UserDto(
+                login_name=user_login,
+                display_name=user_name,
+                email=f"{user_login}@example.com",
+                external_id=user_login,
             )
         )
 
     submissions = [
         submission.model_copy(
             update={
-                "team_key": team_mapping[submission.team_key],
+                "team_name": team_mapping[submission.team_name],
                 "submission_time": submission.submission_time + time_delta,
             }
         )
@@ -65,7 +72,7 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
     clarifications = [
         clarification.model_copy(
             update={
-                "team_key": team_mapping[clarification.team_key],
+                "team_name": team_mapping[clarification.team_name],
                 "request_time": clarification.request_time + time_delta,
             }
         )
@@ -81,7 +88,7 @@ def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):
     write_str_to(
         contest.model_copy(
             update={
-                "teams": {team.key: team for team in teams},
+                "teams": {team.external_id: team for team in teams},
                 "submissions": submissions,
                 "clarifications": clarifications,
                 "description": new_description,
@@ -95,6 +102,7 @@ def command_contest(args):
     anonymize(args.source, args.destination)
 
 
+@error_handler_wrapper
 def main():
     logging.basicConfig(level=logging.DEBUG)
 

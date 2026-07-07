@@ -1,21 +1,16 @@
 from pydantic import BaseModel
 
-from .user import User
+from ._user import User
+from pydomjudge.util import FrozenSequence
 
 
-class TeamCategory(BaseModel):
+class TeamCategory(BaseModel, frozen=True):
     key: str
     name: str
     color: str
     visible: bool
     order: int
     self_registration: bool
-
-    def __hash__(self):
-        return hash(self.key)
-
-    def __eq__(self, other):
-        return isinstance(other, TeamCategory) and self.key == other.key
 
 
 class SystemCategory:
@@ -80,38 +75,20 @@ class DefaultCategory:
         return [cls.Participants, cls.Hidden]
 
 
-class Affiliation(BaseModel):
+class Affiliation(BaseModel, frozen=True):
+    key: str
     short_name: str
     name: str
     country: str | None
 
-    @staticmethod
-    def json_key_name():
-        return "short_name"
 
-    def json_key(self):
-        return self.short_name
-
-    def __hash__(self):
-        return hash(self.short_name)
-
-    def __eq__(self, other):
-        return isinstance(other, Affiliation) and self.short_name == other.short_name
-
-
-class Team(BaseModel):
+class Team(BaseModel, frozen=True):
     key: str
     name: str
     display_name: str
-    members: list[User]
+    members: FrozenSequence[User]
     category: TeamCategory | None
     affiliation: Affiliation | None
 
     def __str__(self):
         return f"Team({self.name})"
-
-    def __hash__(self):
-        return hash(self.key)
-
-    def __eq__(self, other):
-        return isinstance(other, Team) and self.key == other.key

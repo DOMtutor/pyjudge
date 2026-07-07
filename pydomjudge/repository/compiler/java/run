@@ -22,7 +22,7 @@ if [ $java_memory_limit -le 0 ]; then
   exit 1
 fi
 
-temp_file=$(mktemp --tmpdir domjudge_javac_output.XXXXXX) || exit 1
+temp_file=$(mktemp --tmpdir=$(pwd) javac_output.XXXXXX) || exit 1
 javac -encoding UTF-8 -sourcepath . -d . $@ 2> "$temp_file"
 compilation_exit_code=$?
 cat "$temp_file"

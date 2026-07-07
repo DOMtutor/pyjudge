@@ -5,6 +5,7 @@ import sys
 import pydomjudge.repository.kattis as kattis
 import pydomjudge.scripts.util as script_util
 import pydomjudge.scripts.find_problem as find_problem
+from pydomjudge.exc import error_handler_wrapper
 
 
 def func_statements(args, problems, add_content):
@@ -19,7 +20,7 @@ def func_statements(args, problems, add_content):
                 add_content(problem_pdf, name)
 
 
-def func_samples(args, problems, add_content):
+def func_samples(_, problems, add_content):
     for problem in problems:
         for case in problem.testcases:
             if case.is_sample():
@@ -31,6 +32,7 @@ def func_samples(args, problems, add_content):
                 add_content(case.output, f"{problem.key}/{name}.ans")
 
 
+@error_handler_wrapper
 def main():
     parser = argparse.ArgumentParser()
     script_util.add_logging(parser)

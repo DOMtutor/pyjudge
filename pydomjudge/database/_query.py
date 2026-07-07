@@ -1,79 +1,63 @@
 import logging
 from collections import defaultdict
-from typing import Collection, Generator
+from typing import Collection
 
-from pydomjudge.data.submission import (
+from pydomjudge.model import TeamCategory
+from pydomjudge.model.verdict import SubmissionVerdict, TestcaseVerdict
+from ._data import (
     SubmissionFileDto,
     ClarificationDto,
     ContestDescriptionDto,
     TestcaseResultDto,
     SubmissionDto,
+    UserDto,
+    TeamDto,
+    ContestProblemDto,
 )
-from pydomjudge.data.teams import UserDto, TeamDto
-from pydomjudge.model import Verdict, ContestProblem
-from pydomjudge.model.submission import TestcaseVerdict
-from pydomjudge.model.team import SystemCategory
-from pydomjudge.scripts.db import (
+from ._db import (
     Database,
     DBCursor as Cursor,
     list_param,
-    get_unique,
     field_in_list,
+    field_not_in_list,
+    get_unique_with_error,
 )
-
-
-def parse_judging_verdict(key):
-    if key is None:
-        return None
-    # noinspection SpellCheckingInspection
-    return {
-        "correct": Verdict.CORRECT,
-        "wrong-answer": Verdict.WRONG_ANSWER,
-        "timelimit": Verdict.TIME_LIMIT,
-        "run-error": Verdict.RUN_ERROR,
-        "memory-limit": Verdict.MEMORY_LIMIT,
-        "output-limit": Verdict.OUTPUT_LIMIT,
-        "no-output": Verdict.NO_OUTPUT,
-        "compiler-error": Verdict.COMPILER_ERROR,
-    }[key]
-
-
-def _find_contest_with_problems_by_key(
-    cursor: Cursor, contest_key: str
-) -> tuple[str, dict[int, ContestProblem]]:
-    cursor.execute("SELECT cid FROM contest WHERE shortname = %s", (contest_key,))
-    contest_id = get_unique(cursor)[0]
-    cursor.execute(
-        "SELECT cp.shortname, cp.points, cp.probid, cp.color, p.externalid "
-        "FROM contestproblem cp "
-        "  JOIN problem p ON p.probid = cp.probid "
-        "WHERE cid = %s",
-        (contest_id,),
-    )
-    problems = {
-        problem_id: ContestProblem(
-            name=contest_name,
-            problem_key=problem_key,
-            points=points,
-            color=color,
-        )
-        for (contest_name, points, problem_id, color, problem_key) in cursor
-    }
-    return contest_id, problems
 
 
 def _find_contest_end(cursor: Cursor, contest_key: str) -> tuple[str, float]:
     cursor.execute(
         "SELECT cid, endtime FROM contest WHERE shortname = %s", (contest_key,)
     )
-    contest_id, contest_end = get_unique(cursor)
+    contest_id, contest_end = get_unique_with_error(
+        cursor, f"key {contest_key}", "contest"
+    )
     return contest_id, float(contest_end)
 
 
-def find_contest_problems(database: Database, contest_key: str) -> list[ContestProblem]:
+def find_contest_problems(
+    database: Database, contest_key: str
+) -> list[ContestProblemDto]:
     with database.transaction_cursor(readonly=True) as cursor:
-        _, problems = _find_contest_with_problems_by_key(cursor, contest_key)
-        return list(problems.values())
+        cursor.execute("SELECT cid FROM contest WHERE shortname = %s", (contest_key,))
+
+        (contest_id,) = get_unique_with_error(cursor, f"key {contest_key}", "contest")
+        cursor.execute(
+            "SELECT cp.shortname, cp.points, cp.color, p.name, p.externalid "
+            "FROM contestproblem cp "
+            "  JOIN problem p ON p.probid = cp.probid "
+            "WHERE cid = %s",
+            (contest_id,),
+        )
+        return [
+            ContestProblemDto(
+                short_name=short_name,
+                points=points,
+                color=color,
+                problem_name=problem_name,
+                problem_external_id=problem_external_id,
+            )
+            for (short_name, points, color, problem_name, problem_external_id) in cursor
+        ]
 
 
 def find_contest_keys(database: Database):
@@ -90,7 +74,9 @@ def find_contest_description(
             "SELECT starttime, endtime FROM contest WHERE shortname = %s",
             (contest_key,),
         )
-        start_time, end_time = get_unique(cursor)
+        start_time, end_time = get_unique_with_error(
+            cursor, f"key {contest_key}", "contest"
+        )
         return ContestDescriptionDto(
             contest_key=contest_key, start=float(start_time), end=float(end_time)
         )
@@ -98,42 +84,41 @@ def find_contest_description(
 
 def find_submissions(
     database: Database, contest_key: str, only_valid=True, include_files=True
-) -> Generator[SubmissionDto, None, None]:
+) -> list[SubmissionDto]:
     with database.transaction_cursor(readonly=True) as cursor:
-        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
-            cursor, contest_key
-        )
-        _, contest_end = _find_contest_end(cursor, contest_key)
+        contest_id, contest_end = _find_contest_end(cursor, contest_key)
 
         cursor.execute(
-            f"SELECT "
-            f"  s.submitid, p.probid, s.submittime, s.langid, t.name "
-            f"FROM team t "
-            f"  JOIN submission s on t.teamid = s.teamid "
-            f"  JOIN problem p on s.probid = p.probid "
-            f"WHERE "
-            f"  s.cid = %s AND "
-            f"  p.probid IN {list_param(contest_problems_by_id)} ",
-            (contest_id, *contest_problems_by_id.keys()),
+            "SELECT "
+            "  s.submitid, cp.shortname, p.name, s.submittime, s.langid, s.externalid, t.name "
+            "FROM submission s "
+            "  JOIN team t on s.teamid = t.teamid "
+            "  JOIN problem p on s.probid = p.probid "
+            "  JOIN contestproblem cp on ( s.probid = cp.probid and s.cid = cp.cid ) "
+            "WHERE "
+            "  s.cid = %s",
+            (contest_id,),
         )
         submission_data = {}
         for (
             submission_id,
-            problem_id,
+            contest_problem_name,
+            problem_name,
             submission_time,
             language_key,
-            team_key,
+            submission_external_id,
+            team_name,
         ) in cursor:
             if submission_id in submission_data:
                 logging.warning("Multiple results for submission %s", submission_id)
                 continue
-            contest_problem = contest_problems_by_id[problem_id]
             submission_data[submission_id] = (
                 float(submission_time),
-                contest_problem.name,
-                contest_problem.problem_key,
+                contest_problem_name,
+                problem_name,
                 language_key,
-                team_key,
+                team_name,
+                submission_external_id,
             )
 
         if only_valid:
@@ -158,7 +143,7 @@ def find_submissions(
                 tuple(submission_data.keys()),
             )
         judging_ids = set()
-        judging_data: dict[int, tuple[int, Verdict | None]] = {}
+        judging_data: dict[int, tuple[int, SubmissionVerdict | None]] = {}
         for submission_id, judging_id, judging_result in cursor:
             if submission_id in judging_data:
                 logging.warning("Multiple runs for submission %s", submission_id)
@@ -169,7 +154,7 @@ def find_submissions(
             judging_ids.add(judging_id)
             judging_data[submission_id] = (
                 judging_id,
-                parse_judging_verdict(judging_result),
+                SubmissionVerdict.from_string(judging_result),
             )
 
         source_data: dict[str, dict[str, bytes]] = defaultdict(dict)
@@ -186,7 +171,7 @@ def find_submissions(
             )
             for submission_id, filename, content in cursor:
                 if isinstance(content, str):
-                    content = content.encode("utf-8")
+                    content: bytes = content.encode("utf-8")
                 elif isinstance(content, bytearray):
                     content = bytes(content)
                 if not isinstance(content, bytes):
@@ -221,9 +206,10 @@ def find_submissions(
             f"WHERE NOT t.deleted AND t.testcaseid IN {list_param(testcase_ids)}",
             tuple(testcase_ids),
         )
-        testcases = {}
-        for testcase_id, name, is_sample in cursor:
-            testcases[testcase_id] = (name, bool(is_sample))
+        testcases = {
+            testcase_id: (name, bool(is_sample))
+            for testcase_id, name, is_sample in cursor
+        }
 
         judging_testcases = {}
         for judging_id, judging_cases in judging_testcases_db.items():
@@ -240,22 +226,25 @@ def find_submissions(
                 )
             judging_testcases[judging_id] = cases
 
+    submissions = []
     for submission_id, (
         submission_time,
         contest_problem_key,
-        problem_key,
+        problem_name,
         language_key,
-        team_key,
+        team_name,
+        submission_external_id,
     ) in submission_data.items():
         if submission_id not in judging_data:
             logging.warning(
-                "No judging for submission %s by team %s", submission_id, team_key
+                "No judging for submission %s by team %s", submission_id, team_name
             )
             continue
         judging_id, judging_result = judging_data[submission_id]
         testcases = judging_testcases.get(judging_id, [])
         if not testcases and (
-            judging_result != Verdict.COMPILER_ERROR and judging_result is not None
+            judging_result != SubmissionVerdict.COMPILER_ERROR
+            and judging_result is not None
         ):
             logging.warning(
                 "No testcases found for submission %s/judging %s with result %s",
@@ -264,37 +253,39 @@ def find_submissions(
                 judging_result,
             )
 
-        yield SubmissionDto(
-            team_key=team_key,
-            contest_key=contest_key,
-            contest_problem_key=contest_problem_key,
-            problem_key=problem_key,
-            language_key=language_key,
-            verdict=judging_result,
-            submission_time=submission_time,
-            too_late=contest_end < submission_time,
-            case_result=testcases,
-            files=[
-                SubmissionFileDto(filename=filename, content=content)
-                for (filename, content) in source_data[submission_id].items()
-            ],
+        submissions.append(
+            SubmissionDto(
+                team_name=team_name,
+                contest_key=contest_key,
+                contest_problem_key=contest_problem_key,
+                problem_name=problem_name,
+                language_key=language_key,
+                verdict=judging_result,
+                submission_time=submission_time,
+                too_late=contest_end < submission_time,
+                case_result=testcases,
+                files=[
+                    SubmissionFileDto(filename=filename, content=content)
+                    for (filename, content) in source_data[submission_id].items()
+                ],
+                external_id=submission_external_id,
+            )
         )
+    return submissions
 
 
 def find_clarifications(
     database: Database, contest_key: str
 ) -> Collection[ClarificationDto]:
     with database.transaction_cursor(readonly=True) as cursor:
-        contest_id, contest_problems_by_id = _find_contest_with_problems_by_key(
-            cursor, contest_key
-        )
         cursor.execute(
-            "SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime "
-            "FROM problem p, clarification c, team t "
+            "SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime, c.externalid "
+            "FROM contest con, clarification c, team t "
             "WHERE "
             "  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
-            "  c.cid = %s ",
-            (contest_id,),
+            "  c.cid = con.cid AND "
+            "  con.shortname = %s ",
+            (contest_key,),
         )
 
         clarification_data = {
@@ -305,17 +296,33 @@ def find_clarifications(
                 body,
                 response_id,
                 float(submit_time),
+                external_id,
             )
-            for clarification_id, problem_id, team_key, from_jury, body, response_id, submit_time in cursor
+            for clarification_id, problem_id, team_key, from_jury, body, response_id, submit_time, external_id in cursor
         }
+        problem_ids = {
+            problem_id for problem_id, _, _, _, _, _, _ in clarification_data.values()
+        }
+        cursor.execute(
+            "SELECT p.probid, p.name "
+            "FROM problem p "
+            "WHERE "
+            f"  {field_in_list('p.probid', problem_ids)}",
+            tuple(problem_ids),
+        )
+        problem_id_to_name = {
+            problem_id: problem_name for problem_id, problem_name in cursor
+        }
+
         clarifications_by_id = {}
         for clarification_id, (
             problem_id,
-            team_key,
+            team_name,
             from_jury,
             body,
             response_id,
             submit_time,
+            external_id,
         ) in clarification_data.items():
             if response_id is not None:
                 if response_id not in clarification_data:
@@ -324,13 +331,17 @@ def find_clarifications(
                     )
                 (
                     _,
-                    response_team_key,
+                    response_team_name,
                     response_from_jury,
                     _,
                     _,
                     response_submit_time,
+                    _,
                 ) = clarification_data[response_id]
-                if (team_key, not from_jury) != (response_team_key, response_from_jury):
+                if (team_name, not from_jury) != (
+                    response_team_name,
+                    response_from_jury,
+                ):
                     raise ValueError(
                         f"Inconsistent clarification {clarification_id} (invalid response)"
                     )
@@ -338,57 +349,96 @@ def find_clarifications(
                     raise ValueError(
                         f"Response {clarification_id} to {response_id} sent before"
                     )
-            if problem_id is None:
-                contest_problem_key = None
-            else:
-                contest_problem_key = contest_problems_by_id[problem_id].name
-
-            clarification = ClarificationDto(
-                key=str(clarification_id),
-                team_key=team_key,
-                request_time=submit_time,
-                response_to=str(response_id),  # Hack
-                from_jury=from_jury,
+            clarifications_by_id[clarification_id] = ClarificationDto(
+                identifier=str(
+                    clarification_id
+                ),  # This leaks the database id, but there is no other unique identifier, and we need one to model responses
+                team_name=team_name,
                 contest_key=contest_key,
-                contest_problem_key=contest_problem_key,
+                request_time=submit_time,
+                response_to=str(response_id),
+                from_jury=from_jury,
+                contest_problem_key=problem_id_to_name[problem_id]
+                if problem_id is not None
+                else None,
                 body=body,
+                external_id=external_id,
             )
-            clarifications_by_id[clarification_id] = clarification
 
         return clarifications_by_id.values()
 
 
-def find_non_system_teams(database: Database) -> list[TeamDto]:
-    system_categories: set[str] = {category.key for category in SystemCategory.values()}
-
+def find_users_by_login(database: Database, login_names: set[str]) -> list[UserDto]:
+    if not login_names:
+        return []
     with database.transaction_cursor(readonly=True) as cursor:
+        # noinspection SqlType
         cursor.execute(
-            f"SELECT t.teamid, t.name, t.display_name, tc.name FROM team t "
-            f"  JOIN team_category tc on t.categoryid = tc.categoryid "
-            f"WHERE "
-            f"  tc.name NOT IN {list_param(system_categories)} ",
-            tuple(system_categories),
+            f"SELECT u.name, u.username, u.email, u.teamid, u.externalid FROM user u "
+            f"WHERE u.username IN {list_param(login_names)}",
+            tuple(login_names),
         )
+        return [
+            UserDto(
+                login_name=username,
+                display_name=name,
+                email=email,
+                external_id=external_id,
+            )
+            for name, username, email, team_id, external_id in cursor
+        ]
+
+
+def find_teams(
+    database: Database, except_categories: list[str | TeamCategory] | None = None
+) -> list[TeamDto]:
+    with database.transaction_cursor(readonly=True) as cursor:
+        if except_categories is None:
+            except_categories = []
+        except_category_names = [
+            category.name if isinstance(category, TeamCategory) else str(category)
+            for category in except_categories
+        ]
+        cursor.execute(
+            f"SELECT t.teamid, t.name, t.display_name, t.label, t.externalid, tc.name, ta.name FROM team t "
+            f"  JOIN team_category tc on t.categoryid = tc.categoryid "
+            f"  LEFT OUTER JOIN team_affiliation ta on t.affilid = ta.affilid "
+            f"WHERE "
+            f"  {field_not_in_list('tc.name', except_category_names)} ",
+            tuple(except_category_names),
+        )
+
         team_data = {
-            team_id: (key, name, category) for team_id, key, name, category in cursor
+            team_id: (name, display_name, label, external_id, category, affiliation)
+            for team_id, name, display_name, label, external_id, category, affiliation in cursor
         }
         cursor.execute(
-            f"SELECT u.name, u.username, u.email, u.teamid FROM user u "
+            f"SELECT u.teamid, u.username FROM user u "
             f"WHERE "
             f"  {field_in_list('u.teamid', team_data)}",
             tuple(team_data.keys()),
         )
-        team_users = {team_id: [] for team_id in team_data.keys()}
-        for name, username, email, team_id in cursor:
-            team_users[team_id].append(UserDto(login=username, name=name, email=email))
+        team_members = {team_id: [] for team_id in team_data.keys()}
+        for team_id, name in cursor:
+            team_members[team_id].append(name)
         return [
             TeamDto(
-                key=team_key,
-                name=team_name,
-                category=category,
-                members=team_users[team_id],
+                name=name,
+                display_name=display_name,
+                category_name=category,
+                affiliation_name=affiliation,
+                label=label,
+                external_id=external_id,
+                member_login_names=team_members[team_id],
             )
-            for team_id, (team_key, team_name, category) in team_data.items()
+            for team_id, (
+                name,
+                display_name,
+                external_id,
+                label,
+                category,
+                affiliation,
+            ) in team_data.items()
         ]
 
 

@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import logging
-import sys
 
 import bcrypt
 import tzlocal
@@ -25,6 +24,7 @@ from pydomjudge.model.settings import (
     JudgingSettings,
 )
 from pydomjudge.scripts.upload import UsersDescription
+from pydomjudge.util import open_file_or_stdout
 
 
 def make_settings():
@@ -54,6 +54,7 @@ def make_contest():
     )
     return Contest(
         key="sample",
+        short_name="sample",
         name="Sample Contest",
         activation_time=base_time,
         start_time=base_time + datetime.timedelta(hours=1),
@@ -61,7 +62,6 @@ def make_contest():
         end_time=base_time + datetime.timedelta(days=14),
         deactivation_time=base_time + datetime.timedelta(days=15),
         problems=[contest_problem],
-        access=None,
         public_scoreboard=False,
     )
 
@@ -69,10 +69,11 @@ def make_contest():
 def make_users():
     salt = bcrypt.gensalt()
     affiliation = Affiliation(
-        short_name="foo", name="Foo University of Bar", country=None
+        key="foo", short_name="foo", name="Foo University of Bar", country=None
     )
 
     user = User(
+        key="user",
         login_name="user",
         display_name="User",
         email="user@localhost",
@@ -80,6 +81,7 @@ def make_users():
         role=UserRole.Participant,
     )
     admin = User(
+        key="admin",
         login_name="admin",
         display_name="Admin",
         email="admin@localhost",
@@ -115,8 +117,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "-O",
         "--output",
-        type=argparse.FileType("w"),
-        default=sys.stdout,
         help="File output",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
@@ -132,5 +132,5 @@ if __name__ == "__main__":
     contest.set_defaults(func=make_contest)
 
     args = parser.parse_args()
-    with args.output as f:
+    with open_file_or_stdout(args.output) as f:
         f.write(args.func().model_dump_json(indent=2 if args.pretty else None))

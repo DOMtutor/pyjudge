@@ -1,10 +1,12 @@
 import pathlib
 import sys
 
+from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import User, UserRole
 from pydomjudge.scripts.upload import UsersDescription
 
 
+@error_handler_wrapper
 def main():
     salt = User.generate_salt()
     from getpass import getpass
@@ -17,6 +19,7 @@ def main():
         sys.exit("Empty password")
 
     admin = User(
+        key=name,
         login_name=name,
         display_name=name,
         email=None,

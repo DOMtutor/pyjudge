@@ -1,13 +1,12 @@
-from os import PathLike
-from typing import Union
+import os
 
 
-def get_md5(o: Union[bytes, PathLike]) -> str:
+def get_md5(o: bytes | os.PathLike) -> str:
     import hashlib
 
     md5 = hashlib.md5()
 
-    if isinstance(o, PathLike):
+    if isinstance(o, os.PathLike):
         with open(o, mode="rb") as f:
             while block := f.read(4096):
                 md5.update(block)
