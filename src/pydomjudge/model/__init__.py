@@ -36,5 +36,6 @@ from ._verdict import (
     SubmissionVerdict as SubmissionVerdict,
     PydanticTestcaseVerdict as PydanticTestcaseVerdict,
     PydanticVerdict as PydanticVerdict,
+    TestcaseVerdict as TestcaseVerdict,
 )
 from ._util import get_md5 as get_md5

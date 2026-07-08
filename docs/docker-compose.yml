@@ -1,0 +1,67 @@
+volumes:
+  mariadb_data: {}
+
+networks:
+  domjudge:
+    driver: bridge
+
+x-judgehost-config: &judgehost-config
+  image: incaseoftrouble/judgehost:latest
+  cgroup: host
+  restart: on-failure
+  networks:
+    - domjudge
+  depends_on:
+    - domserver
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup
+  privileged: true
+  environment:
+    CONTAINER_TIMEZONE: Europe/Berlin
+    JUDGEDAEMON_USERNAME: judgehost
+    JUDGEDAEMON_PASSWORD: judgepassword
+    DOMSERVER_BASEURL: http://domjudge/
+
+services:
+  mariadb:
+    container_name: domjudge_mariadb
+    image: mariadb:12
+    command: --innodb_snapshot_isolation=OFF --max-connections=1000 --innodb-log-file-size=2G --max-allowed-packet=1G --net_read_timeout=3600 --net_write_timeout=3600
+    networks:
+      - domjudge
+    ports:
+      - 3306:3306/tcp
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_USER: domjudge
+      MARIADB_PASSWORD: domjudge
+      MARIADB_DATABASE: domjudge
+
+  domserver:
+    container_name: domjudge
+    image: incaseoftrouble/domserver:latest
+    networks:
+      - domjudge
+    ports:
+      - 12345:80/tcp
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: domjudge
+      MYSQL_PASSWORD: domjudge
+      MYSQL_DATABASE: domjudge
+      CONTAINER_TIMEZONE: Europe/Berlin
+      DJ_DB_INSTALL_BARE: 1
+
+  judgehost:
+    <<: *judgehost-config
+    container_name: judgehost
+    hostname: judgehost
+    environment:
+      DAEMON_ID: 1

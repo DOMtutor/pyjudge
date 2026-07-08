@@ -1,9 +1,9 @@
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Collection
 
-from pydomjudge.model import TeamCategory
-from pydomjudge.model.verdict import SubmissionVerdict, TestcaseVerdict
+from pydomjudge.model import TeamCategory, SubmissionVerdict, TestcaseVerdict
 from ._data import (
     SubmissionFileDto,
     ClarificationDto,
@@ -389,6 +389,71 @@ def find_users_by_login(database: Database, login_names: set[str]) -> list[UserD
         ]
 
 
+@dataclass(frozen=True)
+class TeamData:
+    db_id: int
+    name: str
+    display_name: str
+    label: str
+    external_id: str
+    category_name: str
+    affiliation_name: str
+
+
+def _teams_from_data(cursor: Cursor, team_data: list[TeamData]) -> list[TeamDto]:
+    team_by_id = {t.db_id: t for t in team_data}
+    cursor.execute(
+        f"SELECT u.teamid, u.username FROM user u "
+        f"WHERE "
+        f"  {field_in_list('u.teamid', team_by_id)}",
+        tuple(team_by_id.keys()),
+    )
+    team_members = {team_id: [] for team_id in team_by_id.keys()}
+    for team_id, name in cursor:
+        team_members[team_id].append(name)
+    return [
+        TeamDto(
+            name=team.name,
+            display_name=team.display_name,
+            category_name=team.category_name,
+            affiliation_name=team.affiliation_name,
+            label=team.label,
+            external_id=team.external_id,
+            member_login_names=team_members[team_id],
+        )
+        for team_id, team in team_by_id.items()
+    ]
+
+
+def find_teams_by_name(database: Database, names: set[str]) -> list[TeamDto]:
+    if not names:
+        return []
+    with database.transaction_cursor(readonly=True) as cursor:
+        cursor.execute(
+            f"SELECT t.teamid, t.name, t.display_name, t.label, t.externalid, tc.name, ta.name FROM team t "
+            f"  JOIN team_category tc on t.categoryid = tc.categoryid "
+            f"  LEFT OUTER JOIN team_affiliation ta on t.affilid = ta.affilid "
+            f"WHERE "
+            f"  {field_in_list('t.name', names)}",
+            tuple(names),
+        )
+        return _teams_from_data(
+            cursor,
+            [
+                TeamData(
+                    team_id,
+                    name,
+                    display_name,
+                    label,
+                    external_id,
+                    category,
+                    affiliation,
+                )
+                for team_id, name, display_name, label, external_id, category, affiliation in cursor
+            ],
+        )
+
+
 def find_teams(
     database: Database, except_categories: list[str | TeamCategory] | None = None
 ) -> list[TeamDto]:
@@ -407,39 +472,21 @@ def find_teams(
             f"  {field_not_in_list('tc.name', except_category_names)} ",
             tuple(except_category_names),
         )
-
-        team_data = {
-            team_id: (name, display_name, label, external_id, category, affiliation)
-            for team_id, name, display_name, label, external_id, category, affiliation in cursor
-        }
-        cursor.execute(
-            f"SELECT u.teamid, u.username FROM user u "
-            f"WHERE "
-            f"  {field_in_list('u.teamid', team_data)}",
-            tuple(team_data.keys()),
+        return _teams_from_data(
+            cursor,
+            [
+                TeamData(
+                    team_id,
+                    name,
+                    display_name,
+                    label,
+                    external_id,
+                    category,
+                    affiliation,
+                )
+                for team_id, name, display_name, label, external_id, category, affiliation in cursor
+            ],
         )
-        team_members = {team_id: [] for team_id in team_data.keys()}
-        for team_id, name in cursor:
-            team_members[team_id].append(name)
-        return [
-            TeamDto(
-                name=name,
-                display_name=display_name,
-                category_name=category,
-                affiliation_name=affiliation,
-                label=label,
-                external_id=external_id,
-                member_login_names=team_members[team_id],
-            )
-            for team_id, (
-                name,
-                display_name,
-                external_id,
-                label,
-                category,
-                affiliation,
-            ) in team_data.items()
-        ]
 
 
 def find_languages(database: Database) -> dict[str, str]:

@@ -7,10 +7,17 @@ from pymysql.cursors import Cursor
 from pydomjudge.exc import ElementNotFoundError, MultipleElementsFoundError
 
 
+# noinspection SpellCheckingInspection
 class DBCursor(Protocol):
     def execute(self, query: str, params: Any = ...) -> Any: ...
 
-    def fetchone(self) -> Optional[tuple[Any, ...]]: ...
+    def fetchone(self) -> tuple[Any, ...] | None: ...
+
+    def fetchfirst(self) -> tuple[Any, ...]:
+        item = self.fetchone()
+        if item is None:
+            raise LookupError()
+        return item
 
     def fetchmany(self, size: int = ...) -> list[tuple[Any, ...]]: ...
 
@@ -63,7 +70,7 @@ class Database(object):
             host=self.host,
             port=self.port,
             user=self.user,
-            passwd=self.password,
+            password=self.password,
             database=self.database,
         )
         return self

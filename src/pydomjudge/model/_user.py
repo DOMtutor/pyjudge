@@ -25,7 +25,10 @@ class User(BaseModel, frozen=True):
         return bcrypt.gensalt()
 
     @staticmethod
-    def hash_password(password: str, salt: bytes) -> str:
+    def hash_password(password: str, salt: bytes | None = None) -> str:
         import bcrypt
+
+        if salt is None:
+            salt = User.generate_salt()
 
         return bcrypt.hashpw(password.encode(), salt).decode()

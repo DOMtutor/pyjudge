@@ -9,6 +9,8 @@ import logging
 from collections import defaultdict
 from typing import Collection, Mapping, Callable, Any
 
+import itertools
+
 from pydomjudge.model import (
     TeamCategory,
     Team,
@@ -28,6 +30,7 @@ from pydomjudge.model import (
     SubmissionVerdict,
 )
 from ._db import DBCursor as Cursor, list_param, field_not_in_list
+from pydomjudge.exc import ElementNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +64,45 @@ def _find_category_ids(
 
 def _find_system_category_ids(cursor: Cursor) -> Mapping[TeamCategory, int]:
     return _find_category_ids(cursor, list(SystemCategory.values()))
+
+
+def _find_affiliation_ids(
+    cursor: Cursor, affiliations: Collection[Affiliation]
+) -> dict[Affiliation, int]:
+    if not affiliations:
+        return dict()
+    affiliations_by_key = {affiliation.key: affiliation for affiliation in affiliations}
+    # noinspection SqlType
+    cursor.execute(
+        f"SELECT affilid, externalid FROM team_affiliation "
+        f"WHERE externalid IN {list_param(affiliations)}",
+        tuple(affiliation.key for affiliation in affiliations),
+    )
+    return {affiliations_by_key[key]: affiliation_id for affiliation_id, key in cursor}
+
+
+def _find_user_ids(cursor: Cursor, users: Collection[User]) -> dict[User, int]:
+    if not users:
+        return dict()
+    users_by_key = {user.key: user for user in users}
+    # noinspection SqlType
+    cursor.execute(
+        f"SELECT userid, externalid FROM `user` WHERE externalid IN {list_param(users)}",
+        tuple(user.key for user in users),
+    )
+    return {users_by_key[key]: user_id for user_id, key in cursor}
+
+
+def _find_team_ids(cursor: Cursor, teams: Collection[Team]) -> dict[Team, int]:
+    if not teams:
+        return dict()
+    teams_by_key: dict[str, Team] = {team.key: team for team in teams}
+    # noinspection SqlType
+    cursor.execute(
+        f"SELECT teamid, externalid FROM team WHERE externalid IN {list_param(teams)}",
+        tuple(team.key for team in teams),
+    )
+    return {teams_by_key[key]: team_id for team_id, key in cursor}
 
 
 def update_categories(
@@ -140,25 +182,38 @@ def update_categories(
 def create_or_update_teams(
     cursor: Cursor,
     teams: Collection[Team],
-    affiliation_ids: dict[Affiliation, int],
-    user_ids: dict[User, int],
+    affiliation_ids: dict[Affiliation, int] | None = None,
+    user_ids: dict[User, int] | None = None,
 ) -> dict[Team, int]:
     log.info("Updating %d teams", len(teams))
     if not teams:
         return {}
+    if affiliation_ids is None:
+        affiliation_ids = {}
+    if user_ids is None:
+        user_ids = {}
 
     categories = set(team.category for team in teams if team.category is not None)
     category_ids = _find_category_ids(cursor, list(categories))
+    existing_teams = _find_team_ids(cursor, teams)
 
-    teams_by_key: dict[str, Team] = {team.key: team for team in teams}
-    # noinspection SqlType
-    cursor.execute(
-        f"SELECT teamid, externalid FROM team WHERE externalid IN {list_param(teams)}",
-        tuple(team.key for team in teams),
+    missing_affiliations: set[Affiliation] = (
+        set(team.affiliation for team in teams if team.affiliation is not None)
+        - affiliation_ids.keys()
     )
-    existing_teams: dict[Team, int] = {
-        teams_by_key[key]: team_id for team_id, key in cursor
-    }
+    missing_affiliation_ids = _find_affiliation_ids(cursor, missing_affiliations)
+    if missing_affiliation_ids.keys() != missing_affiliations:
+        raise ElementNotFoundError("Some affiliations do not exist")
+    affiliation_ids.update(missing_affiliation_ids)
+    missing_users: set[User] = set(
+        itertools.chain.from_iterable(
+            (member for member in team.members) for team in teams
+        )
+    )
+    missing_user_ids = _find_user_ids(cursor, missing_users)
+    if missing_user_ids.keys() != missing_users:
+        raise ElementNotFoundError("Some users do not exist")
+    user_ids.update(missing_user_ids)
 
     assigned_users = set()
     for team in teams:
@@ -450,7 +505,10 @@ def create_or_update_problem_testcases(
 ) -> int:
     log.debug("Updating problem test cases %s", problem)
     cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
-    problem_id = cursor.fetchone()[0]  # ty:ignore[not-subscriptable]
+    query_result = cursor.fetchone()
+    if not query_result:
+        raise ElementNotFoundError(f"No problem found for key {problem.key}")
+    problem_id = query_result[0]
 
     problem_testcases = problem.testcases
 
@@ -1094,6 +1152,7 @@ def create_problem_submissions(
                     updated_submissions += 1
 
             assert submission.expected_results is not None
+            # noinspection PyTypeChecker
             expected_keys = [
                 expected_result.expected_result_key()
                 for expected_result in submission.expected_results
@@ -1389,7 +1448,7 @@ def create_or_update_contest_problems(
             "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
         )
-        if cursor.fetchone()[0]:  # ty:ignore[not-subscriptable]
+        if cursor.fetchfirst():
             # Setting lazy_eval_results to EVAL_DEFAULT, which is 0, see domjudge/webapp/src/Service/DOMJudgeService.php
             cursor.execute(
                 "UPDATE contestproblem SET "
@@ -1424,6 +1483,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
     def format_datetime(dt: datetime.datetime | None):
         if dt is None:
             return None
+        # noinspection PyStringConversionWithoutDunderMethod
         return f"{dt.strftime(date_format)} {dt.tzinfo}"
 
     cursor.execute(
@@ -1607,14 +1667,7 @@ def create_or_update_users(
             raise KeyError(f"Invalid role {user.role}")
 
     role_ids_by_name = fetch_user_roles(cursor)
-
-    users_by_key = {user.key: user for user in users}
-    # noinspection SqlType
-    cursor.execute(
-        f"SELECT userid, externalid FROM `user` WHERE externalid IN {list_param(users)}",
-        tuple(user.key for user in users),
-    )
-    user_ids = {users_by_key[key]: user_id for user_id, key in cursor}
+    user_ids = _find_user_ids(cursor, users)
 
     for user in users:
         if user in user_ids:
@@ -1641,6 +1694,7 @@ def create_or_update_users(
                 ),
             )
             user_id = cursor.lastrowid
+            assert user_id is not None
             user_ids[user] = user_id
 
         user_roles = set(

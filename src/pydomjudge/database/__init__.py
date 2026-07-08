@@ -7,6 +7,7 @@ from ._query import (
     find_contest_problems as find_contest_problems,
     find_languages as find_languages,
     find_users_by_login as find_users_by_login,
+    find_teams_by_name as find_teams_by_name,
 )
 from ._update import (
     clear_invalid_submissions as clear_invalid_submissions,
