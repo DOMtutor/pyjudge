@@ -1,0 +1,39 @@
+# Example config.yml for DOMjudge Watcher
+
+# This section defines the notification channels.
+# The key is a name you choose for the channel (e.g., 'telegram_alerts'),
+# and the value is the Apprise URL for the notification service.
+notifications:
+  # For Telegram, the format is tgram://<YourBotToken>/<YourChatID>
+  # You can get a bot token from the BotFather on Telegram.
+  # You can get your chat ID from a bot like @userinfobot.
+  # See https://github.com/caronc/apprise/wiki/Notify_telegram for more details.
+  telegram_alerts: "tgram://<YOUR_BOT_TOKEN>/<YOUR_CHAT_ID>"
+
+# This section defines the DOMjudge instances to monitor.
+# You can add multiple judges to this list.
+judges:
+  - name: "My Contest Judge"
+    # The public base URL of your DOMjudge instance.
+    url: "https://domjudge.example.com"
+
+    # Credentials for a user with API access (needs API Reader and Jury User).
+    user: "watcherbot"
+
+    # It's recommended to provide the password via an environment variable for security.
+    # The script will read the value of the environment variable specified here.
+    # Example: export DOMJUDGE_WATCHER_PASSWORD="your_password"
+    password_env: "DOMJUDGE_WATCHER_PASSWORD"
+    # Alternatively, you can give the password here directly
+    # password: "your_plain_text_password"
+
+    # This section maps notification channels defined above to events they receive.
+    # A notification for an event will be sent to all channels that list it.
+    # Leave empty to receive all events.
+    channels:
+      telegram_alerts:
+        - ServerStatus # Sent when connection to server is broken
+        - JudgehostStatus # Sent when judgehosts go online or offline.
+        - Clarification # Sent when a new clarification is submitted by a team and is unanswered.
+      # Alternatively, write a star to receive all messages
+      # telegram_alerts: "*"

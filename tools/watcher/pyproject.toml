@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "domjudge_watcher"
+version = "0.1.0"
+description = "A small daemon to monitor DOMjudge instances."
+dependencies = [
+    "aiohttp",
+    "apprise",
+    "PyYAML",
+    "python-dateutil"
+]
+
+requires-python = ">= 3.11"
+
+[project.scripts]
+domjudge_watcher = "domjudge_watcher:start"
+
+[tool.setuptools]
+py-modules = ["domjudge_watcher"]

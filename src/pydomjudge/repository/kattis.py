@@ -16,9 +16,8 @@ from typing import Collection, Any, Mapping, Callable
 import yaml
 from pydantic import BaseModel, model_validator
 
-import problemtools.run as run
+import problemtools.run
 import problemtools.verifyproblem
-import problemtools.verifyproblem as verify
 from problemtools.run import BuildRun
 from pydomjudge.model import (
     ProblemTestCase,
@@ -315,7 +314,9 @@ class RepositoryProblem(Problem):
             max_additional_info=15,
         )
         # self._args added as the second param
-        self._problemtools = verify.Problem(str(self.directory.absolute()), self._args)
+        self._problemtools = problemtools.verifyproblem.Problem(
+            str(self.directory.absolute()), args=self._args
+        )
         self._problemtools_loaded = False
         self._reference_submission = None
         self.log = log.getChild(self.repository_key)
@@ -389,12 +390,12 @@ class RepositoryProblem(Problem):
             )
             p.output_validators._validators = [validator]
 
-        reference_submission: run.SourceCode | None = None
+        reference_submission: problemtools.run.SourceCode | None = None
         # noinspection PyProtectedMember
         submissions_by_type = self._problemtools.submissions._submissions
         for submissions in submissions_by_type.values():
             for submission in submissions:
-                assert isinstance(submission, run.SourceCode)
+                assert isinstance(submission, problemtools.run.SourceCode)
                 if (
                     submission.name.startswith("reference_")
                     or "_reference_" in submission.name
@@ -446,13 +447,13 @@ class RepositoryProblem(Problem):
 
         limit.check_limit_capabilities(self)
 
-        context = verify.Context(
-            argparse.Namespace(
+        context = problemtools.verifyproblem.Context(
+            args=argparse.Namespace(
                 data_filter=re.compile(".*"),
                 submission_filter=re.compile(".*"),
                 fixed_timelim=None,
             ),
-            None,
+            executor=None,
         )
 
         with self as p:
