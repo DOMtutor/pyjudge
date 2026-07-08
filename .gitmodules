@@ -1,0 +1,3 @@
+[submodule "libs/problemtools"]
+	path = libs/problemtools
+	url = git@github.com:DOMtutor/problemtools.git

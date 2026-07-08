@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "PyDOMjudge"
-version = "0.3.1"
+version = "0.3.2"
 description = "A library to ease interaction with DOMjudge"
 authors = [ { name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" } ]
 
@@ -25,8 +29,14 @@ dependencies = [
     "matplotlib",
     "pydantic",
     "tzlocal",
-    "numpy"
+    "numpy",
+    "flask>=3.1.3",
+    "flask-inputs>=1.0.0",
+    "jsonschema==4.*",
 ]
+
+[tool.uv.sources]
+problemtools = { path = "./libs/problemtools" }
 
 [project.scripts]
 dt_judge_upload = "pydomjudge.scripts.upload:main"
@@ -37,18 +47,15 @@ dt_kattis_get = "pydomjudge.scripts.get:main"
 dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
 dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
 dt_default_settings = "pydomjudge.scripts.default_instance:main"
+dt_fuzzer = "pydomjudge.fuzzer:run_app"
 
 [tool.setuptools.packages.find]
-include = ["pydomjudge*"]
+where = ["src"]
 
 [tool.setuptools.package-data]
+"pydomjudge.fuzzer" = ["static/**/*", "templates/**/*"]
 "pydomjudge.repository.runscript" = ["**"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
 "pydomjudge.repository" = ["languages.yml"]
 "pydomjudge" = ["default_wordlist.gz"]
-
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
