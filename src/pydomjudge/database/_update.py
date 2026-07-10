@@ -29,7 +29,7 @@ from pydomjudge.model import (
     SystemCategory,
     SubmissionVerdict,
 )
-from ._db import DBCursor as Cursor, list_param, field_not_in_list
+from ._db import DBCursor as Cursor, list_param, field_not_in_list, get_only
 from pydomjudge.exc import ElementNotFoundError
 
 log = logging.getLogger(__name__)
@@ -580,7 +580,7 @@ def create_or_update_problem_testcases(
             "SELECT EXISTS(SELECT * FROM testcase_content WHERE testcaseid = %s)",
             (database_case.case_id,),
         )
-        if cursor.fetchone()[0]:  # ty:ignore[not-subscriptable]
+        if get_only(cursor):
             if (
                 problem_testcase.input_md5 != database_case.input_md5
                 or problem_testcase.output_md5 != database_case.output_md5
@@ -972,7 +972,7 @@ def create_problem_submissions(
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
     existing_submissions: dict[
-        int, tuple[int, int, int, int, tuple[SubmissionVerdict, ...]]
+        int, tuple[int | None, int, int, str, tuple[SubmissionVerdict, ...]]
     ] = {}
     submission_successor: dict[int, int] = {}
     for (
@@ -1013,10 +1013,12 @@ def create_problem_submissions(
             submission_successor[original_submission_id] = submission_id
 
         assert (
-            isinstance(original_submission_id, int)
+            (isinstance(original_submission_id, int) or original_submission_id is None)
             and isinstance(team_id, int)
             and isinstance(contest_id, int)
-            and isinstance(language_id, int)
+            and isinstance(language_id, str)
+        ), (
+            f"Expected identifiers, got {original_submission_id}, {team_id}, {contest_id}, {language_id}"
         )
         existing_submissions[submission_id] = (
             original_submission_id,
@@ -1448,7 +1450,7 @@ def create_or_update_contest_problems(
             "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
         )
-        if cursor.fetchfirst():
+        if get_only(cursor):
             # Setting lazy_eval_results to EVAL_DEFAULT, which is 0, see domjudge/webapp/src/Service/DOMJudgeService.php
             cursor.execute(
                 "UPDATE contestproblem SET "

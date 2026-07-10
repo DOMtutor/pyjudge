@@ -1,5 +1,6 @@
 volumes:
-  mariadb_data: {}
+  domjudge_mariadb_data: {}
+  domjudge_mariadb_backup: {}
 
 networks:
   domjudge:
@@ -17,13 +18,13 @@ x-judgehost-config: &judgehost-config
     - /sys/fs/cgroup:/sys/fs/cgroup
   privileged: true
   environment:
-    CONTAINER_TIMEZONE: Europe/Berlin
+    CONTAINER_TIMEZONE: ${TZ}
     JUDGEDAEMON_USERNAME: judgehost
-    JUDGEDAEMON_PASSWORD: judgepassword
+    JUDGEDAEMON_PASSWORD: ${DOMJUDGE_JUDGE_PASSWORD:?}
     DOMSERVER_BASEURL: http://domjudge/
 
 services:
-  mariadb:
+  domjudge_mariadb:
     container_name: domjudge_mariadb
     image: mariadb:12
     command: --innodb_snapshot_isolation=OFF --max-connections=1000 --innodb-log-file-size=2G --max-allowed-packet=1G --net_read_timeout=3600 --net_write_timeout=3600
@@ -32,13 +33,31 @@ services:
     ports:
       - 3306:3306/tcp
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - domjudge_mariadb_data:/var/lib/mysql
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: root
+      MARIADB_ROOT_PASSWORD: ${DOMJUDGE_DB_ROOT_PASSWORD:?}
       MARIADB_USER: domjudge
-      MARIADB_PASSWORD: domjudge
+      MARIADB_PASSWORD: ${DOMJUDGE_DB_DOMJUDGE_PASSWORD:?}
       MARIADB_DATABASE: domjudge
+
+  domjudge-mariadb-backup:
+    container_name: domjudge_mariadb_backup
+    image: fradelg/mysql-cron-backup:1.14.1
+    networks:
+      - domjudge
+    volumes:
+      - domjudge_mariadb_backup:/backup
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: domjudge_mariadb
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASS: ${DOMJUDGE_DB_ROOT_PASSWORD:?}
+      CRON_TIME: "12 */6 * * *"
+      MAX_BACKUPS: 12
+      INIT_BACKUP: 1
+      TZ: ${TZ}
 
   domserver:
     container_name: domjudge
@@ -51,12 +70,12 @@ services:
     depends_on:
       - mariadb
     environment:
-      MYSQL_HOST: mariadb
+      MYSQL_HOST: domjudge_mariadb
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: domjudge
-      MYSQL_PASSWORD: domjudge
+      MYSQL_PASSWORD: ${DOMJUDGE_DB_DOMJUDGE_PASSWORD:?}
       MYSQL_DATABASE: domjudge
-      CONTAINER_TIMEZONE: Europe/Berlin
+      CONTAINER_TIMEZONE: ${TZ}
       DJ_DB_INSTALL_BARE: 1
 
   judgehost:

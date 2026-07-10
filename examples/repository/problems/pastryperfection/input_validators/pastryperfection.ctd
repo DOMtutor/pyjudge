@@ -1,0 +1,9 @@
+INT(1,20,m) SPACE INT(1,100,n) NEWLINE
+REP(n)
+    INT(-m,m,state)
+    WHILE(state != 0)
+        SPACE INT(-m,m,state)
+    END
+    NEWLINE
+END
+EOF

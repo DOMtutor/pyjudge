@@ -17,14 +17,14 @@
     "scoring": {
       "penalty_time": 600.0,
       "result_priority": {
-        "time_limit": 70,
-        "memory_limit": 95,
-        "output_limit": 90,
-        "run_error": 85,
-        "wrong_answer": 80,
-        "no_output": 99,
-        "presentation_error": 98,
-        "compiler_error": 100,
+        "time-limit": 70,
+        "memory-limit": 95,
+        "output-limit": 90,
+        "run-error": 85,
+        "wrong-answer": 80,
+        "no-output": 99,
+        "presentation-error": 98,
+        "compiler-error": 100,
         "correct": 1
       }
     },
@@ -46,11 +46,7 @@
   },
   "base_time": 1.5,
   "user_whitelist": [],
-  "allowed_language_keys": [
-    "c",
-    "java",
-    "python"
-  ],
+  "allowed_language_keys": [],
   "team_categories": [
     {
       "key": "participants",

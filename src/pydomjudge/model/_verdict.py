@@ -27,7 +27,7 @@ class SubmissionVerdict(enum.Enum):
         for verdict in SubmissionVerdict:
             if str(verdict) == key:
                 return verdict
-        raise KeyError(key)
+        raise KeyError(f"Invalid submission verdict string {key}")
 
     def expected_result_key(self):
         return self.value[0]
@@ -38,7 +38,7 @@ class SubmissionVerdict(enum.Enum):
 
 PydanticVerdict = Annotated[
     SubmissionVerdict,
-    PlainSerializer(str, when_used="json"),
+    PlainSerializer(str, return_type=str),
     BeforeValidator(
         lambda v: SubmissionVerdict.from_string(v) if isinstance(v, str) else v
     ),

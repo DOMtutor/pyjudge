@@ -13,12 +13,6 @@ class DBCursor(Protocol):
 
     def fetchone(self) -> tuple[Any, ...] | None: ...
 
-    def fetchfirst(self) -> tuple[Any, ...]:
-        item = self.fetchone()
-        if item is None:
-            raise LookupError()
-        return item
-
     def fetchmany(self, size: int = ...) -> list[tuple[Any, ...]]: ...
 
     def fetchall(self) -> list[tuple[Any, ...]]: ...
@@ -58,11 +52,11 @@ class DatabaseTransactionCursor(object):
 
 class Database(object):
     def __init__(self, **config):
-        self.host = config["host"]
-        self.port = config.get("port", 3306)
-        self.user = config["user"]
-        self.password = config["password"]
-        self.database = config["database"]
+        self.host = str(config["host"])
+        self.port = int(config.get("port", 3306))
+        self.user = str(config["user"])
+        self.password = str(config["password"])
+        self.database = str(config["database"])
         self._connection = None
 
     def __enter__(self):
@@ -111,6 +105,13 @@ def get_unique(cursor: DBCursor):
         raise ElementNotFoundError("No result found")
     if len(result) > 1:
         raise MultipleElementsFoundError("Multiple results found")
+    return result[0]
+
+
+def get_only(cursor: DBCursor) -> tuple[Any, ...]:
+    result = cursor.fetchone()
+    if result is None:
+        raise ElementNotFoundError("No result found")
     return result[0]
 
 

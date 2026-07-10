@@ -624,11 +624,9 @@ class RepositoryProblem(Problem):
                 lines = []
                 with seed_file.open(mode="rt") as f:
                     for line in f:
-                        index = line.find("#")
-                        if index >= 0:
-                            line = line[:index]
-                        line = line.strip()
-                        if line:
+                        if (ind := line.find("#")) != -1:
+                            line = line[:ind]
+                        if line := line.strip():
                             lines.append(line)
 
                 s.log.debug(

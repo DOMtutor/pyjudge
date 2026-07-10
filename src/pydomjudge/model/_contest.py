@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import ClassVar
+from zoneinfo import ZoneInfo
 
-import pytz
 from pydantic import (
     BaseModel,
     model_validator,
@@ -50,10 +50,18 @@ class Contest(BaseModel):
             raise ValueError("Start before activate")
         if self.start_time.tzinfo is None:
             raise ValueError("Start has no timezone")
+        if not hasattr(self.start_time.tzinfo, "key"):
+            raise ValueError(
+                "Start timezone has no key -- use tz=ZoneInfo(...) and dt.replace(tzinfo=tz) to get a proper timezone"
+            )
         if self.end_time < self.start_time:
             raise ValueError("End before start")
         if self.end_time.tzinfo is None:
             raise ValueError("End has no timezone")
+        if not hasattr(self.end_time.tzinfo, "key"):
+            raise ValueError(
+                "End timezone has no key -- use tz=ZoneInfo(...) and dt.replace(tzinfo=tz) to get a proper timezone"
+            )
         if self.deactivation_time is not None:
             if self.deactivation_time < self.end_time:
                 raise ValueError("Deactivated before end")
@@ -81,8 +89,8 @@ class Contest(BaseModel):
     def _parse_datetime(cls, v: str | datetime):
         if isinstance(v, str):
             dt, tz = v.split(" ")
-            return pytz.timezone(tz).localize(
-                datetime.strptime(dt, Contest.DATE_FORMAT)
+            return datetime.strptime(dt, Contest.DATE_FORMAT).replace(
+                tzinfo=ZoneInfo(tz)
             )
         return v
 

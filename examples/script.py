@@ -15,8 +15,6 @@ from pydomjudge.model import (
     Affiliation,
     Contest,
     ContestProblem,
-)
-from pydomjudge.model.settings import (
     JudgeInstance,
     ClarificationSettings,
     DisplaySettings,
@@ -39,7 +37,7 @@ def make_settings():
         settings=judge_settings,
         base_time=1.5,
         user_whitelist=set(),
-        allowed_language_keys={"c", "java", "python"},
+        allowed_language_keys=set(),
         team_categories=[DefaultCategory.Participants],
     )
 
