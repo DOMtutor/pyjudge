@@ -1,8 +1,7 @@
 venv/
-.venv/
 .idea/
 .junie/
 __pycache__/
-*.pyc
 *.egg-info/
 build/
+tools/

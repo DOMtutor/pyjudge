@@ -1,0 +1,41 @@
+\problemname{Pastéis Pastry Perfection}
+
+\begin{quote}
+	This is an example of a \enquote{story-based} task, where a (big) part of the challenge is identifying which approach is appropriate (and efficient enough to meet the time constraints).
+\end{quote}
+
+Our protagonist Camila is absolutely passionate about baking (and eating) Pastéis de Nata (a famous Portuguese pastry), so much so that she and her friends even participate in baking competitions.
+The next contest is the famous \enquote{World Pastry Championship} scheduled for tomorrow and Camila's team is working on its list of recipes.
+All winners will be awarded the title \enquote{Pastry Perfectionist} for the following year.
+For each type of pastry they know which team member bakes it best and only that person should bake it.
+Since all of them have a similar baking level, it happened that each team member appears exactly two times on this list.
+Each member of the group may bring at most one of his or her two types of pastries to the competition, so they have to decide for each baker which one of the two recipes to include.
+
+There will also be judges at the competition.
+These judges do not care that much about whether the pastries fit together, but they want to see some special pastry they really like.
+Each of the judges has a list of pastries they want to taste.
+Since the judges do not know which baker is going to create which type of pastry it may happen that several or no recipes assigned to one baker appear on their lists.
+
+Camila's team wants to make all judges happy for obvious reasons.
+Therefore, their plan is to bring pastries in a way that each judge sees at least one of the recipes on his list.
+But is this even possible?
+
+\begin{Input}
+The input begins with a line consisting of two integers $m$, the number of bakers, numbered from $1$ to $m$, and $n$, the number of judges.
+$n$ lines follow describing the judges.
+The $i$-th line contains the space-separated list of recipes judge $i$ likes most.
+Each of these lines contains several integers, where a positive integer $a$ means the first recipe of baker $a$ and a negative integer $-b$ means the second recipe of baker $b$.
+The judge's lines end with $0$.
+\end{Input}
+
+\begin{Output}
+Output \texttt{yes} if there is an assignment of recipes such that each judge can try at least on type of pastry from their list or \texttt{no} otherwise.
+\end{Output}
+
+\begin{Constraints}
+\begin{itemize}
+	\item $1\leq m\leq 20$
+	\item $1\leq n\leq 100$
+	\item Each judge has at most $m$ entries on his list.
+\end{itemize}
+\end{Constraints}

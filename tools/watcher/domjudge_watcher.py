@@ -318,7 +318,6 @@ async def main(config_path: pathlib.Path):
                         name,
                     )
 
-            print(event_config)
             watcher = Watcher(
                 name=name,
                 url=url,
@@ -330,6 +329,11 @@ async def main(config_path: pathlib.Path):
             watchers.append(watcher.run())
 
         if watchers:
+            await ap.async_notify(
+                body="DOMjudge watcher bot started",
+                title="Bot started",
+                tag=list(notification_channels.keys()),
+            )
             await asyncio.gather(*watchers)
         else:
             logging.info("No judges to watch.")
@@ -345,8 +349,8 @@ def start():
         "-c",
         "--config",
         type=pathlib.Path,
-        default=pathlib.Path(__file__).parent / "config.yaml",
-        help="Path to the configuration file (default: config.yaml in script directory)",
+        default="config.yaml",
+        help="Path to the configuration file (default: config.yaml)",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging"

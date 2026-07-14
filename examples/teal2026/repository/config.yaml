@@ -1,0 +1,8 @@
+authors:
+  tobias_meggendorfer:
+    basic_regex: tobias
+    name: "Tobias Meggendorfer"
+languages:
+  - c
+  - java
+  - python

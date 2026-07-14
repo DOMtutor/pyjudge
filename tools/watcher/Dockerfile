@@ -1,8 +1,7 @@
-FROM python:3.9
+FROM python:3.14-slim
+
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt && rm requirements.txt
+COPY . .
+RUN pip install .
 
-COPY watcher.py .
-
-CMD ["python", "watcher.py"]
+CMD ["domjudge_watcher"]

@@ -1,0 +1,9 @@
+INT(1,1000,n) SPACE INT(1,24,m) SPACE INT(1,n) NEWLINE
+INT(0,n,k) REP(k) SPACE INT(1,n) END NEWLINE
+REP(n)
+    REP(m, SPACE)
+        INT(1,n)
+    END
+    NEWLINE
+END
+EOF

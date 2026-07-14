@@ -1307,11 +1307,10 @@ def create_problem_submissions(
                     }
                 )
 
-                external_id = (
-                    f"{team_id} {submission.name} {int(submission.last_modified())}"
-                )
-                if len(external_id) > 255:
-                    external_id = external_id[:256]
+                external_id = f"{team_id} {submission.name} {''.join(reversed(str(int(submission.last_modified()))))}"
+                # The external_id is used in the event column as endpointid, which has at most 64
+                if len(external_id) > 64:
+                    external_id = external_id[:64]
 
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "

@@ -1,0 +1,31 @@
+\problemname{DFA Minimzation}
+
+\begin{quote}
+	This is an example of a \enquote{direct} task, where the main challenge simply is implementing a given algorithm.
+\end{quote}
+
+Camila is currently studying for her automata theory exam and is worried about DFA minimization.
+She has solved several exercises on paper, but wants to double check that she didn't make a mistake.
+For this, just knowing the number of states in the minimized automaton is already very helpful for her.
+Can you help her?
+
+\begin{Input}
+The input begins with a line consisting of three space-separated integers $n$, the number of states in the automaton, numbered from $1$ to $n$, $m$, the size of the alphabet, and $i$, the initial state.
+On the next line, an integer $k$ gives the number of accepting states, followed by $k$ space separated integers, denoting the accepting states.
+Finally, $n$ lines follow, describing the transitions of the automaton.
+The $i$-th line comprises $m$ space separated integers.
+The $j$-th integer describes the successor of $i$ under the $j$-th letter.
+\end{Input}
+
+\begin{Output}
+Output an integer $n$ where $n$ is the number of states in the minimal DFA.
+\end{Output}
+
+\begin{Constraints}
+\begin{itemize}
+	\item $1 \leq n \leq 1000$
+	\item $1 \leq m \leq 24$
+	\item $0 \leq k \leq n$
+	\item Each reference to a state (e.g.\ in the transition matrix) is well-formed, i.e.\ between $1$ and $n$.
+\end{itemize}
+\end{Constraints}

@@ -175,7 +175,18 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def name(self) -> str:
-        return f"{self.category}/{self.file_name}"
+        short_category = {
+            "accepted": "AC",
+            "too_slow": "TLE",
+            "time_limit_exceeded": "TLE",
+            "timelimit_exceeded": "TLE",
+            "slow": "SL",
+            "run_time_error": "RTE",
+            "runtime_error": "RTE",
+            "wrong_answer": "WA",
+            "compile_error": "CE",
+        }[self.category]
+        return f"{short_category}/{self.file_name}"
 
     @property
     def file_name(self) -> str:
@@ -309,7 +320,7 @@ class RepositoryProblem(Problem):
             # some attributes include:
             # threads: int
             # parts: list[str] ?
-            bail_on_error=False,
+            bail_on_error=True,
             werror=False,
             max_additional_info=15,
         )
@@ -398,7 +409,7 @@ class RepositoryProblem(Problem):
                 assert isinstance(submission, problemtools.run.SourceCode)
                 if (
                     submission.name.startswith("reference_")
-                    or "_reference_" in submission.name
+                    or "_reference" in submission.name
                 ):
                     if reference_submission is None:
                         reference_submission = submission
@@ -410,6 +421,11 @@ class RepositoryProblem(Problem):
             for candidate in ["AC", "SL", "TLE"]:
                 if candidate in submissions_by_type and submissions_by_type[candidate]:
                     reference_submission = submissions_by_type[candidate][0]  # ty:ignore[invalid-assignment]
+                    self.log.debug(
+                        "Using arbitrarily picked submission %s (of type %s) as reference",
+                        reference_submission,
+                        candidate,
+                    )
                     break
         self._reference_submission = reference_submission
 
@@ -471,6 +487,8 @@ class RepositoryProblem(Problem):
             p.graders.check(context)
             p.testdata.check(context)
             p.submissions.check(context)
+
+        last_verified.touch()
 
     @property
     def checker_flags(self) -> str | None:
