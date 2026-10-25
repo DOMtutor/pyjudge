@@ -1,5 +1,6 @@
 """The self-service app on the test database, checked through DOMjudge's login."""
 
+import concurrent.futures
 from collections.abc import Iterator
 
 import httpx
@@ -133,3 +134,28 @@ def test_startup_checks_category(database: Database, uploaded: Contest):
     )
     with pytest.raises(Exception, match="no_such_category"):
         create_app(config)
+
+
+def test_concurrent_registrations(selfservice, database: Database):
+    # gunicorn runs the app with several threads sharing one backend
+    names = [f"{USERNAME}_{index}" for index in range(8)]
+
+    def register(name: str) -> int:
+        return selfservice.post(
+            "/register",
+            data={"username": name, "password": "x" * 8, "password_confirm": "x" * 8},
+        ).status_code
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(len(names)) as pool:
+            assert list(pool.map(register, names)) == [302] * len(names)
+        with database as db, db.transaction_cursor(readonly=True) as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) FROM team WHERE name LIKE %s", (f"{USERNAME}\\_%",)
+            )
+            assert cursor.fetchone()[0] == len(names)
+    finally:
+        with database as db, db.transaction_cursor() as cursor:
+            for name in names:
+                cursor.execute("DELETE FROM `user` WHERE username = %s", (name,))
+                cursor.execute("DELETE FROM team WHERE name = %s", (name,))

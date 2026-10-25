@@ -13,8 +13,9 @@ shift
 case "$TOOL" in
     "selfservice")
         echo "Starting Self-Service via Gunicorn..."
-        # The limit of failed password attempts lives in the worker process
-        exec gunicorn --bind 0.0.0.0:8000 --workers 1 "pydomjudge.tools.selfservice:create_app()" "$@"
+        # The limit of failed password attempts lives in the worker process, so
+        # one process; threads, since bcrypt releases the GIL
+        exec gunicorn --bind 0.0.0.0:8000 --workers 1 --threads 4 "pydomjudge.tools.selfservice:create_app()" "$@"
         ;;
     "fuzzer")
         echo "Starting Fuzzer via Gunicorn"

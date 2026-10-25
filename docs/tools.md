@@ -40,7 +40,7 @@ pyjudge serve selfservice --config config.yaml
 ```
 
 Run it behind a reverse proxy with TLS for anything but local tests, and set `server.trust_proxy` so Flask sees the correct scheme, host and client address (used by the attempt limit).
-Under a WSGI server, use `pydomjudge.tools.selfservice:create_app()` with a single worker process, since the attempt limit is kept in memory.
+Under a WSGI server, use `pydomjudge.tools.selfservice:create_app()` with a single worker process, since the attempt limit is kept in memory; threads are fine (the image uses four, bcrypt releases the GIL).
 
 `pyjudge upload users --overwrite-passwords` sets the passwords of `users.json` again, also for users who changed theirs here.
 
@@ -68,7 +68,7 @@ docker run --rm -p 8000:8000 -v "$PWD/config.yaml:/app/config.yaml" pyjudge self
 docker run --rm -p 8000:8000 -v "$PWD/repository:/repository" pyjudge fuzzer   # PYJUDGE_REPOSITORY=/repository
 ```
 
-The self-service reads its configuration from `APP_CONFIG_PATH` (default `config.yaml` in the working directory) and also runs with a single worker.
+The self-service reads its configuration from `APP_CONFIG_PATH` (default `config.yaml` in the working directory) and also runs with a single worker (with four threads).
 
 The fuzzer runs with a single gunicorn worker, because running fuzzing jobs and their results live in the worker's memory.
 The image contains `pypy3` and the `checktestdata` runtime, so it can fuzz Python submissions with Python generators and reference solutions; other languages need an image extended with their compilers (for example `g++` or a JDK).
