@@ -1,7 +1,6 @@
 import abc
 import dataclasses
 from collections.abc import Collection
-from typing import Generic, TypeVar
 
 from ._language import Executable
 from ._submission import JuryProblemSubmission
@@ -123,10 +122,7 @@ class Problem(abc.ABC):
         return f"{self.name}"
 
 
-P = TypeVar("P", bound=Problem)
-
-
-class ProblemLoader(abc.ABC, Generic[P]):
+class ProblemLoader[P: Problem](abc.ABC):
     @abc.abstractmethod
     def load_problem(self, key: str) -> P:
         pass

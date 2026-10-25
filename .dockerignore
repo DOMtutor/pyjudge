@@ -1,7 +1,16 @@
+.git/
+.github/
+.venv/
 venv/
 .idea/
 .junie/
+.ruff_cache/
+.pytest_cache/
 __pycache__/
 *.egg-info/
 build/
+dist/
+docs/
+examples/
+tests/
 tools/
