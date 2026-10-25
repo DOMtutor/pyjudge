@@ -30,6 +30,23 @@ More judgehosts: duplicate the `judgehost` service with a different `container_n
 The domserver image passes the host name without port to DOMjudge, so its redirects (for example to the login page) would lose a port like 12345. The small start script in the compose file (`domserver-public-port`) adds `DOMJUDGE_PUBLIC_PORT`, which defaults to `DOMJUDGE_PORT`.
 Behind a reverse proxy on the standard ports, set `DOMJUDGE_PUBLIC_PORT=` (empty) in `.env`.
 
+## Self-service
+
+The profile `selfservice` adds the [self-service](tools.md#self-service) from the pyjudge image, which is built locally (set `PYJUDGE_IMAGE` in `.env` to use another one):
+
+* In the pyjudge checkout: `docker build -t pyjudge .`
+* Add to `.env`:
+  ```
+  SELFSERVICE_SECRET_KEY=<random>   # python -c 'import secrets; print(secrets.token_urlsafe(32))'
+  SELFSERVICE_PORT=8001             # optional
+  ```
+* Upload the settings with `pyjudge upload settings` first: the self-service checks at startup that its team category (`participants`) exists, and restarts until it does
+* `docker compose --profile selfservice up -d`
+
+It listens on `127.0.0.1` only; put a reverse proxy with TLS in front of it (the compose configuration trusts one proxy, `server.trust_proxy: 1`).
+The self-service configuration is the `selfservice-config` block in the compose file; edit its `services:` there.
+The self-service reaches the database as `domjudge_mariadb` on the compose network, with `DOMJUDGE_DB_DOMJUDGE_PASSWORD`.
+
 ## Judgehost errors
 
 The judgehost needs deep access to the host to sandbox and measure submissions, which may require kernel and container flags.

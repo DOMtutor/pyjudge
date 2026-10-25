@@ -73,4 +73,6 @@ The self-service reads its configuration from `APP_CONFIG_PATH` (default `config
 The fuzzer runs with a single gunicorn worker, because running fuzzing jobs and their results live in the worker's memory.
 The image contains `pypy3` and the `checktestdata` runtime, so it can fuzz Python submissions with Python generators and reference solutions; other languages need an image extended with their compilers (for example `g++` or a JDK).
 
+The compose file of the [deployment](deployment.md#self-service) runs the self-service next to DOMjudge with the profile `selfservice`.
+
 `tools/watcher/Dockerfile` builds a separate image for the watcher.
