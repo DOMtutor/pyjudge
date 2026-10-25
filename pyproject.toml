@@ -44,7 +44,6 @@ Issues = "https://github.com/DOMtutor/pyjudge/issues"
 
 [project.scripts]
 pyjudge = "pydomjudge.scripts.commands:main"
-dt_default_settings = "pydomjudge.scripts.default_instance:main"
 
 [dependency-groups]
 dev = [

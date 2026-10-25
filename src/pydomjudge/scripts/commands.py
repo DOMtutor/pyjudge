@@ -17,7 +17,7 @@ from typing import Any
 from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.scripts import _cli
 
-Options = Callable[[argparse.ArgumentParser], None]
+Options = Callable[[argparse.ArgumentParser], object]
 
 
 def _leaf(
@@ -115,7 +115,12 @@ def _upload_problem_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _upload_contest_options(parser: argparse.ArgumentParser) -> None:
-    _file(parser, "contest", "Contest file (contest.json)")
+    _file(
+        parser,
+        "contest",
+        "Contest file (default: 'contest:' of pyjudge.yaml)",
+        nargs="?",
+    )
     parser.add_argument(
         "--force", action="store_true", help="Update the contest even if it is running"
     )
@@ -123,7 +128,7 @@ def _upload_contest_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _upload_users_options(parser: argparse.ArgumentParser) -> None:
-    _file(parser, "users", "Users file (users.json)")
+    _file(parser, "users", "Users file (default: 'users:' of pyjudge.yaml)", nargs="?")
     parser.add_argument(
         "--disable",
         action="store_true",
@@ -377,6 +382,24 @@ def build_parser(prog: str = "pyjudge") -> argparse.ArgumentParser:
         nested=True,
     )
     _problem(group("problem", "Work with the problems of the repository"))
+    help = "Create pyjudge.yaml, db.yml and instance.json here"
+    _leaf(
+        commands.add_parser("init", help=help, description=help),
+        "pydomjudge.scripts.project:run_init",
+        lambda p: p.add_argument(
+            "--force", action="store_true", help="Overwrite files"
+        ),
+        nested=True,
+    )
+    help = "Show the settings and the files they come from"
+    _leaf(
+        commands.add_parser("config", help=help, description=help),
+        "pydomjudge.scripts.project:run_config",
+        nested=True,
+        database=True,
+        repository=True,
+        instance=True,
+    )
     help = "Interactively write admin.json with one admin user"
     _leaf(
         commands.add_parser("make-admin", help=help, description=help),

@@ -19,11 +19,16 @@ def _options(parser: argparse.ArgumentParser) -> set[str]:
     return {option for action in parser._actions for option in action.option_strings}
 
 
-def test_make_parser_options():
-    assert _options(_cli.make_parser()) == {"-h", "--help", "--debug", "--log"}
-    full = _cli.make_parser(
-        database=True, repository=True, instance=True, problem_filters=True
-    )
+def _parser(**shared: bool) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    _cli.add_logging_options(parser)
+    _cli.add_shared_options(parser, **shared)
+    return parser
+
+
+def test_shared_options():
+    assert _options(_parser()) == {"-h", "--help", "--debug", "--log"}
+    full = _parser(database=True, repository=True, instance=True, problem_filters=True)
     assert _options(full) >= {
         "--db",
         "--repository",
@@ -34,8 +39,8 @@ def test_make_parser_options():
         "--contest",
     }
     args = full.parse_args([])
-    assert args.db == pathlib.Path("db.yml")
-    assert args.instance == pathlib.Path("instance.json")
+    # unset, so that pyjudge.yaml can provide them (see test_config.py)
+    assert args.db is None and args.instance is None and args.repository is None
     assert args.name == [] and args.contest == []
 
 
@@ -57,13 +62,13 @@ def restore_log_levels():
     ],
 )
 def test_configure_logging(argv, pydomjudge, problemtools, restore_log_levels):
-    _cli.configure_logging(_cli.make_parser().parse_args(argv))
+    _cli.configure_logging(_parser().parse_args(argv))
     assert logging.getLogger("pydomjudge").level == pydomjudge
     assert logging.getLogger("problemtools").level == problemtools
 
 
 def test_find_problems_filters(examples_dir: pathlib.Path):
-    parser = _cli.make_parser(repository=True, problem_filters=True)
+    parser = _parser(repository=True, problem_filters=True)
     repository_args = ["--repository", str(examples_dir / "repository")]
     args = parser.parse_args([*repository_args, "--keyword", "easy"])
     repository = _cli.load_repository(args)

@@ -57,7 +57,7 @@ def test_building_the_parser_imports_nothing_heavy():
 def test_shared_options_before_or_after_the_command(argv):
     args = commands.build_parser().parse_args(argv)
     assert args.db == pathlib.Path("x.yml")
-    assert args.instance == pathlib.Path("instance.json")
+    assert args.instance is None  # from pyjudge.yaml or the default
     assert args.upload_command == "settings"
 
 
@@ -73,7 +73,7 @@ def test_logging_options_before_or_after_the_command(argv):
 def test_defaults_without_options():
     args = commands.build_parser().parse_args(["upload", "contest", "c.json"])
     assert (args.db, args.repository, args.debug) == (
-        pathlib.Path("db.yml"),
+        None,
         None,
         False,
     )

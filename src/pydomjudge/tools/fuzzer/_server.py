@@ -269,14 +269,10 @@ def create_app(
 
 def run(args: argparse.Namespace) -> None:
     """pyjudge serve fuzzer: the Flask development server."""
+    from pydomjudge.scripts import _cli
+
     base_time = args.base_time
     if args.instance is not None:
-        from pydomjudge.scripts._cli import load_model
-
-        base_time = load_model(args.instance, JudgeInstance).base_time
-    repository = args.repository
-    if repository is None:
-        from pydomjudge.scripts._cli import load_repository
-
-        repository = load_repository(args).base_directory
+        base_time = _cli.load_model(args.instance, JudgeInstance).base_time
+    repository = _cli.load_repository(args).base_directory
     create_app(repository, base_time).run(host=args.host, port=args.port)

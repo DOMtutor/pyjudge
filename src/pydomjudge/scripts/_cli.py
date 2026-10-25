@@ -62,23 +62,25 @@ def add_shared_options(
         parser.add_argument(
             "--db",
             type=pathlib.Path,
-            default=default(pathlib.Path("db.yml")),
-            help="Database configuration (default: db.yml)",
+            default=default(None),
+            help="Database configuration file (default: from pyjudge.yaml, else db.yml)",
         )
     if repository:
         _action = parser.add_argument(
             "--repository",
             type=pathlib.Path,
             default=default(None),
-            help="Problem repository (default: ./repository, or . and its parents)",
+            help="Problem repository (default: from pyjudge.yaml, else ./repository, "
+            "or . and its parents)",
         )
         _complete(_action, directory_completer)
     if instance:
         _action = parser.add_argument(
             "--instance",
             type=pathlib.Path,
-            default=default(pathlib.Path("instance.json")),
-            help="Judge instance specification (default: instance.json)",
+            default=default(None),
+            help="Judge instance specification (default: from pyjudge.yaml, else "
+            "instance.json)",
         )
         _complete(_action, json_completer)
     if problem_filters:
@@ -110,27 +112,6 @@ def add_shared_options(
             help="Only the problems of this contest file",
         )
         _complete(_action, json_completer)
-
-
-def make_parser(
-    description: str | None = None,
-    *,
-    database: bool = False,
-    repository: bool = False,
-    instance: bool = False,
-    problem_filters: bool = False,
-) -> argparse.ArgumentParser:
-    """A parser with the logging options and the requested shared options."""
-    parser = argparse.ArgumentParser(description=description)
-    add_logging_options(parser)
-    add_shared_options(
-        parser,
-        database=database,
-        repository=repository,
-        instance=instance,
-        problem_filters=problem_filters,
-    )
-    return parser
 
 
 # Shell completion (argcomplete); these must stay cheap, they run on every <Tab>
@@ -207,23 +188,41 @@ def configure_logging(args: argparse.Namespace) -> None:
     )
 
 
+def setting(args: argparse.Namespace, name: str, option: str | None = None) -> Any:
+    """A setting from the command line option or the configuration files
+    (see _config); None if neither has it."""
+    from pydomjudge.scripts import _config
+
+    value, _source = _config.lookup(name, getattr(args, option or name, None))
+    return value
+
+
 def load_database(args: argparse.Namespace) -> Database:
-    path: pathlib.Path = args.db
+    from pydomjudge.scripts import _config
+
+    value, source = _config.lookup("database", getattr(args, "db", None))
+    if value is None:
+        value = pathlib.Path("db.yml")
+    if isinstance(value, _config.DatabaseConfig):
+        return Database(**value.connection(pathlib.Path(source)))
+    path: pathlib.Path = value
     if not path.is_file():
         raise ConfigurationError(
-            f"No database configuration found at {path}; create one or set --db"
+            f"No database configuration found at {path}; create one (pyjudge init), "
+            "set --db or 'database:' in pyjudge.yaml"
         )
     try:
         with path.open(mode="rt") as f:
-            config = yaml.safe_load(f)
+            data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise InvalidFileFormatError(path, f"invalid YAML: {e}") from e
-    if not isinstance(config, dict):
+    if not isinstance(data, dict):
         raise InvalidFileFormatError(path, "expected a mapping (host, user, ...)")
     try:
-        return Database(**config)
-    except KeyError as e:
-        raise InvalidFileFormatError(path, f"missing entry {e.args[0]}") from e
+        config = _config.DatabaseConfig.model_validate(data)
+    except pydantic.ValidationError as e:
+        raise InvalidFileFormatError(path, *validation_problems(e)) from e
+    return Database(**config.connection(path))
 
 
 def load_model[M: pydantic.BaseModel](
@@ -244,7 +243,7 @@ def load_repository(args: argparse.Namespace) -> "Repository":
     from pydomjudge.repository.kattis import Repository
 
     cwd = pathlib.Path.cwd()
-    given: pathlib.Path | None = args.repository
+    given: pathlib.Path | None = setting(args, "repository")
     if given is None:
         candidates = [cwd / "repository", cwd, *cwd.resolve().parents]
     else:
@@ -258,11 +257,11 @@ def load_repository(args: argparse.Namespace) -> "Repository":
 
 
 def load_instance(args: argparse.Namespace) -> JudgeInstance:
-    path: pathlib.Path = args.instance
+    path: pathlib.Path = setting(args, "instance") or pathlib.Path("instance.json")
     if not path.is_file():
         raise ConfigurationError(
             f"No instance.json found (expected one at {path}). Set the correct path "
-            f"with --instance or generate one with dt_default_settings."
+            f"with --instance or in pyjudge.yaml, or create one with pyjudge init."
         )
     instance = load_model(path, JudgeInstance)
     if not instance.team_categories:

@@ -1,4 +1,3 @@
-from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import (
     ClarificationSettings,
     DefaultCategory,
@@ -8,8 +7,6 @@ from pydomjudge.model import (
     JudgingSettings,
     ScoringSettings,
 )
-from pydomjudge.scripts import _cli
-from pydomjudge.util import open_file_or_stdout
 
 
 def make_settings():
@@ -27,19 +24,3 @@ def make_settings():
         allowed_language_keys=None,
         team_categories=[DefaultCategory.Participants],
     )
-
-
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser("Write a default instance.json")
-    parser.add_argument(
-        "-O",
-        "--output",
-        type=str,
-        help="File output",
-    )
-    parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
-    args = parser.parse_args()
-    _cli.configure_logging(args)
-    with open_file_or_stdout(args.output) as f:
-        f.write(make_settings().model_dump_json(indent=2 if args.pretty else None))

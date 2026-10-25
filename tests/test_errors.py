@@ -1,5 +1,6 @@
 """Errors that end a command are reported in a few readable lines."""
 
+import argparse
 import json
 import logging
 import pathlib
@@ -55,11 +56,12 @@ def test_missing_file(tmp_path):
 def test_database_file_problems(tmp_path):
     path = tmp_path / "db.yml"
     path.write_text("host: [unclosed\n")
-    parser = _cli.make_parser(database=True)
+    parser = argparse.ArgumentParser()
+    _cli.add_shared_options(parser, database=True)
     with pytest.raises(InvalidFileFormatError, match="db.yml: invalid YAML"):
         _cli.load_database(parser.parse_args(["--db", str(path)]))
     path.write_text("host: localhost\n")
-    with pytest.raises(InvalidFileFormatError, match="db.yml: missing entry user"):
+    with pytest.raises(InvalidFileFormatError, match="db.yml: user: Field required"):
         _cli.load_database(parser.parse_args(["--db", str(path)]))
 
 
