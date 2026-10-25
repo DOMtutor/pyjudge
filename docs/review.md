@@ -8,7 +8,6 @@ Each item is a proposal or a known limitation, not a decision.
 * **Keys vs. names (by design).**
   The writer (`database/_users.py`, `_problems.py`, `_contest.py`, ...) identifies every object by its key, stored as DOMjudge's `externalid`, so all other properties can change and are synchronised on the next upload.
   The reader (`database/_query.py`, exports) works by names (contest short name, team name, login), so it also works on databases not created by pydomjudge.
-* **`create_problem_submissions`** (`database/_submissions.py`) is 500 lines and re-queries the global configuration for every inserted submission.
 * **problemtools coupling** goes through private attributes (`p.output_validators._validators`, `submissions._submissions`) and `argparse.Namespace` stand-ins (`kattis.py`, `_fuzzer.py`).
   Every problemtools update can break these silently; a thin adapter module would localise the damage (see also the long-term TODO "migrate away from problemtools").
 * **Compile scripts** in `repository/compiler/*` are copies of DOMjudge's.
@@ -24,6 +23,9 @@ Each item is a proposal or a known limitation, not a decision.
   Running jobs live in the memory of the worker, so the fuzzer must run with a single gunicorn worker.
   `DELETE /submission/<id>` only forgets a run; the thread finishes in the background.
   Two concurrent runs on the same problem share its problemtools context.
+* **Changed jury solutions keep their old version.**
+  A changed file becomes a new submission whose `origsubmitid` points to the previous one; the previous submission and its judging stay valid, so the jury pages and the jury scoreboard show both versions, and the judging verifier checks the old one, too.
+  Marking the previous version invalid (`valid = 0`, as DOMjudge's "ignore") would match the intent better; not changed yet.
 * **Jury submissions of removed teams stay.**
   `create_problem_submissions` only matches existing submissions of the teams it is given, so submissions of an author team that no longer exists are not deleted.
 
