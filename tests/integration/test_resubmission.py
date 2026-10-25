@@ -16,7 +16,7 @@ from pydomjudge.repository.kattis import Repository
 from pydomjudge.scripts import upload
 from pydomjudge.scripts.upload import PyjudgeConfig
 
-from .conftest import EXAMPLES
+from .conftest import ADMIN, EXAMPLES, login
 
 # Only uploaded for its author team (not accepted, so no sample solution team)
 CHANGED = "pastryperfection/submissions/time_limit_exceeded/pastry_perfection_tobias_bruteforce.py"
@@ -67,7 +67,7 @@ def copied_config(
 
 
 def test_changed_jury_solution_is_resubmitted(
-    copied_config, database: Database, contest: Contest
+    copied_config, database: Database, contest: Contest, base_url: str
 ):
     config, repository = copied_config
     # Same content as uploaded by test_domjudge.py: nothing happens
@@ -115,11 +115,10 @@ def test_changed_jury_solution_is_resubmitted(
         "WHERE submitid = %s OR origsubmitid = %s ORDER BY submitid",
         (old_id, old_id),
     )
-    # The new version points to the old one; both stay valid (current behaviour,
-    # see docs/review.md)
+    # The new version points to the old one, which is ignored (invalid)
     assert new[1] == old_id
-    assert old[2:] == new[2:]
-    assert old[6] == 1
+    assert old[2:6] == new[2:6] and old[7] == new[7]
+    assert (old[6], new[6]) == (0, 1)
     new_source = _rows(
         database,
         "SELECT sourcecode FROM submission_file WHERE submitid = %s",
@@ -142,7 +141,23 @@ def test_changed_jury_solution_is_resubmitted(
 
     assert task_configs(new[0]) == task_configs(old_id)
 
+    # DOMjudge shows both versions and the verifier
+    admin = login(base_url, *ADMIN)
+    try:
+        for url in [
+            f"/jury/submissions/{old_id}",
+            f"/jury/submissions/{new[0]}",
+            "/jury/judging-verifier",
+        ]:
+            response = admin.get(url)
+            assert response.status_code == 200, f"{url}: {response.status_code}"
+    finally:
+        admin.close()
+
     # Uploading the changed repository again changes nothing
     config = _with_fresh_repository(config, repository)
     upload.upload_contest(config, contest, force=True, verify_problems=False)
     assert _counts(database) == after
+    assert _rows(
+        database, "SELECT valid FROM submission WHERE submitid = %s", (old_id,)
+    ) == [(0,)]
