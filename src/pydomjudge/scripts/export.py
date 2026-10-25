@@ -1,16 +1,13 @@
-import argparse
 import logging
 import pathlib
 
 from pydantic import BaseModel
 
 import pydomjudge.database as query
-import pydomjudge.scripts.db as db
-import pydomjudge.scripts.util as util
-from pydomjudge.database import ContestDataExport, SubmissionDto, TeamDto
+from pydomjudge.database import ContestDataExport, Database, SubmissionDto, TeamDto
 from pydomjudge.exc import ElementNotFoundError, error_handler_wrapper
 from pydomjudge.model import SystemCategory
-from pydomjudge.scripts.db import Database
+from pydomjudge.scripts import _cli
 from pydomjudge.util import write_str_to
 
 log = logging.getLogger(__name__)
@@ -40,23 +37,16 @@ def fetch_contest(database: Database, contest_key: str):
 
         teams = query.find_teams(connection, SystemCategory.values())
         teams_by_name: dict[str, TeamDto] = {team.name: team for team in teams}
-        log.info(teams_by_name)
 
         language_name_by_key = query.find_languages(connection)
 
-        logging.info("Fetching submissions")
-        find_submissions = query.find_submissions(connection, contest_key)
-        logging.info("Submissions %s", find_submissions)
-        logging.info(
-            "Submissions %s", [submission.team_name for submission in find_submissions]
-        )
-        logging.info("Teams %s", teams_by_name)
+        log.info("Fetching submissions")
         submissions = [
             submission
-            for submission in find_submissions
+            for submission in query.find_submissions(connection, contest_key)
             if submission.team_name in teams_by_name
         ]
-        logging.info("Fetching clarifications")
+        log.info("Fetching clarifications")
         clarifications = [
             clarification
             for clarification in query.find_clarifications(connection, contest_key)
@@ -114,15 +104,13 @@ def command_submissions(database: Database, args):
 
 @error_handler_wrapper
 def main():
-    parser = argparse.ArgumentParser()
-    db.make_argparse(parser)
-    util.add_logging(parser)
+    parser = _cli.make_parser("Export contest data", database=True)
 
     subparsers = parser.add_subparsers(help="Help for commands", required=True)
     contest_data_parser = subparsers.add_parser(
         "contest", help="Relevant data of a contest"
     )
-    contest_data_parser.add_argument("contest", help="The contest key")
+    contest_data_parser.add_argument("contest", help="The contest short name")
     contest_data_parser.add_argument(
         "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
     )
@@ -130,12 +118,12 @@ def main():
     submissions_parser = subparsers.add_parser(
         "submissions", help="Submissions of a contest"
     )
-    submissions_parser.add_argument("contest", help="The contest key")
+    submissions_parser.add_argument("contest", help="The contest short name")
     submissions_parser.set_defaults(func=command_submissions)
     submissions_parser.add_argument(
         "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
     )
 
     arguments = parser.parse_args()
-    util.apply_logging(arguments)
-    arguments.func(db.from_args(arguments), arguments)
+    _cli.configure_logging(arguments)
+    arguments.func(_cli.load_database(arguments), arguments)

@@ -1,87 +1,16 @@
-import argparse
-import pathlib
-import re
-
-import pydomjudge.repository.kattis as kattis
-import pydomjudge.scripts.util as script_util
 from pydomjudge.exc import error_handler_wrapper
-from pydomjudge.model import Contest
 from pydomjudge.repository.kattis import RepositoryProblem
-
-
-def add_arguments(parser: argparse.ArgumentParser):
-    parser.add_argument(
-        "--keyword",
-        required=False,
-        action="append",
-        help="Keywords to match",
-        default=[],
-    )
-    parser.add_argument(
-        "--name", required=False, action="append", help="Names to match", default=[]
-    )
-    parser.add_argument(
-        "--exclude",
-        required=False,
-        action="append",
-        help="Names to exclude",
-        default=[],
-    )
-    parser.add_argument(
-        "--contest",
-        required=False,
-        action="append",
-        type=pathlib.Path,
-        help="Contests to include",
-    )
-
-
-def find_problems(
-    repository: kattis.Repository, args: argparse.Namespace
-) -> list[RepositoryProblem]:
-    name_patterns = [re.compile(pattern) for pattern in args.name]
-    keyword_patterns = [re.compile(pattern) for pattern in args.keyword]
-    exclude_patterns = [re.compile(pattern) for pattern in args.exclude]
-
-    problem_candidates: set[RepositoryProblem] = set()
-    if args.contest:
-        for contest_file in args.contest:
-            contest: Contest = Contest.model_validate_json(contest_file.read_bytes())
-            for contest_problem in contest.problems:
-                problem_candidates.add(
-                    repository.problems.load_problem(contest_problem.problem_key)
-                )
-    else:
-        problem_candidates = repository.problems.load_all_problems()
-
-    filtered_problems = []
-    for problem in problem_candidates:
-        if keyword_patterns and not any(
-            any(pattern.search(keyword) for keyword in problem.keywords)
-            for pattern in keyword_patterns
-        ):
-            continue
-        if name_patterns and not any(
-            pattern.search(problem.repository_key) for pattern in name_patterns
-        ):
-            continue
-        if any(pattern.match(problem.repository_key) for pattern in exclude_patterns):
-            continue
-        filtered_problems.append(problem)
-    return filtered_problems
+from pydomjudge.scripts import _cli
 
 
 @error_handler_wrapper
 def main():
-    parser = argparse.ArgumentParser()
-    script_util.add_logging(parser)
-    kattis.add_arguments(parser)
-    add_arguments(parser)
-
+    parser = _cli.make_parser(
+        "List problems of the repository", repository=True, problem_filters=True
+    )
     args = parser.parse_args()
-    script_util.apply_logging(args)
-    repository = kattis.from_args(args)
-    filtered_problems = find_problems(repository, args)
+    _cli.configure_logging(args)
+    filtered_problems = _cli.find_problems(_cli.load_repository(args), args)
 
     print(f"Found {len(filtered_problems)} problems")
     for problem in sorted(
@@ -92,5 +21,6 @@ def main():
         ),
     ):
         print(
-            f"  {problem.repository_key:30s} - {problem.difficulty:20s} - {','.join(problem.keywords)}"
+            f"  {problem.repository_key:30s} - {problem.difficulty:20s} - "
+            f"{','.join(problem.keywords)}"
         )

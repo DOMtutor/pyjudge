@@ -41,4 +41,5 @@ from ._update import (
     set_global_languages as set_global_languages,
     update_categories as update_categories,
     update_settings as update_settings,
+    update_user_password as update_user_password,
 )

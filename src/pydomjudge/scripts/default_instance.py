@@ -1,6 +1,3 @@
-import argparse
-import logging
-
 from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import (
     ClarificationSettings,
@@ -11,6 +8,7 @@ from pydomjudge.model import (
     JudgingSettings,
     ScoringSettings,
 )
+from pydomjudge.scripts import _cli
 from pydomjudge.util import open_file_or_stdout
 
 
@@ -33,9 +31,7 @@ def make_settings():
 
 @error_handler_wrapper
 def main():
-    logging.basicConfig(level=logging.INFO)
-
-    parser = argparse.ArgumentParser()
+    parser = _cli.make_parser("Write a default instance.json")
     parser.add_argument(
         "-O",
         "--output",
@@ -44,5 +40,6 @@ def main():
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     args = parser.parse_args()
+    _cli.configure_logging(args)
     with open_file_or_stdout(args.output) as f:
         f.write(make_settings().model_dump_json(indent=2 if args.pretty else None))

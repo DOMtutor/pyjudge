@@ -3,79 +3,23 @@
 import json
 
 from pydomjudge.database import (
-    ClarificationDto,
     ContestDataExport,
-    ContestDescriptionDto,
-    SubmissionDto,
     SubmissionFileDto,
-    TeamDto,
-    TestcaseResultDto as CaseResultDto,  # Test* would be collected by pytest
-    UserDto,
 )
-from pydomjudge.model import Verdict
 
 
-def _export() -> ContestDataExport:
-    submission = SubmissionDto(
-        team_name="t",
-        contest_key="c",
-        contest_problem_key="A",
-        problem_name="p",
-        language_key="python",
-        submission_time=1.0,
-        verdict=Verdict.TIME_LIMIT,
-        case_result=[
-            CaseResultDto(
-                runtime=0.5, verdict=Verdict.TIME_LIMIT, is_sample=False, test_name="x"
-            )
-        ],
-        too_late=False,
-        files=[SubmissionFileDto(filename="a.py", content=b"print(1)\n")],
+def test_export_roundtrip(contest_export: ContestDataExport):
+    assert (
+        ContestDataExport.model_validate_json(contest_export.model_dump_json())
+        == contest_export
     )
-    pending = submission.model_copy(update={"verdict": None, "case_result": []})
-    return ContestDataExport(
-        description=ContestDescriptionDto(contest_key="c", start=0.0, end=10.0),
-        users={
-            "u": UserDto(
-                login_name="u", display_name="U", external_id="e", email="u@x"
-            ),
-            "v": UserDto(login_name="v", display_name="V"),
-        },
-        teams={
-            "t": TeamDto(
-                name="t",
-                display_name="Team T",
-                category_name="participants",
-                affiliation_name=None,
-                member_login_names=["u", "v"],
-            )
-        },
-        languages={"python": "Python 3"},
-        problems={"A": "p"},
-        submissions=[submission, pending],
-        clarifications=[
-            ClarificationDto(
-                team_name="t",
-                contest_key="c",
-                contest_problem_key=None,
-                request_time=2.0,
-                identifier="1",
-                response_to=None,
-                from_jury=False,
-                body="?",
-            )
-        ],
+    assert (
+        ContestDataExport.model_validate(contest_export.model_dump()) == contest_export
     )
 
 
-def test_export_roundtrip():
-    export = _export()
-    assert ContestDataExport.model_validate_json(export.model_dump_json()) == export
-    assert ContestDataExport.model_validate(export.model_dump()) == export
-
-
-def test_export_json_format():
-    data = json.loads(_export().model_dump_json())
+def test_export_json_format(contest_export: ContestDataExport):
+    data = json.loads(contest_export.model_dump_json())
     # users and teams are maps keyed by login / team name, with short field names
     assert data["users"]["u"] == {"name": "U", "external_id": "e", "email": "u@x"}
     assert data["users"]["v"] == {"name": "V"}

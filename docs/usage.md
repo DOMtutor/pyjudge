@@ -1,7 +1,8 @@
 # Usage
 
 All command-line tools are installed with the package (`uv sync`, then `uv run <tool>` or activate the environment).
-Every tool accepts `--help`, `--debug` (verbose output, including `problemtools`) and `--log LEVEL`.
+Every tool accepts `--help`, `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`).
+Configuration and data errors are reported in one line with exit code 1 (`--debug` adds the stack trace).
 
 ## Configuration files
 
@@ -90,8 +91,11 @@ All subcommands are idempotent; objects are matched by their key (`externalid` i
 | `settings` | Writes `instance.json` settings, creates/updates team categories (categories not listed are deleted) and languages (languages not in the repository are deleted, or disabled if they have submissions) |
 | `users FILE [--disable] [--overwrite-passwords]` | Creates/updates affiliations, users, teams. `--disable` disables every user not in the file or whitelist |
 | `contest FILE [--force] [--skip-verify] [--skip-problems] [--skip-testcases] [--skip-submissions]` | Creates/updates the contest, then its problems (verification, statement PDF, test cases, jury solutions). Problems no longer listed are removed from the contest, unless teams have submitted to them (DOMjudge would delete those submissions). Refuses to touch a running contest without `--force` |
-| `problem (--name KEY \| --regex RE \| --contest FILE)... [--skip-verify] [--skip-submissions]` | Uploads problems without a contest |
+| `problem (--name KEY \| --regex RE \| --contest FILE)... [--skip-verify] [--skip-testcases] [--skip-submissions]` | Uploads problems without a contest |
+| `password KEY` | Asks for a new password of the user with this key and sets it |
 | `check` | Removes submissions with empty or binary source files and submissions without judging |
+
+A failed problem verification stops the upload before the database is touched, with exit code 1.
 
 Jury solutions are uploaded as submissions of synthetic teams: one "Sample Solution <language>" team per language (category `solution`) for accepted solutions, and one "Author <name>" team (category `author`) per matched author.
 They are judged like any other submission, which immediately shows whether a problem behaves as expected.
@@ -109,6 +113,9 @@ Without `-d`, output goes to stdout only if it is a pipe.
 Verdicts use DOMjudge's result strings (see `settings.scoring` above).
 The export is the input for `pydomjudge.evaluate` (statistics and plots) and for grading scripts.
 
+`dt_anonymize contest EXPORT [DEST]` replaces logins, names, e-mail addresses and team names of an export by random words and shifts all times by a random offset, for example to share data for teaching or research.
+The same export always gives the same result.
+
 ## Working with problems: `dt_kattis_*`
 
 These tools work on the problem repository only, no database needed.
@@ -118,7 +125,7 @@ They share filters: `--name RE`, `--keyword RE`, `--exclude RE` (regular express
 |------|--------|
 | `dt_kattis_find [filters]` | Lists matching problems with difficulty and keywords |
 | `dt_kattis_check [filters] [--statement LANG]` | Verifies problems with `problemtools` (generating test data first), or builds the statement PDF |
-| `dt_kattis_get DEST problems [--language LANG]` | Writes statement PDFs to a folder or `.zip` |
+| `dt_kattis_get DEST problems [--language LANG]... [--force]` | Writes statement PDFs (default language `en`, `--force` rebuilds them) to a folder, `.zip` or `.tar` |
 | `dt_kattis_get DEST samples` | Writes sample inputs and answers |
 | `dt_generate_seed TEMPLATE --count N [--filename FMT]` | Generates `N` seed files from a Jinja template (variables `n`, `seed`, `random`); see below |
 

@@ -1778,12 +1778,11 @@ def disable_unknown_users(cursor: Cursor, user_login_names: set[str]):
         log.warning("Disabled %d users", cursor.rowcount)
 
 
-def update_user_password(cursor: Cursor, user: User):
-    if not user.password_hash:
-        raise ValueError("Cannot update password of user without password hash")
+def update_user_password(cursor: Cursor, user_key: str, password_hash: str):
+    """Set the password (a bcrypt hash, see User.hash_password) of a user."""
     cursor.execute(
         "UPDATE `user` SET password = %s WHERE externalid = %s",
-        (user.password_hash, user.key),
+        (password_hash, user_key),
     )
     if cursor.rowcount != 1:
-        raise ValueError(f"User {user.key} not found")
+        raise ElementNotFoundError(f"No user with key {user_key}")
