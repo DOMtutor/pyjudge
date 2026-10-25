@@ -261,6 +261,20 @@ def _seed_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--count", required=True, type=int, help="Number of files")
 
 
+def _new_problem_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("key", help="Folder name of the problem (a-z, 0-9)")
+    parser.add_argument("--name", help="Title of the problem (default: from the key)")
+    parser.add_argument("--author", help="Author key from config.yaml")
+    parser.add_argument(
+        "--language", help="Language of the example solution (default: python)"
+    )
+    parser.add_argument(
+        "--seeded",
+        action="store_true",
+        help="Also a generator, a seed template and a seed file",
+    )
+
+
 def _problem(parser: argparse.ArgumentParser, *, nested: bool) -> None:
     _cli.add_shared_options(parser, repository=True, suppress=nested)
     commands = _subcommands(parser, "problem_command")
@@ -292,6 +306,13 @@ def _problem(parser: argparse.ArgumentParser, *, nested: bool) -> None:
             "pydomjudge.scripts.get:run_samples",
             _samples_options,
             True,
+        ),
+        (
+            "new",
+            "Create a problem folder that verifies, to start from",
+            "pydomjudge.scripts.scaffold:run",
+            _new_problem_options,
+            False,
         ),
         (
             "seed",
