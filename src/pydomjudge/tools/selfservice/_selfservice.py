@@ -13,6 +13,7 @@ the throttling of password attempts is kept in memory.
 
 import argparse
 import collections
+import copy
 import functools
 import logging
 import os
@@ -239,7 +240,13 @@ def _password_matches(password: str, stored: str) -> bool:
 
 class UserBackend:
     def __init__(self, db: Database):
-        self.db = db
+        self._db = db
+
+    @property
+    def db(self) -> Database:
+        # A Database holds the connection of its "with" block, and requests run
+        # in several threads: every use gets its own copy
+        return copy.copy(self._db)
 
     def category_exists(self, key: str) -> bool:
         with self.db as db, db.transaction_cursor(readonly=True) as cursor:
