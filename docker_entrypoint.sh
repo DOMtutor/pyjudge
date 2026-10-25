@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS="\n"
 
-# Default to displaying help if no argument is provided
-if [ -z "$1" ]; then
+if [ -z "${1:-}" ]; then
     echo "Error: No tool specified."
-    echo "Usage: docker run <image> [fuzzer|selfservice]"
+    echo "Usage: docker run <image> [fuzzer|selfservice] [gunicorn options]"
     exit 1
 fi
 
@@ -19,8 +17,8 @@ case "$TOOL" in
         ;;
     "fuzzer")
         echo "Starting Fuzzer via Gunicorn"
-        exec gunicorn --bind 0.0.0.0:8000 "pydomjudge.tools.fuzzer:run_app()" "$@"
-        # exec python -m tools.my_cli_tool "$@"
+        # Fuzzing runs and their state live in the worker process: use exactly one
+        exec gunicorn --bind 0.0.0.0:8000 --workers 1 "pydomjudge.tools.fuzzer:run_app()" "$@"
         ;;
     *)
         echo "Error: Unknown tool '$TOOL'."
