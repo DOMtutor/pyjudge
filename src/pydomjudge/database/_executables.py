@@ -165,7 +165,7 @@ def set_global_languages(
         "Setting the list of languages to %s",
         ", ".join(sorted(language.name for language in languages)),
     )
-    for language in languages:
+    for language in sorted(languages, key=lambda language: language.key):
         create_or_update_language(
             cursor, language, allow_submit=language.key in allowed_keys
         )
