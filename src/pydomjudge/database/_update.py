@@ -353,7 +353,7 @@ def create_or_update_language(
             language.key,
             language.compile_script.key,
             language.name,
-            json.dumps(list(language.extensions)),
+            json.dumps(sorted(language.extensions)),
             language.time_factor,
             language.entry_point_description,
             language.entry_point_required,
@@ -361,7 +361,7 @@ def create_or_update_language(
             language.key,
             language.compile_script.key,
             language.name,
-            json.dumps(list(language.extensions)),
+            json.dumps(sorted(language.extensions)),
             language.time_factor,
             language.entry_point_description,
             language.entry_point_required,
@@ -789,10 +789,7 @@ def update_settings(cursor: Cursor, settings: JudgeSettings):
     write("show_sample_output", display.show_sample_output)
     write("show_compile", display.show_compile)
 
-    clarification = settings.clarification
-    if not isinstance(clarification.answers, list):
-        raise ValueError
-    write("clar_answers", json.dumps(clarification.answers))
+    write("clar_answers", json.dumps(settings.clarification.answers))
 
 
 def set_global_languages(

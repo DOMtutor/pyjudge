@@ -1,5 +1,8 @@
 import json
 
+import pytest
+from pydantic import ValidationError
+
 from pydomjudge.model import JudgeInstance, SystemCategory, UserRole
 from pydomjudge.scripts.default_instance import make_settings
 from pydomjudge.scripts.upload import UsersDescription
@@ -13,9 +16,7 @@ def _context(instance: JudgeInstance) -> dict:
 def test_default_instance_roundtrip():
     instance = make_settings()
     restored = JudgeInstance.model_validate_json(instance.model_dump_json())
-    # Compare serialised form: defaults use tuples where JSON yields lists
-    # (see docs/review.md, ClarificationSettings.answers).
-    assert restored.model_dump_json() == instance.model_dump_json()
+    assert restored == instance
     assert restored.allowed_language_keys is None
 
 
@@ -53,3 +54,21 @@ def test_users_description_json_roundtrip(examples_dir):
     restored = UsersDescription.model_validate_json(dumped, context=context)
     assert restored == description
     assert json.loads(dumped)["teams"]["user_team"]["members"] == ["user"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("category", "participant", "unknown category 'participant'"),
+        ("affiliation", "bar", "unknown affiliation 'bar'"),
+        ("members", ["usr"], "unknown member 'usr'"),
+    ],
+)
+def test_users_description_rejects_unknown_keys(examples_dir, field, value, message):
+    instance = JudgeInstance.model_validate_json(
+        (examples_dir / "instance.json").read_text()
+    )
+    data = json.loads((examples_dir / "users.json").read_text())
+    data["teams"]["user_team"][field] = value
+    with pytest.raises(ValidationError, match=f"Team user_team: {message}"):
+        UsersDescription.model_validate(data, context=_context(instance))

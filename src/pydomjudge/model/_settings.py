@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from pydantic import BaseModel, Field, model_validator
 
 from ._team import TeamCategory
@@ -55,18 +53,21 @@ class DisplaySettings(BaseModel):
 
 
 class ClarificationSettings(BaseModel):
-    answers: Sequence[str] = ("No comment", "Read the problem statement carefully")
+    answers: list[str] = Field(
+        default_factory=lambda: ["No comment", "Read the problem statement carefully"]
+    )
 
 
 class JudgeSettings(BaseModel):
-    judging: JudgingSettings = JudgingSettings()
-    scoring: ScoringSettings = ScoringSettings()
-    display: DisplaySettings = DisplaySettings()
-    clarification: ClarificationSettings = ClarificationSettings()
+    # default_factory: every JudgeSettings gets its own sub-settings objects
+    judging: JudgingSettings = Field(default_factory=JudgingSettings)
+    scoring: ScoringSettings = Field(default_factory=ScoringSettings)
+    display: DisplaySettings = Field(default_factory=DisplaySettings)
+    clarification: ClarificationSettings = Field(default_factory=ClarificationSettings)
 
 
 class JudgeInstance(BaseModel):
-    identifier: str = Field(serialization_alias="id")
+    identifier: str
     settings: JudgeSettings
     base_time: float
     user_whitelist: set[str]

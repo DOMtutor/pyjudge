@@ -75,7 +75,6 @@ class ProblemLimits:
     output_kib: int | None
 
 
-@abc.abstractmethod
 class Problem(abc.ABC):
     @property
     @abc.abstractmethod

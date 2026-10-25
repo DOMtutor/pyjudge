@@ -890,10 +890,10 @@ def recurse_traversable(
     _recurse(traversable, [])
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class TraversableFile(FileData):
     traversable: Traversable
-    path: list[str]
+    path: tuple[str, ...]
 
     def __post_init__(self):
         assert self.path and all(component for component in self.path)
@@ -902,18 +902,18 @@ class TraversableFile(FileData):
         return self.traversable.open(mode="rb")
 
     @property
-    def relative_path(self) -> list[str]:
+    def relative_path(self) -> tuple[str, ...]:
         return self.path
 
 
-def get_components_of_traversable(traversable: Traversable) -> Collection[FileData]:
-    files = []
+def get_components_of_traversable(traversable: Traversable) -> tuple[FileData, ...]:
+    files: list[FileData] = []
 
     def action(child: Traversable, path: list[str]):
-        files.append(TraversableFile(child, path))
+        files.append(TraversableFile(child, tuple(path)))
 
     recurse_traversable(traversable, action)
-    return files
+    return tuple(files)
 
 
 class Repository:
@@ -953,13 +953,13 @@ class Repository:
             key=f"compile_{language_key}",
             description=f"compile {language_data['name']}",
             executable_type=ExecutableType.Compile,
-            contents=executable_contents,
+            contents=tuple(executable_contents),
         )
         return Language(
             key=language_key,
             name=language_data["name"],
             time_factor=language_data.get("time_factor", 1.0),
-            extensions=set(language_data["extensions"]),
+            extensions=frozenset(language_data["extensions"]),
             entry_point_required=language_data.get("entry_point_required", False),
             entry_point_description=language_data.get("entry_point_description", None),
             compile_script=compile_script,
@@ -1174,7 +1174,7 @@ class Repository:
             key=f"cmp_{problem.repository_key}",
             description=f"checker for {problem.repository_key}",
             executable_type=ExecutableType.Compare,
-            contents=checker_files,
+            contents=tuple(checker_files),
         )
 
     # noinspection PyMethodMayBeStatic

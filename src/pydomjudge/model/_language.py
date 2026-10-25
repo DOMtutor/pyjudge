@@ -1,7 +1,7 @@
 import abc
 import enum
 import pathlib
-from collections.abc import Collection
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 
@@ -18,7 +18,7 @@ class FileData(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def relative_path(self) -> list[str]:
+    def relative_path(self) -> Sequence[str]:
         pass
 
     def __lt__(self, other):
@@ -28,7 +28,7 @@ class FileData(abc.ABC):
 @dataclass(frozen=True)
 class PathFile(FileData):
     content: pathlib.Path
-    path_components: list[str]
+    path_components: tuple[str, ...]
 
     def __post_init__(self):
         assert self.path_components and all(
@@ -37,30 +37,31 @@ class PathFile(FileData):
 
     @staticmethod
     def from_path(file: pathlib.Path, base_directory: pathlib.Path) -> "PathFile":
-        return PathFile(file, list(map(str, file.relative_to(base_directory).parts)))
+        return PathFile(file, tuple(map(str, file.relative_to(base_directory).parts)))
 
     def open(self):
         return self.content.open(mode="rb")
 
     @property
-    def relative_path(self) -> list[str]:
+    def relative_path(self) -> tuple[str, ...]:
         return self.path_components
 
 
 @dataclass(frozen=True)
 class Executable:
     @staticmethod
-    def get_directory_contents(directory: pathlib.Path) -> Collection[PathFile]:
-        return [
+    def get_directory_contents(directory: pathlib.Path) -> tuple[PathFile, ...]:
+        return tuple(
             PathFile.from_path(path, directory)
-            for path in directory.glob("**/*")
+            for path in sorted(directory.glob("**/*"))
             if path.is_file() and not path.name.endswith(".class")
-        ]  # Exclude java compilation artifacts
+        )  # Exclude java compilation artifacts
 
     key: str
     description: str
     executable_type: ExecutableType
-    contents: Collection[FileData]
+    # Tuples and frozensets keep the frozen dataclasses hashable
+    contents: tuple[FileData, ...]
 
     def __str__(self):
         return f"{self.key}({self.executable_type})"
@@ -71,7 +72,7 @@ class Language:
     key: str
     name: str
     time_factor: float
-    extensions: Collection[str]
+    extensions: frozenset[str]
     entry_point_description: str | None
     entry_point_required: bool
     compile_script: Executable
