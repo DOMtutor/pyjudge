@@ -187,3 +187,32 @@ def test_language_is_hashable():
         compile_script=script,
     )
     assert {language: 1}[language] == 1
+
+
+@pytest.mark.parametrize(
+    ("model", "data", "key"),
+    [
+        # "score" was the name of the scoring settings in pydomjudge 0.2
+        (JudgeSettings, {"score": {"penalty_time": 300}}, "score"),
+        (ScoringSettings, {"penalty": 300}, "penalty"),
+        (
+            ContestProblem,
+            {
+                "name": "A",
+                "points": 1,
+                "color": "red",
+                "problem_key": "a",
+                "problem": "a",
+            },
+            "problem",
+        ),
+    ],
+)
+def test_user_written_models_reject_unknown_keys(model, data, key):
+    with pytest.raises(ValidationError, match=key):
+        model.model_validate(data)
+
+
+def test_contest_rejects_unknown_keys():
+    with pytest.raises(ValidationError, match="public_scorebord"):
+        _contest(public_scorebord=True)

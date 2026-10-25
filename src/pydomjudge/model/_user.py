@@ -11,7 +11,7 @@ class UserRole(enum.StrEnum):
     Jury = "jury"
 
 
-class User(BaseModel, frozen=True):
+class User(BaseModel, frozen=True, extra="forbid"):
     key: str
     login_name: str
     display_name: str

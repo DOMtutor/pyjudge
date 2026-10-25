@@ -5,7 +5,7 @@ from pydomjudge.util import FrozenSequence
 from ._user import User
 
 
-class TeamCategory(BaseModel, frozen=True):
+class TeamCategory(BaseModel, frozen=True, extra="forbid"):
     key: str
     name: str
     color: str
@@ -76,14 +76,14 @@ class DefaultCategory:
         return [cls.Participants, cls.Hidden]
 
 
-class Affiliation(BaseModel, frozen=True):
+class Affiliation(BaseModel, frozen=True, extra="forbid"):
     key: str
     short_name: str
     name: str
     country: str | None
 
 
-class Team(BaseModel, frozen=True):
+class Team(BaseModel, frozen=True, extra="forbid"):
     key: str
     name: str
     display_name: str

@@ -191,7 +191,7 @@ def upload_problems(
                     )
 
 
-class UsersDescription(BaseModel):
+class UsersDescription(BaseModel, extra="forbid"):
     users: list[User]
     affiliations: list[Affiliation]
     teams: list[Team]

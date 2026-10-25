@@ -4,7 +4,7 @@ from ._team import TeamCategory
 from ._verdict import PydanticVerdict, Verdict
 
 
-class ScoringSettings(BaseModel):
+class ScoringSettings(BaseModel, extra="forbid"):
     penalty_time: float = 600.0
     result_priority: dict[PydanticVerdict, int] = Field(
         default_factory=lambda: {
@@ -28,7 +28,7 @@ class ScoringSettings(BaseModel):
         return self
 
 
-class JudgingSettings(BaseModel):
+class JudgingSettings(BaseModel, extra="forbid"):
     memory_limit: int = 1572864
     output_limit: int = 8192
     source_size_limit: int = 256
@@ -42,7 +42,7 @@ class JudgingSettings(BaseModel):
     lazy_eval: bool = False
 
 
-class DisplaySettings(BaseModel):
+class DisplaySettings(BaseModel, extra="forbid"):
     show_pending: bool = True
     show_flags: bool = False
     show_affiliations: bool = True
@@ -52,13 +52,13 @@ class DisplaySettings(BaseModel):
     show_compile: int = 1
 
 
-class ClarificationSettings(BaseModel):
+class ClarificationSettings(BaseModel, extra="forbid"):
     answers: list[str] = Field(
         default_factory=lambda: ["No comment", "Read the problem statement carefully"]
     )
 
 
-class JudgeSettings(BaseModel):
+class JudgeSettings(BaseModel, extra="forbid"):
     # default_factory: every JudgeSettings gets its own sub-settings objects
     judging: JudgingSettings = Field(default_factory=JudgingSettings)
     scoring: ScoringSettings = Field(default_factory=ScoringSettings)
@@ -66,7 +66,7 @@ class JudgeSettings(BaseModel):
     clarification: ClarificationSettings = Field(default_factory=ClarificationSettings)
 
 
-class JudgeInstance(BaseModel):
+class JudgeInstance(BaseModel, extra="forbid"):
     identifier: str
     settings: JudgeSettings
     base_time: float
