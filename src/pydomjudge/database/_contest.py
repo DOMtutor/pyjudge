@@ -54,8 +54,8 @@ def _remove_dropped_contest_problems(
             ", ".join(name for _, name, _ in dropped),
         )
         cursor.execute(
-            f"DELETE FROM contestproblem WHERE cid = %s "
-            f"AND probid IN {list_param(dropped_ids)}",
+            "DELETE FROM contestproblem "
+            f"WHERE cid = %s AND probid IN {list_param(dropped_ids)}",
             (contest_id, *dropped_ids),
         )
 

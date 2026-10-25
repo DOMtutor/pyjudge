@@ -57,7 +57,8 @@ def _problem_contests(
     contest_start = {}
     if contest_ids is None:
         cursor.execute(
-            "SELECT c.cid, c.starttime FROM contest c JOIN contestproblem cp on c.cid = cp.cid "
+            "SELECT c.cid, c.starttime FROM contest c "
+            "JOIN contestproblem cp ON c.cid = cp.cid "
             "WHERE cp.probid = %s",
             (problem_id,),
         )
@@ -167,9 +168,9 @@ def _existing_submissions(
 
     if existing.submissions:
         cursor.execute(
-            f"SELECT submitid, submitfileid, filename, MD5(sourcecode) as source_md5 "
-            f"FROM submission_file sf WHERE "
-            f"submitid IN {list_param(existing.submissions)}",
+            "SELECT submitid, submitfileid, filename, MD5(sourcecode) AS source_md5 "
+            "FROM submission_file sf "
+            f"WHERE submitid IN {list_param(existing.submissions)}",
             tuple(existing.submissions.keys()),
         )
         for submission_id, _file_id, file_name, file_md5 in cursor:
@@ -190,8 +191,8 @@ class _JudgingTasks:
 
     def __init__(self, cursor: Cursor, problem_id: int):
         cursor.execute(
-            "SELECT name, value FROM configuration WHERE name IN "
-            "('script_timelimit', 'script_memory_limit', 'script_filesize_limit', "
+            "SELECT name, value FROM configuration "
+            "WHERE name IN ('script_timelimit', 'script_memory_limit', 'script_filesize_limit', "
             "'memory_limit', 'output_limit', 'process_limit')"
         )
         self.config = {row[0]: row[1] for row in cursor.fetchall()}
@@ -199,7 +200,8 @@ class _JudgingTasks:
         cursor.execute(
             "SELECT p.timelimit, p.memlimit, p.outputlimit, p.special_compare_args, "
             "p.special_compare, p.multipass_limit "
-            "FROM problem p WHERE p.probid = %s",
+            "FROM problem p "
+            "WHERE p.probid = %s",
             (problem_id,),
         )
         (

@@ -171,8 +171,8 @@ def set_global_languages(
         )
 
     cursor.execute(
-        "SELECT langid, compile_script "
-        f"FROM language WHERE {field_not_in_list('langid', languages)}",
+        "SELECT langid, compile_script FROM language "
+        f"WHERE {field_not_in_list('langid', languages)}",
         tuple(language.key for language in languages),
     )
     languages_to_delete = []
@@ -186,8 +186,8 @@ def set_global_languages(
     if scripts_to_delete:
         # noinspection SqlType
         cursor.execute(
-            f"DELETE FROM executable WHERE execid IN {list_param(scripts_to_delete)} "
-            f"AND type = 'compile'",
+            "DELETE FROM executable "
+            f"WHERE execid IN {list_param(scripts_to_delete)} AND type = 'compile'",
             tuple(scripts_to_delete),
         )  # Safeguard
     if languages_to_delete:
