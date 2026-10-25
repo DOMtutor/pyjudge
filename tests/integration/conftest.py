@@ -109,29 +109,8 @@ def contest() -> Contest:
     )
 
 
-class _KeepPort(httpx.HTTPTransport):
-    """DOMjudge's nginx passes the Host header without port to PHP, so behind a
-    port mapping its absolute redirects point to port 80; send them back."""
-
-    def __init__(self, port: int):
-        super().__init__()
-        self.port = port
-
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
-        if request.url.port in (None, 80):
-            request.url = request.url.copy_with(port=self.port)
-        return super().handle_request(request)
-
-
 def client(base_url: str, **kwargs) -> httpx.Client:
-    port = httpx.URL(base_url).port or 80
-    return httpx.Client(
-        base_url=base_url,
-        follow_redirects=True,
-        timeout=60,
-        transport=_KeepPort(port),
-        **kwargs,
-    )
+    return httpx.Client(base_url=base_url, follow_redirects=True, timeout=60, **kwargs)
 
 
 def login(base_url: str, username: str, password: str) -> httpx.Client:

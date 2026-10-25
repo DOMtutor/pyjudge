@@ -2,6 +2,19 @@
 # docs/docker-compose.yml (database settings) without backups and persistence.
 name: pyjudge-it
 
+configs:
+  # Same as in docs/docker-compose.yml: the image's nginx passes the Host header
+  # without port to DOMjudge, whose absolute redirects then point to port 80
+  domserver-public-port:
+    content: |
+      #!/bin/sh
+      host='$$host'
+      if [ -n "$${DOMJUDGE_PUBLIC_PORT:-}" ] && [ "$${DOMJUDGE_PUBLIC_PORT}" != 80 ]; then
+        host="$$host:$${DOMJUDGE_PUBLIC_PORT}"
+      fi
+      sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
+      echo "[ok] DOMjudge passes HTTP_HOST $$host"
+
 services:
   mariadb:
     image: mariadb:12
@@ -24,7 +37,7 @@ services:
       retries: 60
 
   domserver:
-    image: ${DOMJUDGE_IMAGE:-domjudge}/domserver:${DOMJUDGE_VERSION:-9.0.1}
+    image: ${DOMJUDGE_DOMSERVER_IMAGE:-domjudge/domserver:9.0.1}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -38,6 +51,11 @@ services:
       MYSQL_DATABASE: domjudge
       CONTAINER_TIMEZONE: Europe/Berlin
       DJ_DB_INSTALL_BARE: 1
+      DOMJUDGE_PUBLIC_PORT: ${PYJUDGE_IT_WEB_PORT:-18080}
+    configs:
+      - source: domserver-public-port
+        target: /scripts/start.ro/40-public-port.sh
+        mode: 0555
     healthcheck:
       test: ["CMD", "/scripts/bin/healthcheck"]
       interval: 3s
@@ -46,7 +64,7 @@ services:
 
   judgehost:
     profiles: [judge]
-    image: ${DOMJUDGE_IMAGE:-domjudge}/judgehost:${DOMJUDGE_VERSION:-9.0.1}
+    image: ${DOMJUDGE_JUDGEHOST_IMAGE:-domjudge/judgehost:9.0.1}
     depends_on:
       domserver:
         condition: service_healthy

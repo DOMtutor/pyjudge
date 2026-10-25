@@ -18,10 +18,10 @@ Each item is a proposal or a known limitation, not a decision.
 
 ## Limitations and untested parts
 
-* **No database tests.**
-  All tests run without MariaDB.
-  The SQL changed in this series (team member detachment, removal of contest problems dropped from `contest.json` with its guard against deleting team submissions, read-only transactions, export queries without `GROUP BY`) is reviewed but has not run against a DOMjudge database.
-  An integration test would start from a DOMjudge-initialised database (the schema comes from DOMjudge's Doctrine migrations; there is no SQL schema file).
+* **Integration coverage.**
+  `tests/integration/run.sh` uploads the examples into a real DOMjudge and checks its pages, the API, its configuration check and that a second upload changes nothing.
+  Not yet covered: removing team members, removing contest problems (and the guard against deleting team submissions), multi-file submissions in exports.
+  The judgehost part (`JUDGE=1`) has not run yet: the development machine has a cgroup-v1 `net_cls` mount (Mullvad), see `docs/deployment.md`.
 * **Fuzzer state is per process.**
   Running jobs live in the memory of the worker, so the fuzzer must run with a single gunicorn worker.
   `DELETE /submission/<id>` only forgets a run; the thread finishes in the background.

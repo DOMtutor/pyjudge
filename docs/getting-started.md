@@ -68,7 +68,7 @@ docker compose logs -f domserver     # wait until it reports the admin password,
 ```
 
 Open <http://localhost:12345> and log in as `admin` with the password from the log.
-Then, in the web interface, go to *Users*, edit `judgehost` and set its password to `DOMJUDGE_JUDGE_PASSWORD` from `.env`.
+Then, in the web interface, go to *Users*, edit `judgehost` and set its password to `DOMJUDGE_JUDGE_PASSWORD` from `.env` (after step 4, `dt_judge_upload password judgehost` does the same).
 The judgehost container reconnects on its own.
 Check with `docker compose logs judgehost`; see [deployment.md](deployment.md) if it complains about cgroups.
 
