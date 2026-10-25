@@ -179,7 +179,10 @@ const submit_problem = function () {
     const source_lang = $('#source_lang').val();
     let lang;
     let source_name;
-    if (source_lang === "cpp") {
+    if (source_lang === "c") {
+        lang = "c";
+        source_name = "main.c";
+    } else if (source_lang === "cpp") {
         lang = "cpp";
         source_name = "a.cpp";
     } else if (source_lang === "haskell") {

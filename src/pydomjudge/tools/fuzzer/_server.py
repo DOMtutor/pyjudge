@@ -1,130 +1,175 @@
+"""Web interface of the fuzzer.
+
+Run it with ``dt_fuzzer --repository PATH`` (Flask development server) or with
+gunicorn as ``pydomjudge.tools.fuzzer:create_app()``, configured through the
+environment variables PYJUDGE_REPOSITORY and PYJUDGE_BASE_TIME. Fuzzing runs
+live in the memory of the process, so use a single worker.
+"""
+
 import argparse
 import logging
+import os
 import pathlib
-import sys
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import StringIO
+from typing import Annotated
 
 from flask import Blueprint, Flask, current_app, jsonify, redirect, request, url_for
-from flask_inputs import Inputs
-from flask_inputs.validators import JsonSchema
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    ValidationError,
+    ValidationInfo,
+    model_validator,
+)
 
+from pydomjudge.exc import ConfigurationError
+from pydomjudge.model import JudgeInstance
 from pydomjudge.repository.kattis import Repository, RepositoryProblem
 
 from ._fuzzer import Fuzzer, FuzzingRequest
 
-schema = {
-    "type": "object",
-    "properties": {
-        "problem": {"type": "string", "minLength": 3},
-        "language": {
-            "enum": [
-                "cpp",
-                "haskell",
-                "java",
-                "javascript",
-                "julia",
-                "pascal",
-                "python",
-                "rust",
-            ]
-        },
-        "sources": {
-            "type": "object",
-            "minProperties": 1,
-            "patternProperties": {"^.*$": {"type": "string", "minLength": 3}},
-        },
-        "case_name": {"type": "string"},
-        "runs": {"type": "integer", "minimum": 0},
-    },
-    "required": ["problem", "language", "sources", "case_name"],
-}
+log = logging.getLogger(__name__)
+
+EXTENSION_KEY = "pydomjudge"
+
+# problemtools calls some languages differently than the repository
+PROBLEMTOOLS_LANGUAGE = {"python": "python3"}
+
+# DOMjudge's SubmissionService::FILENAME_REGEX; in particular no path separators
+FileName = Annotated[
+    str, StringConstraints(pattern=r"^[a-zA-Z0-9_][a-zA-Z0-9+_.-]*$", max_length=255)
+]
 
 
-class JsonInputs(Inputs):
-    json = [JsonSchema(schema=schema)]
+class FuzzingRequestBody(BaseModel):
+    """JSON body of POST /submission.
+
+    Validation needs the repository data, passed as validation context
+    {"state": FuzzerState}.
+    """
+
+    problem: str
+    language: str | None = Field(
+        default=None, description="Repository language key, None to detect"
+    )
+    sources: dict[FileName, Annotated[str, Field(max_length=1_000_000)]] = Field(
+        min_length=1, max_length=20
+    )
+    case_name: str = Field(description="Name of a seed file of the problem")
+    runs: int = Field(default=10, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def _check_against_repository(self, info: ValidationInfo):
+        state: FuzzerState | None = (info.context or {}).get("state")
+        if state is None:
+            raise ValueError("No fuzzer state given for validation")
+        problem = state.problems.get(self.problem)
+        if problem is None:
+            raise ValueError(f"Unknown problem {self.problem}")
+        if self.language is not None and self.language not in state.language_keys:
+            known = ", ".join(sorted(state.language_keys))
+            raise ValueError(f"Unknown language {self.language} (known: {known})")
+        if self.case_name not in seed_names(problem):
+            raise ValueError(f"Problem {self.problem} has no seed {self.case_name}")
+        return self
+
+
+def seed_names(problem: RepositoryProblem) -> list[str]:
+    secret = problem.directory / "data" / "secret"
+    return sorted(seed.stem for seed in secret.glob("*.seed"))
 
 
 class FuzzingThread(threading.Thread):
     FORMATTER = logging.Formatter("%(message)s")
 
-    def __init__(self, fuzzer_id, submission, repository, fuzzer):
-        threading.Thread.__init__(self)
-
+    def __init__(self, fuzzer_id: str, fuzzer: Fuzzer, fuzzing_request: FuzzingRequest):
+        super().__init__(daemon=True)
         self.fuzzer_id = fuzzer_id
-        self.submission = submission
-        self.submission["valid"] = True
-        self.state = {"id": self.fuzzer_id, "finished": False}
-        self.repository = repository
         self.fuzzer = fuzzer
+        self.request = fuzzing_request
+        self.state: dict = {"id": self.fuzzer_id, "finished": False}
         self.log_stream = StringIO()
 
     def run(self):
-        submission_logger = logging.getLogger(f"submission.{self.fuzzer_id}")
-        submission_log_handler = logging.StreamHandler(self.log_stream)
-        submission_log_handler.setFormatter(self.FORMATTER)
-        for handler in list(submission_logger.handlers):
-            submission_logger.removeHandler(handler)
-        submission_logger.addHandler(submission_log_handler)
-        submission_logger.setLevel(level=logging.DEBUG)
+        submission_logger = self.request.logger
+        handler = logging.StreamHandler(self.log_stream)
+        handler.setFormatter(self.FORMATTER)
+        for existing in list(submission_logger.handlers):
+            submission_logger.removeHandler(existing)
+        submission_logger.addHandler(handler)
+        submission_logger.setLevel(logging.DEBUG)
+        submission_logger.propagate = False  # shown to the user, not in the app log
 
         try:
-            problem = self.repository.problems[self.submission["problem"]]
-            seed_file = (
-                problem.directory
-                / "data"
-                / "secret"
-                / f"{self.submission['case_name']}.seed"
-            )
-            request = FuzzingRequest(
-                sources=self.submission["sources"],
-                language=self.submission["language"],
-                problem=problem,
-                seed_file=seed_file,
-                logger=submission_logger,
-                run_count=self.submission.get("runs", 10),
-            )
-            result = self.fuzzer.run(request)
+            result = self.fuzzer.run(self.request)
             if result is not None:
-                cases = {}
-                for index, run_result in enumerate(result.run_results):
-                    cases[f"{index + 1}_{run_result.verdict}"] = {
+                self.state["cases"] = {
+                    f"{index + 1}_{run_result.verdict}": {
                         "case.in": run_result.input,
                         "case.ans": run_result.answer,
                     }
-                self.state["cases"] = cases
-                self.state["log"] = self.log_stream.getvalue()
-            logging.info("Finished fuzzing run %s", self.fuzzer_id)
+                    for index, run_result in enumerate(result.run_results)
+                }
+            log.info("Finished fuzzing run %s", self.fuzzer_id)
         except Exception as e:
-            logging.warning("Unexpected error", exc_info=e)
+            log.warning("Unexpected error", exc_info=e)
             submission_logger.error("Unexpected error: %s", e)
         finally:
-            submission_log_handler.flush()
+            handler.flush()
+            # Keep the log, also of failed runs, before closing the stream
+            self.state["log"] = self.log_stream.getvalue()
+            submission_logger.removeHandler(handler)
             self.log_stream.close()
             self.state["finished"] = True
 
-    def get_state(self):
-        state = self.state.copy()
-        if not state["finished"]:
-            state["log"] = self.log_stream.getvalue()
-        return state
+    def get_state(self) -> dict:
+        current = self.state.copy()
+        if not current["finished"]:
+            current["log"] = self.log_stream.getvalue()
+        return current
 
 
-class FuzzingManager:
-    def __init__(self, repository: "Repository", fuzzer: "Fuzzer"):
-        self.repository = repository
-        self.fuzzer = fuzzer
-        self.state: dict[str, FuzzingThread] = {}
-        pass
+@dataclass
+class FuzzerState:
+    """Everything the request handlers need, stored in app.extensions."""
 
-    def run(self, submission):
+    repository: Repository
+    problems: dict[str, RepositoryProblem]
+    base_time: float
+    fuzzer: Fuzzer = field(default_factory=Fuzzer)
+    runs: dict[str, FuzzingThread] = field(default_factory=dict)
+
+    @property
+    def language_keys(self) -> set[str]:
+        return {language.key for language in self.repository.languages}
+
+    def start(self, body: FuzzingRequestBody) -> str:
+        problem = self.problems[body.problem]
         fuzzing_id = str(uuid.uuid4())
-        thread = FuzzingThread(fuzzing_id, submission, self.repository, self.fuzzer)
-        self.state[fuzzing_id] = thread
+        language = body.language
+        fuzzing_request = FuzzingRequest(
+            sources=body.sources,
+            language=PROBLEMTOOLS_LANGUAGE.get(language, language)
+            if language
+            else None,
+            problem=problem,
+            seed_file=problem.directory / "data" / "secret" / f"{body.case_name}.seed",
+            logger=logging.getLogger(f"{__name__}.run.{fuzzing_id}"),
+            time_limit=round(self.base_time * problem.limits.time_factor, 1),
+            run_count=body.runs,
+        )
+        thread = FuzzingThread(fuzzing_id, self.fuzzer, fuzzing_request)
+        self.runs[fuzzing_id] = thread
         thread.start()
         return fuzzing_id
+
+
+def state() -> FuzzerState:
+    return current_app.extensions[EXTENSION_KEY]
 
 
 main_bp = Blueprint("main", __name__)
@@ -137,114 +182,122 @@ def home():
 
 @main_bp.route("/problems")
 def show_problems():
-    return jsonify(
-        success=True, problems=[p.repository_key for p in current_app.context.problems]
-    )
+    return jsonify(success=True, problems=sorted(state().problems))
 
 
 @main_bp.route("/problem/<problem_name>/seeds", methods=["GET"])
 def get_problem_seeds(problem_name):
-    secret_path = (
-        current_app.context.repository.problems.load_problem(problem_name).directory
-        / "data"
-        / "secret"
-    )
-    if not secret_path.is_dir():
+    problem = state().problems.get(problem_name)
+    if problem is None:
         return jsonify(success=False, errors=["No such problem"])
-    seeds = [seed.name[:-5] for seed in secret_path.glob("*.seed")]
-    return jsonify(success=True, seeds=seeds)
+    return jsonify(success=True, seeds=seed_names(problem))
 
 
 @main_bp.route("/status")
 def show_status():
-    status = {k: v.get_state() for k, v in current_app.context.manager.state.items()}
+    status = {key: run.get_state() for key, run in state().runs.items()}
     return jsonify(success=True, status=status)
 
 
 @main_bp.route("/submission", methods=["POST"])
 def start_fuzzing():
-    inputs = JsonInputs(request)
-    if not inputs.validate():
-        current_app.logger.debug("Invalid JSON request: %s", request)
-        return jsonify(success=False, errors=inputs.errors)
-
-    fuzzing_id = current_app.context.manager.run(submission=request.get_json())
-    return jsonify(success=True, id=fuzzing_id)
+    try:
+        body = FuzzingRequestBody.model_validate(
+            request.get_json(silent=True), context={"state": state()}
+        )
+    except ValidationError as e:
+        errors = [
+            f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors()
+        ]
+        log.debug("Invalid request: %s", errors)
+        return jsonify(success=False, errors=errors)
+    return jsonify(success=True, id=state().start(body))
 
 
 @main_bp.route("/submission/<fuzzing_id>", methods=["GET"])
 def show_single_status(fuzzing_id):
-    manager = current_app.context.manager
-    if fuzzing_id not in manager.state:
+    run = state().runs.get(fuzzing_id)
+    if run is None:
         return jsonify(success=False, errors=["Id not found"])
-    return jsonify(success=True, state=manager.state[fuzzing_id].get_state())
+    return jsonify(success=True, state=run.get_state())
 
 
 @main_bp.route("/submission/<fuzzing_id>", methods=["DELETE"])
 def stop_fuzzing(fuzzing_id):
-    fuzzer_thread = current_app.context.manager.state.pop(fuzzing_id, None)
-
-    if fuzzer_thread is None:
+    # Forgets the run; a running thread finishes in the background
+    run = state().runs.pop(fuzzing_id, None)
+    if run is None:
         return jsonify(success=False, state=None)
-
-    fuzzer_state = fuzzer_thread.get_state()
-    return jsonify(success=True, state=fuzzer_state)
+    return jsonify(success=True, state=run.get_state())
 
 
-@dataclass(frozen=True)
-class AppContext:
-    repository: Repository
-    problems: list[RepositoryProblem]
-    fuzzer: Fuzzer
-    manager: FuzzingManager
-
-
-def create_app():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-r",
-        "--repository",
-        help="Path to repository",
-        type=pathlib.Path,
-        required=True,
-    )
-    args = parser.parse_args()
-    repository_path: pathlib.Path = args.repository
-
-    if not repository_path.is_dir():
-        sys.exit(f"Path {repository_path} is not a path")
-
-    logging_format = "%(asctime)s - %(name)s - %(levelname)s %(message)s"
-    logging.basicConfig(level=logging.DEBUG, format=logging_format)
-
-    logging.getLogger().setLevel(logging.WARNING)
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)
-    logging.getLogger("fuzzer").setLevel(logging.DEBUG)
+def create_app(
+    repository_path: pathlib.Path | str | None = None,
+    base_time: float | None = None,
+) -> Flask:
+    """The fuzzer app. Arguments not given are taken from the environment
+    variables PYJUDGE_REPOSITORY and PYJUDGE_BASE_TIME (default 1.0)."""
+    if repository_path is None:
+        repository_path = os.environ.get("PYJUDGE_REPOSITORY")
+        if not repository_path:
+            raise ConfigurationError(
+                "No repository given; pass --repository or set PYJUDGE_REPOSITORY"
+            )
+    if base_time is None:
+        base_time = float(os.environ.get("PYJUDGE_BASE_TIME", "1.0"))
+    repository_path = pathlib.Path(repository_path)
+    if not Repository.is_repository(repository_path):
+        raise ConfigurationError(f"{repository_path} is not a problem repository")
 
     repository = Repository(repository_path)
-    problems: list[RepositoryProblem] = []
-    for problem in repository.problems:
-        secret_dir = problem.directory / "data" / "secret"
-        if any(True for secret in secret_dir.glob("*.seed")):
-            problems.append(problem)
-
+    problems = {
+        problem.repository_key: problem
+        for problem in repository.problems
+        if seed_names(problem)
+    }
     if not problems:
-        sys.exit("Found no valid problems!")
-
-    logging.getLogger().info("Found %d problems with seeds", len(problems))
-
-    fuzzer = Fuzzer()
-    manager = FuzzingManager(repository, fuzzer)
+        raise ConfigurationError("Found no problems with seed files")
+    log.info("Found %d problems with seeds", len(problems))
 
     app = Flask(__name__)
-    app.context = AppContext(repository, problems, fuzzer, manager)
+    app.extensions[EXTENSION_KEY] = FuzzerState(
+        repository=repository, problems=problems, base_time=base_time
+    )
     app.register_blueprint(main_bp)
     return app
 
 
-def run_app(debug: bool = False):
-    create_app().run(debug=debug)
+def run_app():
+    parser = argparse.ArgumentParser(description="Fuzzer for seeded test data")
+    parser.add_argument(
+        "-r", "--repository", type=pathlib.Path, required=True, help="Repository"
+    )
+    time_group = parser.add_mutually_exclusive_group()
+    time_group.add_argument(
+        "--base-time",
+        type=float,
+        help="Base time limit in seconds, multiplied by the problem's factor "
+        "(default 1.0)",
+    )
+    time_group.add_argument(
+        "--instance", type=pathlib.Path, help="Take the base time from instance.json"
+    )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--debug", action="store_true", help="Flask debug mode")
+    args = parser.parse_args()
 
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s - %(name)s - %(levelname)s %(message)s",
+    )
+    logging.getLogger("pydomjudge").setLevel(logging.DEBUG if args.debug else "INFO")
 
-if __name__ == "__main__":
-    run_app(debug=True)
+    base_time = args.base_time
+    if args.instance is not None:
+        base_time = JudgeInstance.model_validate_json(
+            args.instance.read_text()
+        ).base_time
+    create_app(args.repository, base_time).run(
+        host=args.host, port=args.port, debug=args.debug
+    )

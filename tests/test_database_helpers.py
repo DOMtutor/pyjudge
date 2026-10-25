@@ -123,3 +123,44 @@ def test_jury_submission_external_id_fits_domjudge():
     ids = {jury_submission_external_id() for _ in range(100)}
     assert len(ids) == 100
     assert all(len(external_id) <= 64 for external_id in ids)
+
+
+class _RowsCursor:
+    """Records statements and answers each with the next canned rows."""
+
+    def __init__(self, *answers: list[tuple]):
+        self.statements: list[tuple[str, tuple]] = []
+        self.answers = list(answers)
+        self.rows: list[tuple] = []
+
+    def execute(self, query, params=None):
+        self.statements.append((" ".join(query.split()), tuple(params or ())))
+        self.rows = self.answers.pop(0)
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
+
+
+def _rows_cursor(*answers: list[tuple]):
+    from typing import cast
+
+    from pydomjudge.database._db import DBCursor
+
+    cursor = _RowsCursor(*answers)
+    return cursor, cast(DBCursor, cursor)
+
+
+def test_find_user_and_team_id_match_key_or_name():
+    from pydomjudge.database import find_team_id, find_user_id
+
+    cursor, db_cursor = _rows_cursor([(4,)], [])
+    assert find_user_id(db_cursor, key="alice", login_name="ali") == 4
+    assert find_team_id(db_cursor, name="t_alice") is None
+    (user_query, user_params), (team_query, team_params) = cursor.statements
+    assert "externalid = %s OR username = %s" in user_query
+    assert user_params == ("alice", "ali")
+    assert "externalid = %s OR name = %s" in team_query
+    assert team_params == (None, "t_alice")

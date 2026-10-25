@@ -1786,3 +1786,27 @@ def update_user_password(cursor: Cursor, user_key: str, password_hash: str):
     )
     if cursor.rowcount != 1:
         raise ElementNotFoundError(f"No user with key {user_key}")
+
+
+def find_user_id(
+    cursor: Cursor, *, key: str | None = None, login_name: str | None = None
+) -> int | None:
+    """The id of a user with this key or this login name, if there is one."""
+    cursor.execute(
+        "SELECT userid FROM `user` WHERE externalid = %s OR username = %s LIMIT 1",
+        (key, login_name),
+    )
+    row = cursor.fetchone()
+    return None if row is None else row[0]
+
+
+def find_team_id(
+    cursor: Cursor, *, key: str | None = None, name: str | None = None
+) -> int | None:
+    """The id of a team with this key or this name, if there is one."""
+    cursor.execute(
+        "SELECT teamid FROM team WHERE externalid = %s OR name = %s LIMIT 1",
+        (key, name),
+    )
+    row = cursor.fetchone()
+    return None if row is None else row[0]

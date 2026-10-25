@@ -38,6 +38,8 @@ from ._update import (
     create_or_update_users as create_or_update_users,
     create_problem_submissions as create_problem_submissions,
     disable_unknown_users as disable_unknown_users,
+    find_team_id as find_team_id,
+    find_user_id as find_user_id,
     set_global_languages as set_global_languages,
     update_categories as update_categories,
     update_settings as update_settings,

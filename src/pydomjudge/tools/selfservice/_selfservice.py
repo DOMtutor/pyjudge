@@ -1,6 +1,7 @@
 """Self-service registration web app for DOMjudge.
 
-A tiny Flask application that lets a user pick a username and password.
+A tiny Flask application that lets a user pick a username and password. It
+creates a participant and a one-person team; existing users are never changed.
 """
 
 import argparse
@@ -8,6 +9,7 @@ import logging
 import os
 import pathlib
 from dataclasses import dataclass
+from typing import Any, Protocol, cast
 
 import yaml
 from flask import (
@@ -20,18 +22,35 @@ from flask import (
     url_for,
 )
 from flask_wtf import FlaskForm
-from wtforms import PasswordField, StringField, validators
+from wtforms import Field, PasswordField, StringField, ValidationError, validators
 
 from pydomjudge.database import (
     Database,
     create_or_update_teams,
     create_or_update_users,
-    find_teams_by_name,
-    find_users_by_login,
+    find_team_id,
+    find_user_id,
 )
 from pydomjudge.model import DefaultCategory, Team, User, UserRole
 
 logger = logging.getLogger(__name__)
+
+EXTENSION_KEY = "pydomjudge"
+
+# DOMjudge's constraint on user names (webapp/src/Entity/User.php)
+USERNAME_PATTERN = r"^[a-zA-Z0-9@._-]+$"
+USERNAME_MAX_LENGTH = 64
+
+
+def _from_env(data: dict[str, Any], key: str, what: str) -> Any:
+    """data[key], or the environment variable named by data[key + "_env"]."""
+    env_key = f"{key}_env"
+    if data.get(env_key):
+        variable = str(data[env_key])
+        if variable not in os.environ:
+            raise ValueError(f"Environment variable {variable} for the {what} is unset")
+        return os.environ[variable]
+    return data.get(key)
 
 
 @dataclass(frozen=True)
@@ -54,19 +73,22 @@ class AppConfig:
         db_data = data.get("database")
         if not isinstance(db_data, dict):
             raise ValueError("Config file is missing a 'database' mapping.")
+        db_data = dict(db_data)
+        db_data["password"] = _from_env(db_data, "password", "database password")
+        db_data.pop("password_env", None)
+        if db_data["password"] is None:
+            raise ValueError("Set 'password' or 'password_env' for the database.")
 
-        secret_key = data.get("secret_key")
+        secret_key = _from_env(data, "secret_key", "secret key")
         if not secret_key or not isinstance(secret_key, str):
             raise ValueError(
-                "Missing 'secret_key' in configuration. "
+                "Missing 'secret_key' (or 'secret_key_env') in configuration. "
                 "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
             )
 
         server = data.get("server", {}) or {}
-        database = Database(**db_data)
-
         return cls(
-            database=database,
+            database=Database(**db_data),
             secret_key=secret_key,
             host=str(server.get("host", "127.0.0.1")),
             port=int(server.get("port", 5000)),
@@ -80,40 +102,67 @@ class UserAlreadyExistsError(Exception):
     pass
 
 
+class Backend(Protocol):
+    def create_user(self, username: str, password: str) -> None: ...
+
+
 class UserBackend:
     def __init__(self, db: Database):
         self.db = db
 
     def create_user(self, username: str, password: str) -> None:
-        with self.db as db:
-            if find_users_by_login(db, {username}):
+        user = User(
+            key=username,
+            login_name=username,
+            display_name=username,
+            email=None,
+            role=UserRole.Participant,
+            password_hash=User.hash_password(password),
+        )
+        team = Team(
+            key=f"t_{username}",
+            name=username,
+            display_name=username,
+            members=[user],
+            category=DefaultCategory.Participants,
+            affiliation=None,
+        )
+        with self.db as db, db.transaction_cursor() as cursor:
+            # The writer matches by externalid (key) and would update an existing
+            # user or team with that key, so check names and keys of both
+            if (
+                find_user_id(cursor, key=user.key, login_name=user.login_name)
+                is not None
+                or find_team_id(cursor, key=team.key, name=team.name) is not None
+            ):
                 raise UserAlreadyExistsError
-            if find_teams_by_name(db, {f"t_{username}"}):
-                raise UserAlreadyExistsError
-            with db.transaction_cursor() as cursor:
-                user = User(
-                    key=username,
-                    login_name=username,
-                    display_name=username,
-                    email=None,
-                    role=UserRole.Participant,
-                    password_hash=User.hash_password(password),
-                )
-                create_or_update_users(cursor, [user])
-                team = Team(
-                    key=f"t_{username}",
-                    name=username,
-                    display_name=username,
-                    members=[user],
-                    category=DefaultCategory.Participants,
-                    affiliation=None,
-                )
-                create_or_update_teams(cursor, [team])
+            user_ids = create_or_update_users(cursor, [user])
+            create_or_update_teams(cursor, [team], user_ids=user_ids)
+
+
+@dataclass(frozen=True)
+class SelfServiceState:
+    """What the request handlers need, stored in app.extensions."""
+
+    config: AppConfig
+    backend: Backend
+
+
+def state() -> SelfServiceState:
+    return current_app.extensions[EXTENSION_KEY]
 
 
 class RegisterForm(FlaskForm):
     username = StringField(
-        "Username", [validators.DataRequired(message="Please enter a username.")]
+        "Username",
+        [
+            validators.DataRequired(message="Please enter a username."),
+            validators.Length(max=USERNAME_MAX_LENGTH),
+            validators.Regexp(
+                USERNAME_PATTERN,
+                message="Only letters, digits and the characters _-@. are allowed.",
+            ),
+        ],
     )
     password = PasswordField(
         "New Password", [validators.DataRequired("Please enter a password.")]
@@ -128,13 +177,15 @@ class RegisterForm(FlaskForm):
 
     def __init__(self, minimum_password_length: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        length_validator = validators.Length(
-            min=minimum_password_length,
-            message=f"Password must be at least {minimum_password_length} characters long",
-        )
-        self.password.validators = tuple(
-            list(self.password.validators) + [length_validator]
-        )
+        self.minimum_password_length = minimum_password_length
+
+    # WTForms runs validate_<field> methods in addition to the field validators
+    def validate_password(self, field: Field):
+        if len(field.data or "") < self.minimum_password_length:
+            raise ValidationError(
+                f"Password must be at least {self.minimum_password_length} "
+                "characters long"
+            )
 
 
 register_bp = Blueprint("register", __name__)
@@ -142,31 +193,29 @@ register_bp = Blueprint("register", __name__)
 
 @register_bp.get("/")
 def register_form():
-    config: AppConfig = current_app.app_config
     return render_template(
-        "register.html", form=RegisterForm(config.minimum_password_length)
+        "register.html", form=RegisterForm(state().config.minimum_password_length)
     )
 
 
 @register_bp.post("/")
 def register_submit():
-    config: AppConfig = current_app.app_config
-    form = RegisterForm(config.minimum_password_length)
+    form = RegisterForm(state().config.minimum_password_length)
 
     if form.validate_on_submit():
-        backend: UserBackend = current_app.backend
         username = form.username.data.strip()
-        password = form.password.data
-
         try:
-            backend.create_user(username, password)
+            state().backend.create_user(username, form.password.data)
             flash(
                 f"Account '{username}' created successfully. You may now log in.",
                 "success",
             )
             return redirect(url_for(".register_form"))
         except UserAlreadyExistsError:
-            form.username.errors.append(f"The username '{username}' is already taken.")
+            # A list after validation; the wtforms stubs only know the initial ()
+            cast(list[str], form.username.errors).append(
+                f"The username '{username}' is already taken."
+            )
         except Exception as e:
             current_app.logger.exception(
                 "Creating user %s failed", username, exc_info=e
@@ -175,26 +224,32 @@ def register_submit():
     return render_template("register.html", form=form), 400
 
 
-def create_app(config: AppConfig | None = None) -> Flask:
-    # Fallback to loading from an environment variable if no config is passed
+def create_app(
+    config: AppConfig | None = None, backend: Backend | None = None
+) -> Flask:
+    """The app; without config, it is read from APP_CONFIG_PATH (default
+    config.yaml). The backend is only replaced in tests."""
     if config is None:
         config_path = pathlib.Path(os.environ.get("APP_CONFIG_PATH", "config.yaml"))
         if not config_path.is_file():
             raise ValueError(
-                f"No configuration found at {config_path}, create one or set APP_CONFIG_PATH environment variable"
+                f"No configuration found at {config_path}, create one or set "
+                f"APP_CONFIG_PATH environment variable"
             )
-        config = AppConfig.load(pathlib.Path(config_path))
+        config = AppConfig.load(config_path)
 
-    # Check connection
-    with config.database as db:
-        with db.transaction_cursor(readonly=True) as _:
+    if backend is None:
+        # Fail early if the database is not reachable
+        with config.database as db, db.transaction_cursor(readonly=True):
             pass
+        backend = UserBackend(config.database)
 
     app = Flask(__name__)
     if config.trust_proxy:
         from werkzeug.middleware.proxy_fix import ProxyFix
 
-        app.wsgi_app = ProxyFix(
+        # Flask's documented way to wrap the WSGI app
+        app.wsgi_app = ProxyFix(  # ty: ignore[invalid-assignment]
             app.wsgi_app,
             x_for=config.trust_proxy,
             x_proto=config.trust_proxy,
@@ -204,9 +259,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
         )
 
     app.config["SECRET_KEY"] = config.secret_key
-
-    app.app_config = config
-    app.backend = UserBackend(config.database)
+    app.extensions[EXTENSION_KEY] = SelfServiceState(config=config, backend=backend)
     app.register_blueprint(register_bp)
     return app
 
@@ -217,8 +270,8 @@ def start() -> None:
         "-c",
         "--config",
         type=pathlib.Path,
-        default=pathlib.Path(__file__).parent / "config.yaml",
-        help="Path to the configuration file (default: config.yaml next to this module).",
+        default=pathlib.Path("config.yaml"),
+        help="Path to the configuration file (default: config.yaml).",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging."
