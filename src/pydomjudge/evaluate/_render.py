@@ -9,7 +9,7 @@ import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pydomjudge.evaluate.statistics import ProblemStatistics, SummaryStatistics
+from pydomjudge.evaluate._statistics import ProblemStatistics, SummaryStatistics
 from pydomjudge.model import SubmissionVerdict
 
 verdict_formats = [

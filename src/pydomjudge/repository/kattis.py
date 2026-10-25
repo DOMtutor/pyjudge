@@ -10,7 +10,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from importlib.abc import Traversable
+from importlib.resources.abc import Traversable
 from typing import Collection, Any, Mapping, Callable
 
 import yaml

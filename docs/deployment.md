@@ -5,7 +5,7 @@
 * Create a `.env` file and set the following variables:
   * `TZ=<timezone>` Your timezone, e.g. `Europe/Berlin`
   * `DOMJUDGE_DB_ROOT_PASSWORD=<random password>` Root password for the database
-  * `DOMJUDGE_DB_DOMJUDGE_PASSWORD=<random password>` User password for the database (this goes into `db.yml` of `pyjudge`) 
+  * `DOMJUDGE_DB_DOMJUDGE_PASSWORD=<random password>` User password for the database (this goes into `db.yml` of `pyjudge`)
   * `DOMJUDGE_JUDGE_PASSWORD=<random password>` The judgehost API password
 * Then, in that folder, run `docker compose up -d`
 * Check admin password of domjudge by `docker logs domjudge` (optional if you set it if you set it via `pyjudge`)
@@ -34,7 +34,7 @@ If you use GRUB (widespread), you need to:
 5. (optionall) verify the changes have been applied by `cat /proc/cmdline`
 
 * To enable memory accounting (which is sometimes not enabeld by default), add `cgroup_enable=memory swapaccount=1` to your cmdline.
-* If you get `missing cgroup hierarchy prefix`, you likely are running hybrid / unified cgroups, here you need to add `systemd.unified_cgroup_hierarchy=0` (or `cgroup_no_v1=all`) to your cmdline. 
+* If you get `missing cgroup hierarchy prefix`, you likely are running hybrid / unified cgroups, here you need to add `systemd.unified_cgroup_hierarchy=0` (or `cgroup_no_v1=all`) to your cmdline.
 
 ### No new privileges
 
