@@ -8,7 +8,7 @@ Everything runs through one command, `pyjudge`, installed with the package (`uv 
 | `pyjudge export contest\|submissions` | Export contest data |
 | `pyjudge check` | Report inconsistencies in the database |
 | `pyjudge anonymize` | Anonymize an export |
-| `pyjudge problem find\|check\|statements\|samples\|seed` | Work with the problem repository, no database needed |
+| `pyjudge problem find\|check\|statements\|samples\|new\|seed` | Work with the problem repository, no database needed |
 | `pyjudge make-admin` | Write `admin.json` with one admin user |
 | `pyjudge init` | Create `pyjudge.yaml`, `db.yml` and `instance.json` in the current directory |
 | `pyjudge config` | Show the settings and the files they come from |
@@ -182,6 +182,7 @@ They share filters: `--name RE`, `--keyword RE`, `--exclude RE` (regular express
 | `check [filters]` | Verifies problems with `problemtools` (generating test data first) |
 | `statements [filters] [DEST] [--language LANG]... [--force]` | Builds the statement PDFs (default language `en`, `--force` rebuilds them), and writes them to a folder, `.zip` or `.tar` |
 | `samples [filters] DEST` | Writes sample inputs and answers |
+| `new KEY [--name TITLE] [--author KEY] [--language LANG] [--seeded]` | Creates `problems/KEY/`: `problem.yaml`, statement, a sample and a secret test case, a checktestdata validator and an accepted solution (an "add two numbers" task, so that it verifies at once); `--seeded` adds a generator, a seed template and a seed file |
 | `seed TEMPLATE --count N [--filename FMT]` | Generates `N` seed files from a Jinja template (variables `n`, `seed`, `random`); see below |
 
 ## Problem repository

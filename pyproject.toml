@@ -70,6 +70,7 @@ where = ["src"]
 "pydomjudge.repository.runscript" = ["**"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
+"pydomjudge.scripts.scaffold" = ["problem/**", "seeded/**", "solutions/**"]
 "pydomjudge.tools.fuzzer" = ["static/**/*", "templates/**/*"]
 "pydomjudge.tools.selfservice" = ["static/**/*", "templates/**/*", "example_config.yaml"]
 

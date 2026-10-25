@@ -136,7 +136,7 @@ These are judged too, so you can see immediately whether the expected verdicts (
 
 ## 7. Make it your own
 
-* **Problems**: copy `repository/problems/helloworld` to a new folder, adapt `problem.yaml`, statement, test data and solutions.
+* **Problems**: `pyjudge problem new myproblem` creates a problem folder that verifies (or copy `repository/problems/helloworld`); adapt `problem.yaml`, statement, test data and solutions.
   The layout is the Kattis problem package format with a few additions, see [usage.md](usage.md#problem-repository).
   Check a problem without uploading with `pyjudge problem check --name myproblem`.
 * **Contest**: add the problem to the contest's `problems` list in `script.py` (or `contest.json`) and upload again.
