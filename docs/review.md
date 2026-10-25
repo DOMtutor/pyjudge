@@ -10,8 +10,7 @@ Each item is a proposal or a known limitation, not a decision.
   The reader (`database/_query.py`, exports) works by names (contest short name, team name, login), so it also works on databases not created by pydomjudge.
 * **problemtools coupling** goes through private attributes (`p.output_validators._validators`, `submissions._submissions`) and `argparse.Namespace` stand-ins (`kattis.py`, `_fuzzer.py`).
   Every problemtools update can break these silently; a thin adapter module would localise the damage (see also the long-term TODO "migrate away from problemtools").
-* **Compile scripts** in `repository/compiler/*` are copies of DOMjudge's.
-  Their origin and DOMjudge version are not recorded, so it is unclear when they need refreshing.
+* **Compile scripts** in `repository/compiler/` follow DOMjudge 9.0.1; `compiler/README.md` lists the deviations, how local verification differs, and two open questions (`pypy3 -O`, no Julia in the DOMtutor judgehost chroot).
 
 ## Limitations and untested parts
 

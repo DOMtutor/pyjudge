@@ -52,7 +52,8 @@ export HOME=/does/not/exist
 # debugging.
 # export ONLINE_JUDGE=1 DOMJUDGE=1
 
-exec pypy3 "$MAINSOURCE" "\$@"
+# pydomjudge: -O, asserts are not executed
+exec pypy3 -O "$MAINSOURCE" "\$@"
 EOF
 
 chmod a+x "$DEST"
