@@ -24,6 +24,7 @@ from ._check import (
     Finding as Finding,
     check_consistency as check_consistency,
 )
+from ._config import DatabaseConfig as DatabaseConfig
 from ._contest import (
     create_or_update_contest as create_or_update_contest,
     create_or_update_contest_problems as create_or_update_contest_problems,

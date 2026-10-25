@@ -7,7 +7,6 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import pydantic
-import yaml
 
 from pydomjudge.database import Database
 from pydomjudge.exc import (
@@ -199,33 +198,26 @@ def setting(args: argparse.Namespace, name: str, option: str | None = None) -> A
 
 
 def load_database(args: argparse.Namespace) -> Database:
+    return load_database_from(getattr(args, "db", None))
+
+
+def load_database_from(path: pathlib.Path | None = None) -> Database:
+    """The database of path (a db.yml file); without it, the one of pyjudge.yaml
+    (in the working directory or a parent), of the user configuration, or of
+    db.yml in the working directory."""
     from pydomjudge.scripts import _config
 
-    value, source = _config.lookup("database", getattr(args, "db", None))
+    value, source = _config.lookup("database", path)
     if value is None:
         value = pathlib.Path("db.yml")
     if isinstance(value, _config.DatabaseConfig):
         return Database(**value.connection(pathlib.Path(source)))
-    path: pathlib.Path = value
-    if not path.is_file():
+    if not value.is_file():
         raise ConfigurationError(
-            f"No database configuration found at {path}; create one (pyjudge init), "
+            f"No database configuration found at {value}; create one (pyjudge init), "
             "set --db or 'database:' in pyjudge.yaml"
         )
-    try:
-        with path.open(mode="rt") as f:
-            data = yaml.safe_load(f)
-    except yaml.YAMLError as e:
-        raise InvalidFileFormatError(path, f"invalid YAML: {e}") from e
-    if not isinstance(data, dict):
-        raise InvalidFileFormatError(path, "expected a mapping (host, user, ...)")
-    try:
-        config = _config.DatabaseConfig.model_validate(data)
-    except pydantic.ValidationError as e:
-        raise InvalidFileFormatError(
-            path, *validation_problems(e), what="database configuration"
-        ) from e
-    return Database(**config.connection(path))
+    return Database.from_file(value)
 
 
 # What the files read with load_model are, for messages

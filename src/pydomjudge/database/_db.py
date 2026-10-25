@@ -1,3 +1,4 @@
+import pathlib
 from collections.abc import Iterator, Sequence
 from typing import Any, Protocol
 
@@ -60,6 +61,13 @@ class Database:
         self.password = str(config["password"])
         self.database = str(config["database"])
         self._connection = None
+
+    @classmethod
+    def from_file(cls, path: pathlib.Path) -> "Database":
+        """The database of a db.yml file; password_env is read now."""
+        from ._config import read_database_file
+
+        return cls(**read_database_file(path).connection(path))
 
     def __enter__(self):
         self._connection = pymysql.connect(

@@ -259,3 +259,18 @@ Each test case may have a `<name>.desc` description and a `<name>.<png|jpg>` ima
 The JSON files above are serialised Pydantic models from `pydomjudge.model`.
 For anything beyond a one-off setup, write a script that builds `JudgeInstance`, `Contest`, `User`, `Team` and `Affiliation` objects and dumps them with `model_dump_json()`; see `examples/script.py`.
 The database layer in `pydomjudge.database` offers the same operations as the CLI as functions taking a cursor, e.g. `create_or_update_users`, for use in your own tooling (the self-service registration is an example).
+
+For command-line scripts of your own, `pydomjudge.scripts` has the pyjudge commands' helpers:
+
+```python
+from pydomjudge.database import Database
+from pydomjudge.scripts import add_logging_arguments, configure_logging, load_database
+
+parser = argparse.ArgumentParser()
+add_logging_arguments(parser)  # --debug, --log
+parser.add_argument("--db", type=pathlib.Path)
+args = parser.parse_args()
+configure_logging(args)
+database = load_database(args.db)  # without a path: pyjudge.yaml, user config, ./db.yml
+database = Database.from_file(path)  # exactly this db.yml (password_env is read)
+```
