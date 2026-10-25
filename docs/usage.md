@@ -76,7 +76,7 @@ Times are `YYYY-MM-DDTHH:MM:SS` followed by an IANA time zone name.
 
 Roles: `participant`, `jury`, `organizer` (admin + jury + team), `admin`.
 Passwords are bcrypt hashes (`User.hash_password`), only set on creation unless `--overwrite-passwords` is given.
-Every DOMjudge user needs a team to submit; teams reference users, categories and affiliations by key.
+Every DOMjudge user needs a team to submit; teams reference users, categories and affiliations by key (an unknown key is an error).
 
 `dt_make_admin_user` interactively creates an `admin.json` with one admin user.
 

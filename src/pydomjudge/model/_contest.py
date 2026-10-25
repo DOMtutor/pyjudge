@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import ClassVar
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_validator,
@@ -42,36 +43,44 @@ class Contest(BaseModel):
     access: ContestAccess | None = None
     warning_message: str = ""
 
+    @field_validator(
+        "activation_time",
+        "start_time",
+        "end_time",
+        "freeze_time",
+        "deactivation_time",
+    )
+    @classmethod
+    def _require_named_timezone(cls, dt: datetime | None, info: ValidationInfo):
+        # Runs before the ordering checks below, which cannot compare naive and
+        # aware datetimes. The zone name is needed to write the JSON format.
+        if dt is None:
+            return dt
+        name = info.field_name
+        if dt.tzinfo is None:
+            raise ValueError(f"{name} has no timezone")
+        if not hasattr(dt.tzinfo, "key"):
+            raise ValueError(
+                f"{name} has a timezone without name -- use "
+                "dt.replace(tzinfo=ZoneInfo(...)) to get a proper timezone"
+            )
+        return dt
+
     @model_validator(mode="after")
     def validate_contest(self):
-        if self.activation_time.tzinfo is None:
-            raise ValueError("Activation has no timezone")
         if self.start_time < self.activation_time:
             raise ValueError("Start before activate")
-        if self.start_time.tzinfo is None:
-            raise ValueError("Start has no timezone")
-        if not hasattr(self.start_time.tzinfo, "key"):
-            raise ValueError(
-                "Start timezone has no key -- use tz=ZoneInfo(...) and dt.replace(tzinfo=tz) to get a proper timezone"
-            )
         if self.end_time < self.start_time:
             raise ValueError("End before start")
-        if self.end_time.tzinfo is None:
-            raise ValueError("End has no timezone")
-        if not hasattr(self.end_time.tzinfo, "key"):
-            raise ValueError(
-                "End timezone has no key -- use tz=ZoneInfo(...) and dt.replace(tzinfo=tz) to get a proper timezone"
-            )
-        if self.deactivation_time is not None:
-            if self.deactivation_time < self.end_time:
-                raise ValueError("Deactivated before end")
-            if self.deactivation_time.tzinfo is None:
-                raise ValueError("Deactivation has no timezone")
-        if self.freeze_time is not None:
-            if self.freeze_time < self.start_time or self.end_time < self.freeze_time:
-                raise ValueError("Freeze not during contest")
-            if self.freeze_time.tzinfo is None:
-                raise ValueError("Start has no timezone")
+        if (
+            self.deactivation_time is not None
+            and self.deactivation_time < self.end_time
+        ):
+            raise ValueError("Deactivated before end")
+        if self.freeze_time is not None and not (
+            self.start_time <= self.freeze_time <= self.end_time
+        ):
+            raise ValueError("Freeze not during contest")
         return self
 
     def is_running(self, at: datetime):
@@ -88,10 +97,15 @@ class Contest(BaseModel):
     @classmethod
     def _parse_datetime(cls, v: str | datetime):
         if isinstance(v, str):
-            dt, tz = v.split(" ")
-            return datetime.strptime(dt, Contest.DATE_FORMAT).replace(
-                tzinfo=ZoneInfo(tz)
-            )
+            dt, _, tz = v.partition(" ")
+            try:
+                zone = ZoneInfo(tz)
+            except (ZoneInfoNotFoundError, ValueError):
+                # KeyError subclass, which pydantic would not report
+                raise ValueError(
+                    f"Expected '{Contest.DATE_FORMAT} <IANA zone>', got {v!r}"
+                ) from None
+            return datetime.strptime(dt, Contest.DATE_FORMAT).replace(tzinfo=zone)
         return v
 
     @field_serializer(
@@ -110,7 +124,8 @@ class Contest(BaseModel):
         return f"{dt.strftime(Contest.DATE_FORMAT)} {dt.tzinfo.key}"
 
     def is_active(self, point: datetime):
-        return self.activation_time <= point <= self.end_time
+        end = self.deactivation_time if self.deactivation_time else self.end_time
+        return self.activation_time <= point <= end
 
     def __str__(self):
         return f"C({self.short_name})"

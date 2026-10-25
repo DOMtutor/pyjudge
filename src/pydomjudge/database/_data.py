@@ -1,14 +1,16 @@
 import base64
-from typing import Annotated
+import functools
+from typing import Annotated, Any
 
 import chardet
 from pydantic import (
     BaseModel,
     BeforeValidator,
+    ConfigDict,
     Field,
     PlainSerializer,
     field_serializer,
-    model_validator,
+    field_validator,
 )
 
 from pydomjudge.model import PydanticVerdict
@@ -29,24 +31,56 @@ Base85Bytes = Annotated[
 ]
 
 
-class UserDto(BaseModel, frozen=True):
-    login_name: str = Field(serialization_alias="login")
-    display_name: str = Field(serialization_alias="name")
-    external_id: str | None = Field(exclude_if=lambda x: x is None)
-    email: str | None = Field(exclude_if=lambda x: x is None)
+# Users and teams use short JSON names in exports. With this configuration, the
+# alias is used for JSON in both directions, while Python code may still pass
+# the field names (UserDto(login_name=...)).
+_ALIASED = ConfigDict(
+    frozen=True,
+    validate_by_name=True,
+    validate_by_alias=True,
+    serialize_by_alias=True,
+)
+
+
+def _decode_text(content: bytes) -> str | None:
+    """Decode a source file: UTF-8, else the encoding chardet guesses."""
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    encoding = chardet.detect(content)["encoding"]
+    if encoding is None:
+        return None
+    try:
+        return content.decode(encoding)
+    except (UnicodeDecodeError, LookupError):
+        return None
+
+
+class UserDto(BaseModel):
+    model_config = _ALIASED
+
+    login_name: str = Field(alias="login")
+    display_name: str = Field(alias="name")
+    external_id: str | None = Field(default=None, exclude_if=lambda x: x is None)
+    email: str | None = Field(default=None, exclude_if=lambda x: x is None)
 
     def __str__(self):
         return self.display_name
 
 
-class TeamDto(BaseModel, frozen=True):
+class TeamDto(BaseModel):
+    model_config = _ALIASED
+
+    # No alias "name" for display_name: it would clash with the field name in
+    # TeamDto(name=..., display_name=...). ContestDataExport maps it instead.
     name: str
-    display_name: str = Field(serialization_alias="name")
-    category_name: str | None = Field(serialization_alias="category")
-    affiliation_name: str | None = Field(serialization_alias="affiliation")
-    external_id: str | None = Field(exclude_if=lambda x: x is None)
-    label: str | None = Field(exclude_if=lambda x: x is None)
-    member_login_names: list[str] = Field(serialization_alias="members")
+    display_name: str
+    category_name: str | None = Field(alias="category")
+    affiliation_name: str | None = Field(alias="affiliation")
+    external_id: str | None = Field(default=None, exclude_if=lambda x: x is None)
+    label: str | None = Field(default=None, exclude_if=lambda x: x is None)
+    member_login_names: list[str] = Field(alias="members")
 
     def __str__(self):
         return f"{self.display_name}"
@@ -60,39 +94,27 @@ class SubmissionFileDto(BaseModel):
     def byte_size(self) -> int:
         return len(self.content)
 
-    def _decode(self) -> str | None:
-        if hasattr(self, "_str_content"):
-            return self._str_content
-
-        try:
-            content = self.content.decode("utf-8")
-        except UnicodeDecodeError:
-            try:
-                result = chardet.detect(self.content, should_rename_legacy=True)
-                if "encoding" in result:
-                    content = self.content.decode(result["encoding"])
-                else:
-                    content = None
-            except UnicodeDecodeError:
-                content = None
-        self._str_content = content
-        return self._str_content
+    @functools.cached_property
+    def _text(self) -> str | None:
+        # Decoding may run chardet, so it is cached; pydantic leaves cached
+        # properties out of validation, serialisation and equality
+        return _decode_text(self.content)
 
     @property
     def line_count(self) -> int | None:
-        content = self._decode()
+        content = self._text
         if content is None:
             return None
         lines = [line.strip() for line in content.splitlines()]
         return len([line for line in lines if line])
 
     def content_safe(self, default=None) -> str | None:
-        content = self._decode()
+        content = self._text
         return content if content is not None else default
 
     @property
     def is_text_file(self):
-        return self._decode() is not None
+        return self._text is not None
 
 
 class TeamCategoryDto(BaseModel, frozen=True):
@@ -102,16 +124,17 @@ class TeamCategoryDto(BaseModel, frozen=True):
     order: int
     self_registration: bool
     external_id: str | None = Field(
+        default=None,
         exclude_if=lambda x: x is None,
-        description="External ID of the submission, if any. Must be unique per contest.",
+        description="External ID of the category, if any.",
     )
 
 
 class TestcaseResultDto(BaseModel, frozen=True):
     runtime: float
     verdict: PydanticVerdict
-    is_sample: bool = Field(serialization_alias="sample")
-    test_name: str = Field(serialization_alias="name")
+    is_sample: bool
+    test_name: str
 
 
 class ContestProblemDto(BaseModel, frozen=True):
@@ -123,19 +146,20 @@ class ContestProblemDto(BaseModel, frozen=True):
 
 
 class SubmissionDto(BaseModel, frozen=True):
-    team_name: str = Field(serialization_alias="team")
-    contest_key: str = Field(serialization_alias="contest")
-    contest_problem_key: str = Field(serialization_alias="contest_problem")
-    problem_name: str = Field(serialization_alias="problem")
-    language_key: str = Field(serialization_alias="language")
-    submission_time: float = Field(serialization_alias="time")
+    team_name: str
+    contest_key: str
+    contest_problem_key: str
+    problem_name: str
+    language_key: str
+    submission_time: float
     external_id: str | None = Field(
+        default=None,
         exclude_if=lambda x: x is None,
         description="External ID of the submission, if any. Must be unique per contest.",
     )
 
     verdict: PydanticVerdict | None
-    case_result: list[TestcaseResultDto] = Field(serialization_alias="results")
+    case_result: list[TestcaseResultDto]
     too_late: bool
 
     files: list[SubmissionFileDto]
@@ -163,17 +187,14 @@ class SubmissionDto(BaseModel, frozen=True):
 
 
 class ClarificationDto(BaseModel, frozen=True):
-    team_name: str = Field(serialization_alias="team")
-    contest_key: str = Field(
-        serialization_alias="contest", description="The short_name of the contest"
-    )
+    team_name: str
+    contest_key: str = Field(description="The short_name of the contest")
     contest_problem_key: str | None = Field(
-        serialization_alias="contest_problem",
-        description="The short_name of the contest",
+        description="The short_name of the contest problem",
     )
-    external_id: str | None = Field(exclude_if=lambda x: x is None)
+    external_id: str | None = Field(default=None, exclude_if=lambda x: x is None)
 
-    request_time: float = Field(serialization_alias="time")
+    request_time: float
     identifier: str
     response_to: str | None
     from_jury: bool
@@ -181,7 +202,7 @@ class ClarificationDto(BaseModel, frozen=True):
 
 
 class ContestDescriptionDto(BaseModel, frozen=True):
-    contest_key: str = Field(serialization_alias="key")
+    contest_key: str
     start: float | None
     end: float | None
 
@@ -195,30 +216,36 @@ class ContestDataExport(BaseModel):
     submissions: list[SubmissionDto]
     clarifications: list[ClarificationDto]
 
-    @model_validator(mode="before")
+    # In JSON, users and teams are maps from login / team name to the remaining
+    # fields; the key is put back into the object when reading
+
+    @field_validator("users", mode="before")
     @classmethod
-    def _resolve_users_and_teams(cls, data):
-        if any(not isinstance(v, UserDto) for v in data["users"].values()):
-            data["users"] = {
-                login_name: UserDto.model_validate(
-                    {**user, "login": login_name}, by_alias=True
-                )
-                for login_name, user in data["users"].items()
-            }
-        if any(not isinstance(v, TeamDto) for v in data["teams"].values()):
-            data["teams"] = {
-                name: TeamDto.model_validate(
-                    {**data, "name": name},
-                    by_alias=True,
-                )
-                for name, data in data["teams"].items()
-            }
-        return data
+    def _users_from_map(cls, users: Any) -> Any:
+        if not isinstance(users, dict):
+            return users
+        return {
+            login: {**user, "login": login} if isinstance(user, dict) else user
+            for login, user in users.items()
+        }
+
+    @field_validator("teams", mode="before")
+    @classmethod
+    def _teams_from_map(cls, teams: Any) -> Any:
+        if not isinstance(teams, dict):
+            return teams
+        result = {}
+        for name, team in teams.items():
+            if isinstance(team, dict) and "display_name" not in team:
+                # JSON form: "name" holds the display name
+                team = {**team, "display_name": team.get("name"), "name": name}
+            result[name] = team
+        return result
 
     @field_serializer("users", when_used="json")
     def _users_to_map(self, users: dict[str, UserDto]):
         return {
-            user.login_name: user.model_dump(exclude={"login_name"}, by_alias=True)
+            user.login_name: user.model_dump(exclude={"login_name"})
             for user in users.values()
         }
 
@@ -226,8 +253,8 @@ class ContestDataExport(BaseModel):
     def _teams_to_map(self, teams: dict[str, TeamDto]):
         return {
             team.name: {
-                **team.model_dump(exclude={"name"}, by_alias=True),
-                "members": team.member_login_names,
+                "name": team.display_name,
+                **team.model_dump(exclude={"name", "display_name"}),
             }
             for team in teams.values()
         }

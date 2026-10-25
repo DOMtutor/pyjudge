@@ -195,11 +195,16 @@ class UsersDescription(BaseModel):
     affiliations: list[Affiliation]
     teams: list[Team]
 
+    # In JSON, teams are a map from team name to the team, which refers to its
+    # category, affiliation and members by key. Resolving the category keys
+    # needs the instance's categories, passed as validation context
+    # {"category_by_key": ...}.
+
     @field_serializer("teams", when_used="json")
     def _serialize_teams(self, teams: list[Team]):
         return {
             team.name: {
-                **vars(team),
+                **team.model_dump(mode="json"),
                 "category": team.category.key if team.category is not None else None,
                 "members": [member.key for member in team.members],
                 "affiliation": team.affiliation.key
@@ -215,25 +220,40 @@ class UsersDescription(BaseModel):
         if isinstance(value, list):
             return value
 
-        if info.context is None:
-            raise ValueError("Context is None")
-        category_by_key: dict[str, TeamCategory] = info.context.get("category_by_key")
+        if info.context is None or "category_by_key" not in info.context:
+            raise ValueError("Teams need the team categories as validation context")
+        if "users" not in info.data or "affiliations" not in info.data:
+            raise ValueError("Teams cannot be resolved, users or affiliations invalid")
+        category_by_key: dict[str, TeamCategory] = info.context["category_by_key"]
         user_by_key: dict[str, User] = {user.key: user for user in info.data["users"]}
         affiliation_by_key: dict[str, Affiliation] = {
             affiliation.key: affiliation for affiliation in info.data["affiliations"]
         }
+
+        def resolve(team_name: str, kind: str, key: str | None, by_key: dict):
+            if key is None:
+                return None
+            if key not in by_key:
+                known = ", ".join(sorted(by_key)) or "none"
+                raise ValueError(
+                    f"Team {team_name}: unknown {kind} {key!r} (known: {known})"
+                )
+            return by_key[key]
+
         return [
             {
                 **team,
                 "name": name,
-                "display_name": team["display_name"],
-                "category": category_by_key.get(team["category"])
-                if "category" in team
-                else None,
-                "affiliation": affiliation_by_key.get(team["affiliation"])
-                if "affiliation" in team
-                else None,
-                "members": [user_by_key.get(name) for name in team["members"]],
+                "category": resolve(
+                    name, "category", team.get("category"), category_by_key
+                ),
+                "affiliation": resolve(
+                    name, "affiliation", team.get("affiliation"), affiliation_by_key
+                ),
+                "members": [
+                    resolve(name, "member", member, user_by_key)
+                    for member in team.get("members", [])
+                ],
             }
             for name, team in value.items()
         ]

@@ -10,6 +10,7 @@ from pydomjudge.model import (
     Contest,
     ContestProblem,
     DefaultCategory,
+    JudgeSettings,
     ScoringSettings,
     Team,
     User,
@@ -52,11 +53,38 @@ def test_contest_rejects_start_before_activation():
         _contest(activation_time=datetime.datetime(2026, 1, 10, 13, 0, tzinfo=TZ))
 
 
-def test_contest_rejects_naive_datetime():
-    # Should be a ValidationError; currently the naive/aware comparison in the
-    # validator raises TypeError first (see docs/review.md).
-    with pytest.raises((ValidationError, TypeError)):
-        _contest(start_time=datetime.datetime(2026, 1, 10, 12, 0))
+@pytest.mark.parametrize(
+    "field", ["activation_time", "start_time", "end_time", "deactivation_time"]
+)
+def test_contest_rejects_naive_datetime(field: str):
+    with pytest.raises(ValidationError, match=f"{field} has no timezone"):
+        _contest(**{field: datetime.datetime(2026, 1, 10, 12, 0)})
+
+
+def test_contest_rejects_timezone_without_name():
+    offset = datetime.timezone(datetime.timedelta(hours=1))
+    with pytest.raises(ValidationError, match="freeze_time has a timezone without"):
+        _contest(freeze_time=datetime.datetime(2026, 1, 10, 13, 0, tzinfo=offset))
+
+
+def test_contest_rejects_unknown_zone_name():
+    data = json.loads(_contest().model_dump_json())
+    data["start_time"] = "2026-01-10T12:00:00 Mars/Olympus"
+    with pytest.raises(ValidationError, match="IANA zone"):
+        Contest.model_validate(data)
+
+
+def test_contest_freeze_must_be_during_contest():
+    with pytest.raises(ValidationError, match="Freeze not during contest"):
+        _contest(freeze_time=datetime.datetime(2026, 1, 9, 12, 0, tzinfo=TZ))
+
+
+def test_contest_is_active_until_deactivation():
+    deactivation = datetime.datetime(2026, 1, 20, 12, 0, tzinfo=TZ)
+    contest = _contest(deactivation_time=deactivation)
+    assert contest.is_active(contest.end_time + datetime.timedelta(days=1))
+    assert not contest.is_active(deactivation + datetime.timedelta(days=1))
+    assert not _contest().is_active(contest.end_time + datetime.timedelta(days=1))
 
 
 def test_contest_is_running():
@@ -131,3 +159,31 @@ def test_team_is_hashable_and_members_frozen():
     )
     assert isinstance(team.members, tuple)
     assert {team: 1}[team] == 1
+
+
+def test_judge_settings_defaults_are_independent():
+    first, second = JudgeSettings(), JudgeSettings()
+    assert first.scoring is not second.scoring
+    first.clarification.answers.append("Yes")
+    assert "Yes" not in second.clarification.answers
+
+
+def test_language_is_hashable():
+    from pydomjudge.model import Executable, ExecutableType, Language
+
+    script = Executable(
+        key="compile_x",
+        description="compile X",
+        executable_type=ExecutableType.Compile,
+        contents=(),
+    )
+    language = Language(
+        key="x",
+        name="X",
+        time_factor=1.0,
+        extensions=frozenset({"x"}),
+        entry_point_description=None,
+        entry_point_required=False,
+        compile_script=script,
+    )
+    assert {language: 1}[language] == 1
