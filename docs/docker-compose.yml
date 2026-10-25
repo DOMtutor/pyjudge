@@ -20,6 +20,23 @@ configs:
       sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
       echo "[ok] DOMjudge passes HTTP_HOST $$host"
 
+  # Configuration of the self-service (profile "selfservice"), see docs/tools.md
+  selfservice-config:
+    content: |
+      secret_key_env: SELFSERVICE_SECRET_KEY
+      server:
+        # Set to the number of reverse proxies in front of it
+        trust_proxy: 1
+      database:
+        host: domjudge_mariadb
+        user: domjudge
+        database: domjudge
+        password_env: DOMJUDGE_DB_DOMJUDGE_PASSWORD
+      services:
+        register:
+          category: participants
+        change_password: {}
+
 x-judgehost-config: &judgehost-config
   # Official alternative: domjudge/judgehost:9.0.1 (without the DOMtutor additions)
   image: incaseoftrouble/domtutor_judgehost:latest
@@ -109,3 +126,30 @@ services:
       # A plain "environment:" here would replace the shared one entirely
       <<: *judgehost-environment
       DAEMON_ID: 1
+
+  # Started with "docker compose --profile selfservice up -d". Only listens on
+  # localhost: put a reverse proxy with TLS in front of it.
+  selfservice:
+    # Built locally with "docker build -t pyjudge ." in the pyjudge checkout;
+    # set PYJUDGE_IMAGE to use another image
+    image: ${PYJUDGE_IMAGE:-pyjudge:latest}
+    profiles:
+      - selfservice
+    networks:
+      - domjudge
+    restart: unless-stopped
+    container_name: pyjudge_selfservice
+    command: selfservice
+    depends_on:
+      - domjudge_mariadb
+    ports:
+      - 127.0.0.1:${SELFSERVICE_PORT:-8001}:8000/tcp
+    environment:
+      APP_CONFIG_PATH: /config/selfservice.yaml
+      # Required for the self-service; generate one with
+      # python -c 'import secrets; print(secrets.token_urlsafe(32))'
+      SELFSERVICE_SECRET_KEY: ${SELFSERVICE_SECRET_KEY:-}
+      DOMJUDGE_DB_DOMJUDGE_PASSWORD: ${DOMJUDGE_DB_DOMJUDGE_PASSWORD:?}
+    configs:
+      - source: selfservice-config
+        target: /config/selfservice.yaml
