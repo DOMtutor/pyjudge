@@ -7,11 +7,11 @@ from pydomjudge.database._db import (
     get_scalar,
     list_param,
 )
-from pydomjudge.database._update import (
+from pydomjudge.database._problems import (
     DbTestCase,
-    jury_submission_external_id,
     test_case_compare_key as compare_key,
 )
+from pydomjudge.database._submissions import jury_submission_external_id
 from pydomjudge.exc import ElementNotFoundError, MultipleElementsFoundError
 
 

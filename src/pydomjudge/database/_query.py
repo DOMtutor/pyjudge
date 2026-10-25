@@ -1,9 +1,5 @@
-"""Reading from a DOMjudge database (exports, lookups).
-
-The reader identifies contests, teams and users by their names (contest short
-name, team name, login), not by ``externalid``, so it also works on databases
-that were not created by pydomjudge. The writer in ``_update`` works by key.
-"""
+"""Reading from a DOMjudge database (exports, lookups), by name; see the package
+docstring."""
 
 import logging
 from collections import defaultdict
