@@ -35,11 +35,11 @@ Run it behind a reverse proxy with TLS for anything but local tests, and set `se
 ## Watcher
 
 `tools/watcher` is a standalone daemon (own `pyproject.toml`, no dependency on pydomjudge) that polls the DOMjudge API and sends notifications through [Apprise](https://github.com/caronc/apprise) (Telegram, mail, ...) when the server or judgehosts go down or a team posts a clarification.
+It is a member of the repository's uv workspace and shares its lock file.
 
 ```shell
-cd tools/watcher
-cp example_config.yaml config.yaml      # edit judges and notification channels
-uv run domjudge_watcher --config config.yaml
+cp tools/watcher/example_config.yaml config.yaml     # edit judges and notification channels
+uv run --package domjudge_watcher domjudge_watcher --config config.yaml
 ```
 
 The API user needs the roles API reader and jury.

@@ -64,6 +64,11 @@ dev = [
 [tool.uv.sources]
 problemtools = { path = "./libs/problemtools" }
 
+[tool.uv.workspace]
+# The watcher is an independent project (no dependency on pydomjudge) that
+# shares the lock file and the development environment
+members = ["tools/watcher"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -89,7 +94,7 @@ known-first-party = ["pydomjudge"]
 combine-as-imports = true
 
 [tool.ty.src]
-include = ["src", "tests"]
+include = ["src", "tests", "tools/watcher"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

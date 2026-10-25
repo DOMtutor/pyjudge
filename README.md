@@ -47,7 +47,7 @@ uv run dt_judge_upload contest contest.json
 ## Development
 
 ```shell
-uv sync
+uv sync --all-packages      # including the watcher (a uv workspace member)
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
 uv run ty check

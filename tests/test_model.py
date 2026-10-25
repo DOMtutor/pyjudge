@@ -36,7 +36,7 @@ def _contest(**overrides) -> Contest:
         public_scoreboard=False,
     )
     values.update(overrides)
-    return Contest(**values)
+    return Contest.model_validate(values)
 
 
 def test_contest_json_roundtrip():
@@ -45,7 +45,7 @@ def test_contest_json_roundtrip():
     assert '"2026-01-10T12:00:00 Europe/Berlin"' in dumped
     restored = Contest.model_validate_json(dumped)
     assert restored == contest
-    assert restored.start_time.tzinfo.key == "Europe/Berlin"
+    assert restored.start_time.tzinfo == ZoneInfo("Europe/Berlin")
 
 
 def test_contest_rejects_start_before_activation():
