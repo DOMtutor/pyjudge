@@ -20,36 +20,13 @@ import pytest
 from pydomjudge.database import ContestDataExport, Database
 from pydomjudge.database._db import DatabaseTransactionCursor
 from pydomjudge.model import Contest, SystemCategory, User
-from pydomjudge.scripts import upload
 from pydomjudge.scripts.export import fetch_contest
-from pydomjudge.scripts.upload import PyjudgeConfig, UsersDescription
+from pydomjudge.scripts.upload import PyjudgeConfig
 
-from .conftest import ADMIN, DRY_RUN_REPORT, EXAMPLES, JUDGE, client
+from .conftest import ADMIN, DRY_RUN_REPORT, JUDGE, client, upload_all
 
 # Tables that change by using DOMjudge, not by uploading
 VOLATILE_TABLES = {"auditlog", "sessions", "judgehost", "doctrine_migration_versions"}
-
-
-def _upload_all(config: PyjudgeConfig, contest: Contest) -> None:
-    upload.update_settings(config)
-    description = UsersDescription.model_validate_json(
-        (EXAMPLES / "users.json").read_text(),
-        context={
-            "category_by_key": {
-                category.key: category
-                for category in config.judge.team_categories + [SystemCategory.Jury]
-            }
-        },
-    )
-    upload.upload_users(config, description, overwrite_passwords=True)
-    # The contest is running, which the upload refuses without force
-    upload.upload_contest(config, contest, force=True)
-
-
-@pytest.fixture(scope="module")
-def uploaded(pyjudge_config: PyjudgeConfig, contest: Contest) -> Contest:
-    _upload_all(pyjudge_config, contest)
-    return contest
 
 
 def _ids(database: Database, query: str) -> list:
@@ -293,7 +270,7 @@ def test_second_upload_changes_nothing(
         return _CountingCursor(enter(self), stats)
 
     monkeypatch.setattr(DatabaseTransactionCursor, "__enter__", counting_enter)
-    _upload_all(pyjudge_config, uploaded)
+    upload_all(pyjudge_config, uploaded)
     monkeypatch.undo()
     after = _dump(database)
 

@@ -1,4 +1,4 @@
-# Example configuration for the DOMjudge self-service registration app.
+# Example configuration for the DOMjudge self-service app.
 # Copy this file to `config.yaml` and adjust the values.
 
 # Flask session secret. Either set it here or point `secret_key_env` at an
@@ -26,3 +26,19 @@ database:
   database: "domjudge"
   password: "change-me"
   # password_env: DOMJUDGE_DB_PASSWORD
+
+# The offered services (required, at least one).
+# A service is enabled by its key (with options or empty) and disabled by
+# leaving it out or setting it to false.
+services:
+  register:
+    # Key (externalid) of the team category for new teams; must exist
+    category: participants
+    # Optional regular expression new login names must match
+    # username_pattern: "^ge[0-9]+$"
+  change_password:
+    # Failed attempts per login name and address, and per address, within
+    # window_seconds
+    attempts: 5
+    address_attempts: 30
+    window_seconds: 900

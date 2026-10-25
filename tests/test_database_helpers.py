@@ -164,3 +164,38 @@ def test_find_user_and_team_id_match_key_or_name():
     assert user_params == ("alice", "ali")
     assert "externalid = %s OR name = %s" in team_query
     assert team_params == (None, "t_alice")
+
+
+def test_category_exists():
+    from pydomjudge.database import category_exists
+
+    cursor, db_cursor = _rows_cursor([(1,)], [])
+    assert category_exists(db_cursor, "students")
+    assert not category_exists(db_cursor, "nobody")
+    assert [params for _, params in cursor.statements] == [("students",), ("nobody",)]
+
+
+def test_find_login_collects_roles():
+    from pydomjudge.database import UserLogin, find_login
+
+    cursor, db_cursor = _rows_cursor(
+        [("alice", "$2b$hash", 1, "team"), ("alice", "$2b$hash", 1, "jury")],
+        [("bob", "", 0, None)],
+        [],
+    )
+    assert find_login(db_cursor, "alice") == UserLogin(
+        key="alice",
+        password_hash="$2b$hash",
+        enabled=True,
+        roles=frozenset({"team", "jury"}),
+    )
+    # no password and no role
+    assert find_login(db_cursor, "bob") == UserLogin(
+        key="bob", password_hash=None, enabled=False, roles=frozenset()
+    )
+    assert find_login(db_cursor, "nobody") is None
+    assert [params for _, params in cursor.statements] == [
+        ("alice",),
+        ("bob",),
+        ("nobody",),
+    ]

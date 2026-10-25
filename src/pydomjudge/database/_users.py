@@ -6,6 +6,7 @@ Part of the writer, which works by key; see the package docstring.
 import itertools
 import logging
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass
 
 from pydomjudge.exc import ElementNotFoundError
 from pydomjudge.model import (
@@ -373,6 +374,12 @@ def update_user_password(cursor: Cursor, user_key: str, password_hash: str):
         raise ElementNotFoundError(f"No user with key {user_key}")
 
 
+def category_exists(cursor: Cursor, key: str) -> bool:
+    """Whether a team category with this key (externalid) exists."""
+    cursor.execute("SELECT 1 FROM team_category WHERE externalid = %s", (key,))
+    return cursor.fetchone() is not None
+
+
 def find_user_id(
     cursor: Cursor, *, key: str | None = None, login_name: str | None = None
 ) -> int | None:
@@ -395,3 +402,36 @@ def find_team_id(
     )
     row = cursor.fetchone()
     return None if row is None else row[0]
+
+
+@dataclass(frozen=True)
+class UserLogin:
+    """What authenticating a user needs: key (externalid, None for users made
+    outside pyjudge and DOMjudge), password hash (None if unset), whether the
+    account is enabled, and the names of its DOMjudge roles."""
+
+    key: str | None
+    password_hash: str | None
+    enabled: bool
+    roles: frozenset[str]
+
+
+def find_login(cursor: Cursor, login_name: str) -> UserLogin | None:
+    """The login record of the user with this login name, if there is one."""
+    cursor.execute(
+        "SELECT u.externalid, u.password, u.enabled, r.role FROM `user` u "
+        "LEFT JOIN userrole ur ON ur.userid = u.userid "
+        "LEFT JOIN role r ON r.roleid = ur.roleid "
+        "WHERE u.username = %s",
+        (login_name,),
+    )
+    rows = cursor.fetchall()
+    if not rows:
+        return None
+    key, password_hash, enabled, _ = rows[0]
+    return UserLogin(
+        key=key,
+        password_hash=password_hash or None,
+        enabled=bool(enabled),
+        roles=frozenset(role for *_, role in rows if role is not None),
+    )

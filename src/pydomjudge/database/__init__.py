@@ -61,10 +61,13 @@ from ._submissions import (
     create_problem_submissions as create_problem_submissions,
 )
 from ._users import (
+    UserLogin as UserLogin,
+    category_exists as category_exists,
     create_or_update_affiliations as create_or_update_affiliations,
     create_or_update_teams as create_or_update_teams,
     create_or_update_users as create_or_update_users,
     disable_unknown_users as disable_unknown_users,
+    find_login as find_login,
     find_team_id as find_team_id,
     find_user_id as find_user_id,
     update_categories as update_categories,
