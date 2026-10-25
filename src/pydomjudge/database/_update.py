@@ -329,12 +329,32 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
         ),
     )
 
-    # Deletes every executable that does not appear in the `executable` table.
-    # Also deletes from the `executable_file` (ON DELETE CASCADE)
+
+def delete_unused_immutable_executables(cursor: Cursor) -> None:
+    """Delete file sets no executable refers to any more, after replacing or
+    deleting executables (their files go with them, ON DELETE CASCADE)."""
     cursor.execute(
         "DELETE FROM immutable_executable "
         "WHERE immutable_execid NOT IN "
         "(SELECT immutable_execid FROM executable WHERE immutable_execid IS NOT NULL)"
+    )
+    if cursor.rowcount:
+        log.debug("Deleted %d unused executable file sets", cursor.rowcount)
+
+
+def _write_problem_statement(cursor: Cursor, problem_id: int, content: bytes) -> None:
+    """Store the statement, unless the database already has the same one."""
+    cursor.execute(
+        "SELECT MD5(content) FROM problem_statement_content WHERE probid = %s",
+        (problem_id,),
+    )
+    current = cursor.fetchone()
+    if current is not None and current[0] == hashlib.md5(content).hexdigest():
+        return
+    cursor.execute(
+        "INSERT INTO problem_statement_content (probid, content) VALUES (%s, %s) "
+        "ON DUPLICATE KEY UPDATE content = VALUES(content)",
+        (problem_id, content),
     )
 
 
@@ -393,10 +413,7 @@ def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
             problem_id,
         ),
     )
-    cursor.execute(
-        "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
-        (problem_id, text_data),
-    )
+    _write_problem_statement(cursor, problem_id, text_data)
     return problem_id
 
 
@@ -447,10 +464,7 @@ def create_or_update_problem_data(
         ),
     )
 
-    cursor.execute(
-        "REPLACE INTO problem_statement_content (probid, content) VALUES (%s, %s) ",
-        (problem_id, text_data),
-    )
+    _write_problem_statement(cursor, problem_id, text_data)
 
     checker = problem.checker
     if checker is None:
@@ -465,6 +479,7 @@ def create_or_update_problem_data(
             (checker.key, problem_id),
         )
         log.debug("Updated checker")
+        delete_unused_immutable_executables(cursor)
 
     return problem_id
 
@@ -755,8 +770,11 @@ def update_settings(cursor: Cursor, settings: JudgeSettings):
     log.info("Updating judge settings")
 
     def write(key, value):
+        # Not REPLACE: that deletes and re-inserts the row on every upload
         cursor.execute(
-            "REPLACE INTO configuration (name, value) VALUES (%s, %s)", (key, value)
+            "INSERT INTO configuration (name, value) VALUES (%s, %s) "
+            "ON DUPLICATE KEY UPDATE value = VALUES(value)",
+            (key, value),
         )
 
     scoring = settings.scoring
@@ -866,6 +884,8 @@ def set_global_languages(
             f"WHERE langid IN {list_param(languages_to_disallow)}",
             tuple(languages_to_disallow),
         )
+    # Only now: the compile scripts of deleted languages are gone, too
+    delete_unused_immutable_executables(cursor)
 
 
 def clear_invalid_submissions(cursor: Cursor) -> None:
