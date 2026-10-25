@@ -68,10 +68,10 @@ services:
       - 12345:80/tcp
     restart: unless-stopped
     depends_on:
-      - mariadb
+      - domjudge_mariadb
     environment:
       MYSQL_HOST: domjudge_mariadb
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${DOMJUDGE_DB_ROOT_PASSWORD:?}
       MYSQL_USER: domjudge
       MYSQL_PASSWORD: ${DOMJUDGE_DB_DOMJUDGE_PASSWORD:?}
       MYSQL_DATABASE: domjudge
