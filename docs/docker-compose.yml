@@ -6,8 +6,23 @@ networks:
   domjudge:
     driver: bridge
 
+configs:
+  # The domserver image's nginx passes the Host header without port to DOMjudge,
+  # so its absolute redirects (e.g. to the login page) would point to port 80.
+  # This start script makes it use DOMJUDGE_PUBLIC_PORT instead.
+  domserver-public-port:
+    content: |
+      #!/bin/sh
+      host='$$host'
+      if [ -n "$${DOMJUDGE_PUBLIC_PORT:-}" ] && [ "$${DOMJUDGE_PUBLIC_PORT}" != 80 ]; then
+        host="$$host:$${DOMJUDGE_PUBLIC_PORT}"
+      fi
+      sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
+      echo "[ok] DOMjudge passes HTTP_HOST $$host"
+
 x-judgehost-config: &judgehost-config
-  image: incaseoftrouble/judgehost:latest
+  # Official alternative: domjudge/judgehost:9.0.1 (without the DOMtutor additions)
+  image: incaseoftrouble/domtutor_judgehost:latest
   cgroup: host
   restart: on-failure
   networks:
@@ -17,7 +32,7 @@ x-judgehost-config: &judgehost-config
   volumes:
     - /sys/fs/cgroup:/sys/fs/cgroup
   privileged: true
-  environment:
+  environment: &judgehost-environment
     CONTAINER_TIMEZONE: ${TZ}
     JUDGEDAEMON_USERNAME: judgehost
     JUDGEDAEMON_PASSWORD: ${DOMJUDGE_JUDGE_PASSWORD:?}
@@ -61,11 +76,12 @@ services:
 
   domserver:
     container_name: domjudge
-    image: incaseoftrouble/domserver:latest
+    # Official alternative: domjudge/domserver:9.0.1
+    image: incaseoftrouble/domtutor_domserver:latest
     networks:
       - domjudge
     ports:
-      - 12345:80/tcp
+      - ${DOMJUDGE_PORT:-12345}:80/tcp
     restart: unless-stopped
     depends_on:
       - domjudge_mariadb
@@ -77,10 +93,19 @@ services:
       MYSQL_DATABASE: domjudge
       CONTAINER_TIMEZONE: ${TZ}
       DJ_DB_INSTALL_BARE: 1
+      # The port in the browser; set DOMJUDGE_PUBLIC_PORT= (empty) behind a
+      # reverse proxy on port 80/443
+      DOMJUDGE_PUBLIC_PORT: ${DOMJUDGE_PUBLIC_PORT-${DOMJUDGE_PORT:-12345}}
+    configs:
+      - source: domserver-public-port
+        target: /scripts/start.ro/40-public-port.sh
+        mode: 0555
 
   judgehost:
     <<: *judgehost-config
     container_name: judgehost
     hostname: judgehost
     environment:
+      # A plain "environment:" here would replace the shared one entirely
+      <<: *judgehost-environment
       DAEMON_ID: 1

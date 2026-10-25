@@ -7,7 +7,8 @@
 #           (privileged container, needs cgroup v2)
 # KEEP=1    leave the containers running afterwards (remove with
 #           docker compose -f tests/integration/compose.yml down -v)
-# DOMJUDGE_IMAGE=incaseoftrouble DOMJUDGE_VERSION=latest   other images
+# DOMJUDGE_DOMSERVER_IMAGE=..., DOMJUDGE_JUDGEHOST_IMAGE=...   other images, e.g.
+#           incaseoftrouble/domtutor_domserver:latest (default: official 9.0.1)
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
