@@ -36,9 +36,11 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Install problemtools build dependencies
+        # pypy3: problemtools runs Python submissions with it (problemtools
+        # adapter and verification tests)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends automake g++ make libboost-regex-dev libgmp-dev
+          sudo apt-get install -y --no-install-recommends automake g++ make libboost-regex-dev libgmp-dev pypy3
       - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true

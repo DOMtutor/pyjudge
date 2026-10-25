@@ -1,4 +1,3 @@
-import argparse
 import dataclasses
 import enum
 import logging
@@ -11,16 +10,7 @@ from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
 
-from problemtools import languages
-from problemtools.run import Program, SourceCode
-from problemtools.verifyproblem import (
-    Context,
-    SubmissionResult,
-    TestCase,
-    TestCaseGroup,
-    re_argument,
-)
-
+from pydomjudge.repository._problemtools import Program, RunOutcome, source_program
 from pydomjudge.repository.kattis import ExecutionError, RepositoryProblem
 
 logger = logging.getLogger(__name__)
@@ -150,7 +140,7 @@ class FuzzingRun:
     RANDOM_RUNS = 200
 
     @staticmethod
-    def parse_feedback(result: SubmissionResult) -> dict[str, list[str]]:
+    def parse_feedback(result: RunOutcome) -> dict[str, list[str]]:
         if result.additional_info is None or not result.additional_info.strip():
             return {}
         feedback_files: dict[str, list[str]] = defaultdict(list)
@@ -258,19 +248,7 @@ class FuzzingRun:
         self.input_file: Path = file_directory / f"{self.seed}.in"
         self.answer_file: Path = file_directory / f"{self.seed}.ans"
 
-        self.args = argparse.Namespace(
-            bail_on_error=False,
-            werror=False,
-            parts=["submissions"],
-            problemdir=str(self.problem.directory.absolute()),
-            max_additional_info=15,
-            data_filter=re_argument(f"{self.seed}$"),
-            submission_filter=re_argument(".*"),
-            fixed_timelim=None,
-            # TODO use_result_cache?
-        )
-
-        self.test_data = TestCaseGroup(problem.kattis_problem, str(fuzzing_directory))
+        self.test_data = problem.loaded.test_group(fuzzing_directory)
 
     def _write_case(self, case: list[str]):
         with self.input_file.open(mode="wt", encoding="utf-8") as f:
@@ -278,21 +256,14 @@ class FuzzingRun:
                 f.write(line)
                 f.write("\n")
 
-    def _run_submission(
-        self,
-    ) -> tuple[SubmissionResult, SubmissionResult, SubmissionResult]:
-        time_limit_high = self.time_limit * 2
+    def _run_submission(self) -> RunOutcome:
         self.problem.generate_answer_if_required(self.input_file, self.answer_file)
-        return TestCase(
-            self.problem.kattis_problem,
-            str(self.input_file.with_suffix("")),
+        return self.problem.loaded.run_test_case(
             self.test_data,
-        ).run_submission_real(
             self.program,
-            Context(self.args, None),
+            self.input_file,
             self.time_limit,
-            int(self.time_limit + 1),
-            int(time_limit_high),
+            data_filter=f"{self.seed}$",
         )
 
     def __enter__(self):
@@ -305,7 +276,7 @@ class FuzzingRun:
             )
             self.problem.generate_input_if_required(self.seed_file, self.input_file)
 
-            result, _, _ = self._run_submission()
+            result = self._run_submission()
             logger.debug("Received initial feedback %s", result)
 
             if result.verdict is None or result.runtime == -1.0:
@@ -329,7 +300,7 @@ class FuzzingRun:
                 self.problem.generate_answer_if_required(
                     self.input_file, self.answer_file
                 )
-                result, _, _ = self._run_submission()
+                result = self._run_submission()
 
                 run_feedback = FuzzingRun.parse_feedback(result)
                 if result.verdict == "WA":
@@ -355,7 +326,7 @@ class FuzzingRun:
                     self.problem.generate_answer_if_required(
                         self.input_file, self.answer_file
                     )
-                    result, _, _ = self._run_submission()
+                    result = self._run_submission()
                     if result.verdict == "RTE":
                         self.submission_logger.debug("RTE occurred in first half")
                     else:
@@ -371,7 +342,7 @@ class FuzzingRun:
                 self.problem.generate_answer_if_required(
                     self.input_file, self.answer_file
                 )
-                result, _, _ = self._run_submission()
+                result = self._run_submission()
 
                 run_feedback = FuzzingRun.parse_feedback(result)
                 if result.verdict == "RTE":
@@ -386,7 +357,7 @@ class FuzzingRun:
             FuzzingRun.randomize_single(self.case_seed_file, self.seed_file, self.seed)
             self.problem.generate_input_if_required(self.seed_file, self.input_file)
 
-            result, _, _ = self._run_submission()
+            result = self._run_submission()
             logger.debug("Received feedback %s", result)
 
             if result.verdict is None or result.runtime == -1.0:
@@ -449,9 +420,6 @@ class FuzzingResult:
 class Fuzzer:
     MAX_FAILS = 3
 
-    def __init__(self):
-        self.language_config = languages.load_language_config(Path.cwd())
-
     def run(self, request: FuzzingRequest) -> FuzzingResult | None:
         fuzzing_directory = None
         try:
@@ -475,19 +443,10 @@ class Fuzzer:
                 for name, source_code in request.sources.items():
                     (source_directory / name).write_text(source_code)
 
-                language = self.language_config.languages.get(request.language, None)
-                if language is None:
-                    source_files = [str(path) for path in source_directory.iterdir()]
-                    language = self.language_config.detect_language(source_files)
-                if language is None:
-                    raise ValueError("Could not detect the language of the sources")
-
-                request.logger.info("Using language %s", language.name)
-                program = SourceCode(
-                    str(source_directory),
-                    language=language,
-                    work_dir=str(compile_directory),
+                program, language_name = source_program(
+                    source_directory, request.language, compile_directory
                 )
+                request.logger.info("Using language %s", language_name)
 
                 request.logger.info("Compiling program")
                 (compilation_result, error) = program.compile()

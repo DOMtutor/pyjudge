@@ -1,4 +1,3 @@
-import argparse
 import dataclasses
 import filecmp
 import importlib.resources as res
@@ -15,10 +14,7 @@ from collections.abc import Callable, Collection, Mapping
 from importlib.resources.abc import Traversable
 from typing import Any
 
-import problemtools.run
-import problemtools.verifyproblem
 import yaml
-from problemtools.run import BuildRun
 from pydantic import model_validator
 
 from pydomjudge.exc import InvalidFileFormatError, PyJudgeError
@@ -39,6 +35,7 @@ from pydomjudge.model import (
     Verdict,
     get_md5,
 )
+from pydomjudge.repository import _problemtools
 from pydomjudge.util import link_or_copy
 
 log = logging.getLogger(__name__)
@@ -329,20 +326,8 @@ class RepositoryProblem(Problem):
         self._submissions = None
         self._generator = None
         self._generate_function = None
-        self._args = argparse.Namespace(
-            # might need attributes later?
-            # some attributes include:
-            # threads: int
-            # parts: list[str] ?
-            bail_on_error=True,
-            werror=False,
-            max_additional_info=15,
-        )
-        # self._args added as the second param
-        self._problemtools = problemtools.verifyproblem.Problem(
-            str(self.directory.absolute()), args=self._args
-        )
-        self._problemtools_loaded = False
+        self._problemtools = _problemtools.Problem(self.directory)
+        self._loaded: _problemtools.LoadedProblem | None = None
         self._reference_submission = None
         self.log = log.getChild(self.repository_key)
 
@@ -362,18 +347,8 @@ class RepositoryProblem(Problem):
     def limits(self) -> ProblemLimits:
         return self._limits
 
-    def __enter__(self) -> problemtools.verifyproblem.Problem:
-        if self._problemtools.loaded:
-            # problemtools copies submissions and validators into the temporary
-            # directory of the "with" block, removed on exit, and loads only
-            # once: a later block needs a fresh problem
-            self._problemtools = problemtools.verifyproblem.Problem(
-                str(self.directory.absolute()), args=self._args
-            )
+    def __enter__(self) -> _problemtools.LoadedProblem:
         p = self._problemtools.__enter__()
-
-        # Call load() for submissions to access submission data
-        self._problemtools.load()
 
         self._validator_temporary_directory = None
         if self.validation == "custom":
@@ -416,18 +391,12 @@ class RepositoryProblem(Problem):
                 else:
                     include_dir = None
 
-            # noinspection PyTestUnpassedFixture
-            validator = BuildRun(
-                str(checker_directory), work_dir=p.tmpdir, include_dir=include_dir
-            )
-            p.output_validators._validators = [validator]
+            p.use_output_validator(checker_directory, include_dir)
 
-        reference_submission: problemtools.run.SourceCode | None = None
-        # noinspection PyProtectedMember
-        submissions_by_type = self._problemtools.submissions._submissions
+        reference_submission: _problemtools.Program | None = None
+        submissions_by_type = p.submissions()
         for submissions in submissions_by_type.values():
             for submission in submissions:
-                assert isinstance(submission, problemtools.run.SourceCode)
                 if (
                     submission.name.startswith("reference_")
                     or "_reference" in submission.name
@@ -441,7 +410,7 @@ class RepositoryProblem(Problem):
         if reference_submission is None:
             for candidate in ["AC", "SL", "TLE"]:
                 if candidate in submissions_by_type and submissions_by_type[candidate]:
-                    reference_submission = submissions_by_type[candidate][0]  # ty:ignore[invalid-assignment]
+                    reference_submission = submissions_by_type[candidate][0]
                     self.log.debug(
                         "Using arbitrarily picked submission %s (of type %s) as reference",
                         reference_submission,
@@ -450,19 +419,21 @@ class RepositoryProblem(Problem):
                     break
         self._reference_submission = reference_submission
 
-        self._problemtools_loaded = True
+        self._loaded = p
         return p
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._problemtools_loaded = False
+        self._loaded = None
         if self._validator_temporary_directory is not None:
             shutil.rmtree(self._validator_temporary_directory)
 
         self._problemtools.__exit__(exc_type, exc_val, exc_tb)
 
     @property
-    def kattis_problem(self) -> problemtools.verifyproblem.Problem:
-        return self._problemtools
+    def loaded(self) -> _problemtools.LoadedProblem:
+        """problemtools' view of the problem, inside a "with" block."""
+        assert self._loaded is not None, "only inside a with block"
+        return self._loaded
 
     # noinspection PyProtectedMember
     def check(self, force=False):
@@ -484,34 +455,12 @@ class RepositoryProblem(Problem):
                 return
             last_verified.unlink()
 
-        import problemtools.run.limit as limit
-
-        limit.check_limit_capabilities(self)
-
-        context = problemtools.verifyproblem.Context(
-            args=argparse.Namespace(
-                data_filter=re.compile(".*"),
-                submission_filter=re.compile(".*"),
-                fixed_timelim=None,
-            ),
-            executor=None,
-        )
+        _problemtools.check_limit_capabilities(self.log)
 
         with self as p:
             self._load_testcases()
-
-            p._check_symlinks()
-            p._check_file_and_directory_names()
-            p._check_submission_directory_names()
-
-            # Do not check the statement here
-            p.config.check(context)
-            p.attachments.check(context)
-            p.input_validators.check(context)
-            p.output_validators.check(context)
-            p.graders.check(context)
-            p.testdata.check(context)
-            p.submissions.check(context)
+            # Not the statement
+            p.check()
 
         last_verified.touch()
 
@@ -528,8 +477,6 @@ class RepositoryProblem(Problem):
         return self.repository.get_checker_of(self)
 
     def generate_problem_text_if_required(self, lang="en", force=False):
-        import problemtools.problem2pdf
-
         source_file = self.directory / "problem_statement" / f"problem.{lang}.tex"
         if not source_file.exists():
             raise ValueError(
@@ -565,15 +512,12 @@ class RepositoryProblem(Problem):
                 build_pdf = problem_directory / f"{self.repository_key}.build.pdf"
 
                 self.log.info("Building problem pdf for language %s", lang)
-                options = argparse.Namespace(
-                    language=lang,
-                    destfile=str(build_pdf.absolute()),
+                _problemtools.build_statement_pdf(
+                    problem_directory,
+                    lang,
+                    build_pdf,
                     quiet=not log.isEnabledFor(logging.DEBUG),
-                    nopdf=False,
-                    problem=str(problem_directory.absolute()),
                 )
-
-                problemtools.problem2pdf.convert(options)
 
                 # TODO Wait till problemtools allows extracting the output
                 if not build_pdf.exists():
@@ -741,7 +685,7 @@ class RepositoryProblem(Problem):
                 f"No correct solution found for problem {self} to generate answers"
             )
 
-        assert self._problemtools_loaded
+        assert self._loaded is not None
 
         self.log.debug(
             "Generating answer for %s using submission %s",
@@ -753,11 +697,8 @@ class RepositoryProblem(Problem):
         if not result:
             raise ExecutionError(error)
 
-        # noinspection PyTestUnpassedFixture
-        error_file = pathlib.Path(self._problemtools.tmpdir) / "submission_ans_error"
-        status, _ = self._reference_submission.run(
-            infile=str(input_file), outfile=str(answer_file), errfile=str(error_file)
-        )
+        error_file = self._loaded.tmpdir / "submission_ans_error"
+        status = self._reference_submission.run(input_file, answer_file, error_file)
         flag = ~(stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         answer_file.chmod(answer_file.stat().st_mode & flag)
         if status:
@@ -776,7 +717,7 @@ class RepositoryProblem(Problem):
 
     def _load_testcases(self) -> Collection[RepositoryTestCase]:
         if self._test_cases is None:
-            if self._problemtools_loaded:
+            if self._loaded is not None:
                 self._test_cases = self._collect_testcases()
             else:
                 # Generating answers needs the reference submission, which is

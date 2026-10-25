@@ -9,7 +9,6 @@ import re
 import sys
 from collections.abc import Collection
 
-from problemtools.verifyproblem import VerifyError
 from pydantic import BaseModel, field_serializer, field_validator
 from pydantic_core.core_schema import ValidationInfo
 
@@ -31,6 +30,7 @@ from pydomjudge.model import (
     User,
     Verdict,
 )
+from pydomjudge.repository._problemtools import VerifyError
 from pydomjudge.repository.kattis import JurySubmission, Repository, RepositoryProblem
 from pydomjudge.scripts import _cli
 

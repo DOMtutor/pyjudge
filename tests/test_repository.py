@@ -178,8 +178,8 @@ def test_problem_can_be_entered_again(repository: Repository):
     # "with" block; a second block must not use the removed copies
     problem = repository.problems["pastryperfection"]
     for _ in range(2):
-        with problem as kattis_problem:
+        with problem as loaded:
             reference = problem._reference_submission
             assert reference is not None
-            assert reference.path.startswith(kattis_problem.tmpdir)
-            assert pathlib.Path(reference.path).exists()
+            assert reference.path.is_relative_to(loaded.tmpdir)
+            assert reference.path.exists()
