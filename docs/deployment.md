@@ -27,9 +27,8 @@ Do not expose it on a public host; bind it to `127.0.0.1:3306:3306` or run `pydo
 
 More judgehosts: duplicate the `judgehost` service with a different `container_name`, `hostname` and `DAEMON_ID`.
 
-The domserver image's nginx passes the host name without port to DOMjudge, so its redirects (for example to the login page) lose a port like 12345. The DOMtutor domserver image has a start script for this (`45-public-port.sh` in domjudge-packaging) that adds `DOMJUDGE_PUBLIC_PORT`, which the compose file sets to `DOMJUDGE_PORT`.
-Behind a reverse proxy on the standard ports, set `DOMJUDGE_PUBLIC_PORT=` (empty) in `.env`.
-The DOMtutor images published on Docker Hub are currently identical to the official 9.0.1 images, so the script arrives with their next build; until then, and with the official image, use port 80 or a reverse proxy, or add the start script as a compose `configs:` entry as `tests/integration/compose.yml` does.
+The domserver image's nginx passes the host name without port to DOMjudge, so with a direct port mapping its redirects (for example to the login page) lose a port like 12345. The small start script in the compose file (`domserver-public-port`) adds `DOMJUDGE_PUBLIC_PORT`, which defaults to `DOMJUDGE_PORT`.
+Behind a reverse proxy on the standard ports, the host name is right without it: set `DOMJUDGE_PUBLIC_PORT=` (empty) in `.env`, and the script changes nothing.
 
 ## Self-service
 
