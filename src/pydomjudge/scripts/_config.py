@@ -15,45 +15,10 @@ from typing import Any
 import pydantic
 import yaml
 
+from pydomjudge.database import DatabaseConfig as DatabaseConfig
 from pydomjudge.exc import InvalidFileFormatError, validation_problems
 
 PROJECT_FILE = "pyjudge.yaml"
-
-
-class DatabaseConfig(pydantic.BaseModel, extra="forbid"):
-    """Connection to DOMjudge's database, as in db.yml."""
-
-    host: str
-    port: int = 3306
-    user: str
-    password: str | None = None
-    # Name of an environment variable holding the password, to keep it out of
-    # files under version control
-    password_env: str | None = None
-    database: str = "domjudge"
-
-    @pydantic.model_validator(mode="after")
-    def _one_password(self):
-        if (self.password is None) == (self.password_env is None):
-            raise ValueError("set exactly one of password and password_env")
-        return self
-
-    def connection(self, source: pathlib.Path | None) -> dict[str, Any]:
-        """The arguments of Database(); reads password_env now."""
-        password = self.password
-        if self.password_env is not None:
-            password = os.environ.get(self.password_env)
-            if password is None:
-                raise InvalidFileFormatError(
-                    source, f"environment variable {self.password_env} is not set"
-                )
-        return {
-            "host": self.host,
-            "port": self.port,
-            "user": self.user,
-            "password": password,
-            "database": self.database,
-        }
 
 
 class ConfigFile(pydantic.BaseModel, extra="forbid"):

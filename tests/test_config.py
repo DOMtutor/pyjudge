@@ -108,3 +108,35 @@ def test_init_and_config(tmp_path, monkeypatch, capsys):
     assert "From the command line:\n  instance    x.json\n" in out
     assert "From pyjudge.yaml:\n  database    db.yml\n  repository  repository\n" in out
     assert "Defaults:\n  contest     none" in out
+
+
+def test_public_database_helpers(tmp_path, monkeypatch):
+    import argparse
+    import logging
+
+    from pydomjudge.database import Database
+    from pydomjudge.scripts import (
+        add_logging_arguments,
+        configure_logging,
+        load_database,
+    )
+
+    db_file = tmp_path / "db.yml"
+    db_file.write_text("host: h\nuser: u\npassword_env: DB_PW\n")
+    monkeypatch.setenv("DB_PW", "secret")
+    database = Database.from_file(db_file)
+    assert (database.host, database.user, database.password) == ("h", "u", "secret")
+    assert database.database == "domjudge"
+
+    # Without a path: pyjudge.yaml of the working directory or a parent
+    (tmp_path / "pyjudge.yaml").write_text("database: db.yml\n")
+    work = tmp_path / "sub"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    assert load_database().host == "h"
+    assert load_database(db_file).user == "u"
+
+    parser = argparse.ArgumentParser()
+    add_logging_arguments(parser)
+    configure_logging(parser.parse_args(["--log", "WARNING"]))
+    assert logging.getLogger("pydomjudge").level == logging.WARNING

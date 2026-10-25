@@ -43,6 +43,7 @@ from wtforms import Field, PasswordField, StringField, ValidationError, validato
 
 from pydomjudge.database import (
     Database,
+    DatabaseConfig,
     category_exists,
     create_or_update_teams,
     create_or_update_users,
@@ -57,7 +58,6 @@ from pydomjudge.exc import (
     validation_problems,
 )
 from pydomjudge.model import Team, TeamCategory, User, UserRole
-from pydomjudge.scripts._config import DatabaseConfig
 
 logger = logging.getLogger(__name__)
 
