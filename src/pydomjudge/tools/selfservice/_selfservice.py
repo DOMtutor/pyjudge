@@ -187,7 +187,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
 
     # Check connection
     with config.database as db:
-        with db.transaction_cursor() as _:
+        with db.transaction_cursor(readonly=True) as _:
             pass
 
     app = Flask(__name__)

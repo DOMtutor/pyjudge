@@ -89,7 +89,7 @@ All subcommands are idempotent; objects are matched by their key (`externalid` i
 |---------|--------|
 | `settings` | Writes `instance.json` settings, creates/updates team categories (categories not listed are deleted) and languages (languages not in the repository are deleted, or disabled if they have submissions) |
 | `users FILE [--disable] [--overwrite-passwords]` | Creates/updates affiliations, users, teams. `--disable` disables every user not in the file or whitelist |
-| `contest FILE [--force] [--skip-verify] [--skip-problems] [--skip-testcases] [--skip-submissions]` | Creates/updates the contest, then its problems (verification, statement PDF, test cases, jury solutions). Refuses to touch a running contest without `--force` |
+| `contest FILE [--force] [--skip-verify] [--skip-problems] [--skip-testcases] [--skip-submissions]` | Creates/updates the contest, then its problems (verification, statement PDF, test cases, jury solutions). Problems no longer listed are removed from the contest, unless teams have submitted to them (DOMjudge would delete those submissions). Refuses to touch a running contest without `--force` |
 | `problem (--name KEY \| --regex RE \| --contest FILE)... [--skip-verify] [--skip-submissions]` | Uploads problems without a contest |
 | `check` | Removes submissions with empty or binary source files and submissions without judging |
 

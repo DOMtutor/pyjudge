@@ -1,3 +1,10 @@
+"""Reading from a DOMjudge database (exports, lookups).
+
+The reader identifies contests, teams and users by their names (contest short
+name, team name, login), not by ``externalid``, so it also works on databases
+that were not created by pydomjudge. The writer in ``_update`` works by key.
+"""
+
 import logging
 from collections import defaultdict
 from collections.abc import Collection
@@ -38,7 +45,7 @@ def _parse_result(result: str | None) -> Verdict | None:
         return None
 
 
-def _find_contest_end(cursor: Cursor, contest_key: str) -> tuple[str, float]:
+def _find_contest_end(cursor: Cursor, contest_key: str) -> tuple[int, float]:
     cursor.execute(
         "SELECT cid, endtime FROM contest WHERE shortname = %s", (contest_key,)
     )
@@ -124,7 +131,7 @@ def find_submissions(
             team_name,
         ) in cursor:
             if submission_id in submission_data:
-                logging.warning("Multiple results for submission %s", submission_id)
+                log.warning("Multiple results for submission %s", submission_id)
                 continue
             submission_data[submission_id] = (
                 float(submission_time),
@@ -143,7 +150,7 @@ def find_submissions(
                 f"  JOIN judging j on s.submitid = j.submitid "
                 f"WHERE "
                 f"  j.valid = 1 AND "
-                f"  s.submitid IN {list_param(submission_data)}",
+                f"  {field_in_list('s.submitid', submission_data)}",
                 tuple(submission_data.keys()),
             )
         else:
@@ -153,17 +160,17 @@ def find_submissions(
                 f"FROM submission s "
                 f"  JOIN judging j on s.submitid = j.submitid "
                 f"WHERE "
-                f"  s.submitid IN {list_param(submission_data)}",
+                f"  {field_in_list('s.submitid', submission_data)}",
                 tuple(submission_data.keys()),
             )
         judging_ids = set()
         judging_data: dict[int, tuple[int, Verdict | None]] = {}
         for submission_id, judging_id, judging_result in cursor:
             if submission_id in judging_data:
-                logging.warning("Multiple runs for submission %s", submission_id)
+                log.warning("Multiple runs for submission %s", submission_id)
                 continue
             if judging_id in judging_ids:
-                logging.warning("Multiple judging ids for submission %s", submission_id)
+                log.warning("Multiple judging ids for submission %s", submission_id)
                 continue
             judging_ids.add(judging_id)
             judging_data[submission_id] = (judging_id, _parse_result(judging_result))
@@ -176,8 +183,7 @@ def find_submissions(
                 f"FROM submission s "
                 f"  JOIN submission_file sf on s.submitid = sf.submitid "
                 f"WHERE "
-                f"  s.submitid IN {list_param(submission_data)} "
-                f"GROUP BY s.submitid",
+                f"  {field_in_list('s.submitid', submission_data)}",
                 tuple(submission_data.keys()),
             )
             for submission_id, filename, content in cursor:
@@ -195,7 +201,7 @@ def find_submissions(
             f"FROM judging j "
             f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
             f"WHERE "
-            f"  j.judgingid IN {list_param(judging_ids)}",
+            f"  {field_in_list('j.judgingid', judging_ids)}",
             tuple(judging_ids),
         )
         judging_testcases_db = defaultdict(list)
@@ -217,7 +223,7 @@ def find_submissions(
             f"SELECT "
             f"  t.testcaseid, t.orig_input_filename, t.sample "
             f"FROM testcase t "
-            f"WHERE NOT t.deleted AND t.testcaseid IN {list_param(testcase_ids)}",
+            f"WHERE NOT t.deleted AND {field_in_list('t.testcaseid', testcase_ids)}",
             tuple(testcase_ids),
         )
         testcases = {
@@ -229,6 +235,10 @@ def find_submissions(
         for judging_id, judging_cases in judging_testcases_db.items():
             cases = []
             for test_id, runtime, result in judging_cases:
+                if test_id not in testcases:
+                    # Test case deleted in DOMjudge after this judging ran
+                    log.debug("Skipping run of judging %s on deleted case", judging_id)
+                    continue
                 test_name, test_sample = testcases[test_id]
                 cases.append(
                     TestcaseResultDto(
@@ -250,7 +260,7 @@ def find_submissions(
         submission_external_id,
     ) in submission_data.items():
         if submission_id not in judging_data:
-            logging.warning(
+            log.warning(
                 "No judging for submission %s by team %s", submission_id, team_name
             )
             continue
@@ -259,7 +269,7 @@ def find_submissions(
         if not testcases and (
             judging_result != Verdict.COMPILER_ERROR and judging_result is not None
         ):
-            logging.warning(
+            log.warning(
                 "No testcases found for submission %s/judging %s with result %s",
                 submission_id,
                 judging_id,
@@ -369,7 +379,7 @@ def find_clarifications(
                 team_name=team_name,
                 contest_key=contest_key,
                 request_time=submit_time,
-                response_to=str(response_id),
+                response_to=str(response_id) if response_id is not None else None,
                 from_jury=from_jury,
                 contest_problem_key=problem_id_to_name[problem_id]
                 if problem_id is not None

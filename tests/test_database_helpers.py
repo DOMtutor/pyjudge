@@ -1,7 +1,18 @@
 import pytest
 
-from pydomjudge.database._db import field_in_list, field_not_in_list, list_param
-from pydomjudge.database._update import DbTestCase, test_case_compare_key as compare_key
+from pydomjudge.database._db import (
+    DatabaseTransactionCursor,
+    field_in_list,
+    field_not_in_list,
+    get_scalar,
+    list_param,
+)
+from pydomjudge.database._update import (
+    DbTestCase,
+    jury_submission_external_id,
+    test_case_compare_key as compare_key,
+)
+from pydomjudge.exc import ElementNotFoundError, MultipleElementsFoundError
 
 
 def test_list_param():
@@ -33,3 +44,82 @@ def _case(name: str) -> DbTestCase:
 def test_test_case_sort_order(names: list[str]):
     cases = [_case(name) for name in reversed(names)]
     assert [c.name for c in sorted(cases, key=compare_key)] == names
+
+
+class _FakeCursor:
+    """Implements the DBCursor protocol over fixed result rows."""
+
+    rowcount = 0
+    lastrowid = None
+    arraysize = 1
+    description = None
+
+    def __init__(self, rows=()):
+        self.rows = list(rows)
+        self.executed: list[str] = []
+
+    def execute(self, query, params=None):
+        self.executed.append(query)
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchmany(self, size=1):
+        return self.rows[:size]
+
+    def fetchall(self):
+        return list(self.rows)
+
+    def close(self):
+        pass
+
+    def __iter__(self):
+        return iter(self.rows)
+
+
+class _FakeConnection:
+    def __init__(self):
+        self.cursors: list[_FakeCursor] = []
+        self.committed = self.rolled_back = 0
+
+    def cursor(self):
+        self.cursors.append(_FakeCursor())
+        return self.cursors[-1]
+
+    def commit(self):
+        self.committed += 1
+
+    def rollback(self):
+        self.rolled_back += 1
+
+
+def test_get_scalar():
+    assert get_scalar(_FakeCursor([(1,)])) == 1
+    with pytest.raises(ElementNotFoundError):
+        get_scalar(_FakeCursor([]))
+    with pytest.raises(MultipleElementsFoundError):
+        get_scalar(_FakeCursor([(1,), (2,)]))
+
+
+@pytest.mark.parametrize("readonly", [True, False])
+def test_transaction_cursor_readonly(readonly: bool):
+    connection = _FakeConnection()
+    with DatabaseTransactionCursor(connection, readonly=readonly) as cursor:  # ty: ignore[invalid-argument-type]
+        cursor.execute("SELECT 1")
+    executed = connection.cursors[0].executed
+    assert executed[0] == ("START TRANSACTION READ ONLY" if readonly else "SELECT 1")
+    assert connection.committed == 1
+
+
+def test_transaction_cursor_rolls_back_on_error():
+    connection = _FakeConnection()
+    with pytest.raises(RuntimeError):
+        with DatabaseTransactionCursor(connection):  # ty: ignore[invalid-argument-type]
+            raise RuntimeError
+    assert (connection.committed, connection.rolled_back) == (0, 1)
+
+
+def test_jury_submission_external_id_fits_domjudge():
+    ids = {jury_submission_external_id() for _ in range(100)}
+    assert len(ids) == 100
+    assert all(len(external_id) <= 64 for external_id in ids)

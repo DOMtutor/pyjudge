@@ -30,16 +30,17 @@ class DBCursor(Protocol):
 
 # noinspection PyTypeChecker
 class DatabaseTransactionCursor:
-    def __init__(
-        self,
-        connection: Connection,
-    ):
+    def __init__(self, connection: Connection, readonly: bool = False):
         self.connection = connection
+        self.readonly = readonly
         self.cursor: Cursor | None = None
 
     def __enter__(self) -> DBCursor:
         self.cursor = self.connection.cursor()
         assert self.cursor is not None
+        if self.readonly:
+            # The server rejects writes in this transaction
+            self.cursor.execute("START TRANSACTION READ ONLY")
         return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -74,14 +75,10 @@ class Database:
         if self._connection is not None:
             self._connection.close()
 
-    def transaction_cursor(
-        self,
-        readonly: bool = False,  # TODO Implement
-    ) -> DatabaseTransactionCursor:
+    def transaction_cursor(self, readonly: bool = False) -> DatabaseTransactionCursor:
+        """A cursor whose statements are committed together on success."""
         assert self._connection is not None
-        return DatabaseTransactionCursor(
-            self._connection,
-        )
+        return DatabaseTransactionCursor(self._connection, readonly=readonly)
 
 
 def list_param(data):
@@ -109,11 +106,15 @@ def get_unique(cursor: DBCursor):
     return result[0]
 
 
-def get_only(cursor: DBCursor) -> tuple[Any, ...]:
-    result = cursor.fetchone()
-    if result is None:
+def get_scalar(cursor: DBCursor) -> Any:
+    """The single column of the single row of the last query."""
+    result = cursor.fetchmany(2)
+    if not result:
         raise ElementNotFoundError("No result found")
-    return result[0]
+    if len(result) > 1:
+        raise MultipleElementsFoundError("Multiple results found")
+    (value,) = result[0]
+    return value
 
 
 def get_unique_with_error(
