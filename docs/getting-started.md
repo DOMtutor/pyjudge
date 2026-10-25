@@ -121,8 +121,8 @@ Passwords are only set when a user is created, so the existing `admin` keeps the
 The first `contest` upload takes a while: the larger test inputs are generated from their seed files, `problemtools` validates the test data and runs the jury solutions, and `problem2pdf` compiles the statements.
 Problems that passed are marked with a `.last_verified` file and skipped next time unless something changed.
 
-`pyjudge upload` finds `instance.json` and the `repository/` folder in the current directory.
-Use `--instance` and `--repository` to point elsewhere.
+`pyjudge` finds the database configuration, `instance.json` and the `repository/` folder through `examples/pyjudge.yaml`, from `examples/` or any folder below it; `pyjudge config` shows them.
+For your own project, `pyjudge init` creates these files.
 
 ## 6. Submit something
 

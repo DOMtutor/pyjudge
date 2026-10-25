@@ -9,6 +9,8 @@ Everything runs through one command, `pyjudge`, installed with the package (`uv 
 | `pyjudge anonymize` | Anonymize an export |
 | `pyjudge problem find\|check\|statements\|samples\|seed` | Work with the problem repository, no database needed |
 | `pyjudge make-admin` | Write `admin.json` with one admin user |
+| `pyjudge init` | Create `pyjudge.yaml`, `db.yml` and `instance.json` in the current directory |
+| `pyjudge config` | Show the settings and the files they come from |
 | `pyjudge serve fuzzer\|selfservice` | Web tools, see [tools.md](tools.md) |
 
 `pyjudge --help` and `pyjudge <command> --help` list the options.
@@ -22,7 +24,23 @@ Errors end the tool with exit code 1 and a short message; problems in a file are
 ## Configuration files
 
 The tools are driven by a handful of files that you keep in version control next to your problem repository.
-[examples](../examples) contains a complete set.
+[examples](../examples) contains a complete set; `pyjudge init` starts a new one.
+
+### `pyjudge.yaml`: where the files are
+
+```yaml
+database: db.yml          # a file like db.yml, or the connection itself:
+#   database: {host: 127.0.0.1, user: domjudge, password_env: DOMJUDGE_DB_PASSWORD}
+repository: repository
+instance: instance.json
+users: users.json         # default of `pyjudge upload users`
+contest: contest.json     # default of `pyjudge upload contest`
+```
+
+pyjudge uses the first `pyjudge.yaml` in the current directory or one of its parents, so the commands work from anywhere inside the project.
+`~/.config/pyjudge/config.yaml` (or in `$XDG_CONFIG_HOME`) has the same keys and fills in what the project file leaves out.
+Paths are relative to the file that names them, and command line options (`--db`, `--repository`, `--instance`, file arguments) win over both.
+`pyjudge config` shows the effective values and their source.
 
 ### `db.yml`: database connection
 
@@ -34,13 +52,14 @@ password: ...
 database: domjudge
 ```
 
-Default location: `./db.yml`; override with `--db PATH`.
+Default location: `database` in `pyjudge.yaml`, else `./db.yml`; override with `--db PATH`.
+Instead of `password`, `password_env` names an environment variable holding the password.
 The tools write to the DOMjudge database directly, so the user needs full access to the `domjudge` schema.
 
 ### `instance.json`: judge-wide settings
 
-Generated with `dt_default_settings --pretty -O instance.json`, or from Python via `JudgeInstance`.
-Default location: `./instance.json`; override with `--instance PATH`.
+Created by `pyjudge init`, or from Python via `JudgeInstance`.
+Default location: `instance` in `pyjudge.yaml`, else `./instance.json`; override with `--instance PATH`.
 
 | Field | Meaning |
 |-------|---------|
@@ -147,7 +166,7 @@ They share filters: `--name RE`, `--keyword RE`, `--exclude RE` (regular express
 ## Problem repository
 
 A repository is a folder with `config.yaml` and `problems/<key>/`, one folder per problem in the [Kattis problem package format](https://www.kattis.com/problem-package-format/) (legacy version, as supported by the vendored `problemtools`).
-`--repository PATH` selects it; without the option, the tools look for `./repository`, then `.` and its parents.
+`--repository PATH` (or `repository` in `pyjudge.yaml`) selects it; otherwise pyjudge looks for `./repository`, then `.` and its parents.
 
 ```
 repository/

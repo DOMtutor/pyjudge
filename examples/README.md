@@ -5,6 +5,7 @@ The [getting started guide](../docs/getting-started.md) walks through it step by
 
 | File | Content |
 |------|---------|
+| `pyjudge.yaml` | Where pyjudge finds the files below, from anywhere inside `examples/` |
 | `db.yml` | Database connection (default password `domjudge`, adjust to your DOMjudge) |
 | `instance.json` | Judge-wide settings: limits, scoring, team categories, allowed languages |
 | `users.json` | Users `user` (password `user`) and `admin`, their teams and an affiliation |

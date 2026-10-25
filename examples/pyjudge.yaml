@@ -1,0 +1,6 @@
+# Used by pyjudge anywhere in examples/, see docs/usage.md
+database: db.yml
+repository: repository
+instance: instance.json
+users: users.json
+contest: contest.json

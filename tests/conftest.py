@@ -17,6 +17,12 @@ from pydomjudge.model import Verdict
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _no_user_configuration(tmp_path_factory, monkeypatch):
+    """Keep ~/.config/pyjudge/config.yaml out of the tests."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("config")))
+
+
 @pytest.fixture(scope="session")
 def examples_dir() -> pathlib.Path:
     return ROOT / "examples"

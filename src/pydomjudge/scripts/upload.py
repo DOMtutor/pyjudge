@@ -16,6 +16,7 @@ from pydantic_core.core_schema import ValidationInfo
 import pydomjudge.database as update
 from pydomjudge.database import Database, DBCursor as Cursor
 from pydomjudge.exc import (
+    ConfigurationError,
     ProblemVerificationError,
     UnlikelyInstructionError,
 )
@@ -302,6 +303,15 @@ def check_database(config: PyjudgeConfig):
             update.clear_invalid_submissions(cursor)
 
 
+def _file_setting(args: argparse.Namespace, name: str) -> pathlib.Path:
+    path = _cli.setting(args, name)
+    if path is None:
+        raise ConfigurationError(
+            f"No {name} file given (argument or '{name}:' in pyjudge.yaml)"
+        )
+    return path
+
+
 def command_problem(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     problems: list[RepositoryProblem] = []
     if args.regex:
@@ -337,7 +347,7 @@ def command_problem(config: PyjudgeConfig, args: argparse.Namespace) -> None:
 def command_contest(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     upload_contest(
         config,
-        _cli.load_model(args.contest, Contest),
+        _cli.load_model(_file_setting(args, "contest"), Contest),
         force=args.force,
         update_problems=args.update_problems,
         verify_problems=args.verify,
@@ -348,7 +358,7 @@ def command_contest(config: PyjudgeConfig, args: argparse.Namespace) -> None:
 
 def command_users(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     description = _cli.load_model(
-        args.users,
+        _file_setting(args, "users"),
         UsersDescription,
         context={
             "category_by_key": {
