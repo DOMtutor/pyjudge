@@ -32,11 +32,6 @@ javascript:
   time_factor: 1.5
   extensions:
     - js
-julia:
-  name: "Julia"
-  time_factor: 1.5
-  extensions:
-    - jl
 rust:
   name: "Rust"
   time_factor: 1
