@@ -419,8 +419,8 @@ def create_problem_submissions(
 
     A submission is identified by team and file name. A changed submission
     (content, language) is inserted as a new submission whose origsubmitid
-    points to the previous version; submissions of the given teams whose file
-    is gone are deleted.
+    points to the previous version, which is marked invalid; submissions of the
+    given teams whose file is gone are deleted.
     """
     log.info("Updating submissions of problem %s", problem.name)
     cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
@@ -507,6 +507,8 @@ def create_problem_submissions(
     )
 
     old_submission_ids: list[int] = []
+    # Earlier versions of a jury submission, ignored like DOMjudge's "ignore"
+    superseded_ids: set[int] = set()
     current_submissions: dict[int, dict[tuple[int, Collection[str]], int]] = {
         contest_id: {} for contest_id in contest_ids
     }
@@ -527,6 +529,11 @@ def create_problem_submissions(
                                 f"Cyclic submission {' '.join(str(i) for i in submission_ids)}"
                             )
                     current_submissions[contest_id][(team_id, file_names)] = most_recent
+                    superseded_ids.update(
+                        submission_id
+                        for submission_id in submission_ids
+                        if submission_id != most_recent
+                    )
                 else:
                     old_submission_ids.extend(submission_ids)
 
@@ -589,6 +596,8 @@ def create_problem_submissions(
                 )
                 if tasks is None:
                     tasks = _JudgingTasks(cursor, problem_id)
+                if existing_id is not None:
+                    superseded_ids.add(existing_id)
                 _insert_submission(
                     cursor,
                     tasks,
@@ -607,6 +616,17 @@ def create_problem_submissions(
                     "WHERE submitid = %s",
                     (contest_start[contest_id], expected_results_string, existing_id),
                 )
+
+    if superseded_ids:
+        # Like the jury's "ignore" (SubmissionController::updateStatusAction):
+        # only the submission is marked, its judging stays
+        cursor.execute(
+            f"UPDATE submission SET valid = 0 "
+            f"WHERE valid = 1 AND submitid IN {list_param(superseded_ids)}",
+            tuple(superseded_ids),
+        )
+        if cursor.rowcount:
+            log.info("Ignoring %d earlier versions", cursor.rowcount)
 
     submissions_to_delete = invalid_submission_ids | set(old_submission_ids)
     if submissions_to_delete:
