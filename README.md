@@ -42,7 +42,7 @@ uv run dt_judge_upload contest contest.json
 * [Usage](docs/usage.md): command-line tools, configuration files, problem repository layout
 * [Deployment](docs/deployment.md): running DOMjudge itself with Docker
 * [Tools](docs/tools.md): fuzzer, self-service registration, watcher, Docker image
-* [Examples](examples/README.md): ready-to-use example setups
+* [Examples](examples/README.md): a ready-to-use example setup
 
 ## Development
 

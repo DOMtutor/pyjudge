@@ -1,7 +1,7 @@
 # Usage
 
 All command-line tools are installed with the package (`uv sync`, then `uv run <tool>` or activate the environment).
-Every tool accepts `--help`, `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`).
+Every tool except the web tools ([tools.md](tools.md)) accepts `--help`, `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`).
 Configuration and data errors are reported in one line with exit code 1 (`--debug` adds the stack trace).
 
 ## Configuration files
@@ -192,7 +192,8 @@ Names starting with `tiny_`, `small_`, `medium_`, `large_`, `huge_` are expected
 5 10
 ```
 
-into `small_01.seed` to `small_03.seed`, each with a fresh random seed.
+into `small_01.seed` to `small_03.seed` in the current directory (run it inside `data/secret`, or pass `--filename` with a path), after asking for confirmation.
+Each file gets its own seed, derived from its name, so running it again gives the same files.
 The generator must be deterministic.
 
 Each test case may have a `<name>.desc` description and a `<name>.<png|jpg>` image shown in DOMjudge.
