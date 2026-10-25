@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pydomjudge"
-version = "0.3.3"
+version = "0.4.0"
 description = "Automate DOMjudge from Python: problems, contests, users, and companion tools"
 readme = "README.md"
 license = "GPL-3.0-or-later"
