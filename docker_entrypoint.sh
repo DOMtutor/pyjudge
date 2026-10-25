@@ -18,7 +18,7 @@ case "$TOOL" in
     "fuzzer")
         echo "Starting Fuzzer via Gunicorn"
         # Fuzzing runs and their state live in the worker process: use exactly one
-        exec gunicorn --bind 0.0.0.0:8000 --workers 1 "pydomjudge.tools.fuzzer:run_app()" "$@"
+        exec gunicorn --bind 0.0.0.0:8000 --workers 1 "pydomjudge.tools.fuzzer:create_app()" "$@"
         ;;
     *)
         echo "Error: Unknown tool '$TOOL'."

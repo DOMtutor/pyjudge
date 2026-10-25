@@ -34,6 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/opt/venv/bin:$PATH"
+# Where the fuzzer expects the mounted problem repository
+ENV PYJUDGE_REPOSITORY=/repository
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 

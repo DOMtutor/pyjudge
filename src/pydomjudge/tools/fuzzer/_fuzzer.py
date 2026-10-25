@@ -2,7 +2,6 @@ import argparse
 import dataclasses
 import enum
 import logging
-import math
 import random
 import re
 import shutil
@@ -241,12 +240,13 @@ class FuzzingRun:
         submission_logger: logging.Logger,
         case_seed_file: Path,
         fuzzing_directory: Path,
+        time_limit: float,
     ):
         self.problem: RepositoryProblem = problem
         self.program = program
         self.submission_logger = submission_logger
 
-        self.time_limit = problem.limits.time_factor  # TODO Fix with base time
+        self.time_limit = time_limit
 
         self.case_seed_file = case_seed_file
         self.seed_type = FuzzingRun.detect_seed_type(self.case_seed_file)
@@ -254,8 +254,9 @@ class FuzzingRun:
             raise ValueError(f"Incompatible seed file structure {self.case_seed_file}")
         original_seed = FuzzingRun.get_seed(self.case_seed_file, self.seed_type)
         assert original_seed is not None
-        seed_bits = math.floor(math.log(abs(original_seed), 2))
-        self.seed = str(abs(random.getrandbits(seed_bits)))
+        # Fresh seeds of the same size as the original one (at least 16 bits)
+        seed_bits = max(abs(original_seed).bit_length(), 16)
+        self.seed = str(random.getrandbits(seed_bits))
 
         file_directory = fuzzing_directory / "data"
         file_directory.mkdir(exist_ok=True)
@@ -422,7 +423,9 @@ class FuzzingRun:
             try:
                 file.unlink(missing_ok=True)
             except OSError as e:
-                self.submission_logger.info("Failed to remove file %s", exc_info=e)
+                self.submission_logger.info(
+                    "Failed to remove file %s", file, exc_info=e
+                )
 
 
 @dataclasses.dataclass
@@ -435,6 +438,7 @@ class FuzzingRequest:
 
     logger: logging.Logger
 
+    time_limit: float
     run_count: int = 10
 
 
@@ -468,81 +472,76 @@ class Fuzzer:
                 ]:
                     d.mkdir(parents=True, exist_ok=True)
 
+                # Write all files first, a submission may consist of several
                 for name, source_code in request.sources.items():
-                    source_file = source_directory / name
-                    with source_file.open(mode="wt") as source:
-                        source.write(source_code)
+                    (source_directory / name).write_text(source_code)
 
-                    language = self.language_config.languages.get(
-                        request.language, None
+                language = self.language_config.languages.get(request.language, None)
+                if language is None:
+                    source_files = [str(path) for path in source_directory.iterdir()]
+                    language = self.language_config.detect_language(source_files)
+                if language is None:
+                    raise ValueError("Could not detect the language of the sources")
+
+                request.logger.info("Using language %s", language.name)
+                program = SourceCode(
+                    str(source_directory),
+                    language=language,
+                    work_dir=str(compile_directory),
+                )
+
+                request.logger.info("Compiling program")
+                (compilation_result, error) = program.compile()
+                if not compilation_result:
+                    raise ValueError(
+                        f"Compile error for program {program.name}: {error}"
                     )
-                    if language is None:
-                        source_files = [
-                            str(path) for path in source_directory.iterdir()
-                        ]
-                        language = self.language_config.detect_language(source_files)
 
-                    request.logger.info("Using language %s", language.name)
-                    program = SourceCode(
-                        str(source_directory),
-                        language=language,
-                        work_dir=str(compile_directory),
-                    )
+                run_results = []
 
-                    request.logger.info("Compiling program")
-                    (compilation_result, error) = program.compile()
-                    if not compilation_result:
-                        raise ValueError(
-                            f"Compile error for program {program.name}: {error}"
-                        )
+                request.logger.info("Setting up problem")
 
-                    run_results = []
-
-                    request.logger.info("Setting up problem")
-
-                    with request.problem as _:
-                        request.logger.info("Starting randomization")
-                        fails = 0
-                        for i in range(request.run_count):
-                            with FuzzingRun(
-                                request.problem,
-                                program,
-                                request.logger,
-                                request.seed_file,
-                                fuzzing_directory,
-                            ) as run:
-                                run_result = run.evaluate()
-                                if (
-                                    run_result.verdict
-                                    == RunVerdict.FEEDBACK_INCONSISTENCY
-                                ):
-                                    request.logger.warning(
-                                        "Program has feedback inconsistencies"
-                                    )
-                                    break
-                                if run_result.verdict != RunVerdict.CORRECT:
-                                    fails += 1
-                                    run_results.append(run_result)
-
-                            request.logger.info(
-                                "Finished %d runs of %d (%d failed)",
-                                i + 1,
-                                request.run_count,
-                                fails,
-                            )
-                            if fails >= Fuzzer.MAX_FAILS:
-                                request.logger.info("Enough runs failed, ending run")
+                with request.problem as _:
+                    request.logger.info("Starting randomization")
+                    fails = 0
+                    for i in range(request.run_count):
+                        with FuzzingRun(
+                            request.problem,
+                            program,
+                            request.logger,
+                            request.seed_file,
+                            fuzzing_directory,
+                            request.time_limit,
+                        ) as run:
+                            run_result = run.evaluate()
+                            if run_result.verdict == RunVerdict.FEEDBACK_INCONSISTENCY:
+                                request.logger.warning(
+                                    "Program has feedback inconsistencies"
+                                )
                                 break
+                            if run_result.verdict != RunVerdict.CORRECT:
+                                fails += 1
+                                run_results.append(run_result)
 
-                        request.logger.info("Fuzzing finished")
-                        logger.info("Finished fuzzing")
+                        request.logger.info(
+                            "Finished %d runs of %d (%d failed)",
+                            i + 1,
+                            request.run_count,
+                            fails,
+                        )
+                        if fails >= Fuzzer.MAX_FAILS:
+                            request.logger.info("Enough runs failed, ending run")
+                            break
 
-                        return FuzzingResult(run_results)
+                    request.logger.info("Fuzzing finished")
+                    logger.info("Finished fuzzing")
+
+                    return FuzzingResult(run_results)
         except ExecutionError as e:
             logger.warning("Execution failed with error:\n%s", e.err)
             request.logger.error("Execution failed")
         except ValueError as e:
-            logger.warning("Error during fuzzing: %s", exc_info=e)
+            logger.warning("Error during fuzzing: %s", e, exc_info=e)
             request.logger.error("%s", e)
         except Exception as e:
             logger.warning("Error during fuzzing", exc_info=e)
