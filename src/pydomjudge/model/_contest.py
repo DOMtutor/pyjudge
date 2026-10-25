@@ -11,19 +11,19 @@ from pydantic import (
 )
 
 
-class ContestProblem(BaseModel):
+class ContestProblem(BaseModel, extra="forbid"):
     name: str
     points: int
     color: str
     problem_key: str
 
 
-class ContestAccess(BaseModel):
+class ContestAccess(BaseModel, extra="forbid"):
     team_keys: set[str]
     category_keys: set[str]
 
 
-class Contest(BaseModel):
+class Contest(BaseModel, extra="forbid"):
     DATE_FORMAT: ClassVar[str] = "%Y-%m-%dT%H:%M:%S"
 
     key: str

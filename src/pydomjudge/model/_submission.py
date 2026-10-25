@@ -47,7 +47,7 @@ class ProblemSubmission(abc.ABC):
         return f"S({self.name}@{','.join(str(x) for x in self.expected_results) if self.expected_results else '?'})"
 
 
-class SubmissionAuthor(BaseModel):
+class SubmissionAuthor(BaseModel, extra="forbid"):
     key: str
     name: str
 

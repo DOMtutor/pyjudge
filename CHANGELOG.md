@@ -31,6 +31,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Breaking:** self-service registration is at `/register` (`/` redirects to it when it is the only service), its configuration is checked strictly (unknown keys are errors), and it does not start without its team category.
 - **Breaking:** `docs/docker-compose.yml` uses the images `incaseoftrouble/domtutor_domserver` and `domtutor_judgehost`, the web port `DOMJUDGE_PORT` (default 12345), and passes `DOMJUDGE_JUDGE_PASSWORD` to the judgehost (it fell back to the image default before).
 - **Breaking:** `examples/minimal` and `examples/teal2026` are merged into `examples/`; its `script.py` takes the options before the subcommand.
+- **Breaking:** unknown keys in `instance.json` (including its settings), contest files, `users.json` and the repository `config.yaml` are errors instead of being ignored; for example, the scoring settings of pydomjudge 0.2 (`score`) are now `scoring`.
+  An unknown language in `config.yaml` names the file and the known languages.
 - Passwords are hashed with bcrypt cost 7, as DOMjudge does (12 before; existing hashes stay valid).
 - A repeated upload of unchanged data changes no rows; languages are created in a fixed order.
 - problemtools is used only through `pydomjudge.repository._problemtools`.

@@ -4,6 +4,7 @@ import shutil
 
 import pytest
 
+from pydomjudge.exc import InvalidFileFormatError
 from pydomjudge.model import SystemCategory, Verdict
 from pydomjudge.repository.kattis import (
     JurySubmission,
@@ -183,3 +184,22 @@ def test_problem_can_be_entered_again(repository: Repository):
             assert reference is not None
             assert reference.path.is_relative_to(loaded.tmpdir)
             assert reference.path.exists()
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ("languages: [c, julia]\n", "unknown language 'julia' .*known: .*python"),
+        ("language: [c]\n", "unknown keys language"),
+        (
+            "languages:\n  c: {name: C, extensions: [c], timefactor: 2}\n",
+            "language c: unknown keys timefactor",
+        ),
+        ("authors:\n  me: {name: Me, basic_regex: me, mail: x}\n", "mail"),
+    ],
+)
+def test_repository_config_errors(repository_copy: pathlib.Path, config, message):
+    (repository_copy / "config.yaml").write_text(config)
+    with pytest.raises(InvalidFileFormatError, match=message) as error:
+        Repository(repository_copy)
+    assert error.value.source == repository_copy / "config.yaml"

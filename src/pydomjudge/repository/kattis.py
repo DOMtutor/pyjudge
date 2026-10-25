@@ -15,9 +15,9 @@ from importlib.resources.abc import Traversable
 from typing import Any
 
 import yaml
-from pydantic import model_validator
+from pydantic import ValidationError, model_validator
 
-from pydomjudge.exc import InvalidFileFormatError, PyJudgeError
+from pydomjudge.exc import InvalidFileFormatError, PyJudgeError, validation_problems
 from pydomjudge.model import (
     Affiliation,
     Executable,
@@ -139,13 +139,15 @@ class RepositoryAuthor(SubmissionAuthor):
     @model_validator(mode="before")
     @classmethod
     def parse_regexes(cls, data):
+        # The regex keys become patterns (unknown keys are errors)
+        data = dict(data)
         if "regex" in data:
-            regexes = data["regex"]
+            regexes = data.pop("regex")
             if isinstance(regexes, str):
                 regexes = [regexes]
             patterns = [re.compile(regex, re.IGNORECASE) for regex in regexes]
         else:
-            regexes = data["basic_regex"]
+            regexes = data.pop("basic_regex")
             if isinstance(regexes, str):
                 regexes = [regexes]
             patterns = [
@@ -938,6 +940,18 @@ class Repository:
             Executable.get_directory_contents(language_directory),
         )
 
+    # Keys of config.yaml and of a language entry in it
+    CONFIG_KEYS = frozenset({"affiliations", "authors", "languages"})
+    LANGUAGE_KEYS = frozenset(
+        {
+            "name",
+            "time_factor",
+            "extensions",
+            "entry_point_required",
+            "entry_point_description",
+        }
+    )
+
     @staticmethod
     def is_repository(directory: pathlib.Path):
         return (
@@ -954,26 +968,41 @@ class Repository:
 
         self.base_directory = base_path
 
-        configuration = _read_yaml(base_path / "config.yaml") or {}
-
-        affiliations_by_key: dict[str, Affiliation] = {
-            key: Affiliation.model_validate({**data, "short_name": key})
-            for key, data in configuration.get("affiliations", {}).items()
-        }
-
-        self.affiliations: list[Affiliation] = list(affiliations_by_key.values())
-        self.authors: list[RepositoryAuthor] = [
-            RepositoryAuthor.model_validate(
-                {
-                    **data,
-                    "key": author,
-                    "affiliation": affiliations_by_key[data["affiliation"]]
-                    if "affiliation" in data
-                    else None,
-                }
+        config_file = base_path / "config.yaml"
+        configuration = _read_yaml(config_file) or {}
+        if not isinstance(configuration, dict):
+            raise InvalidFileFormatError(config_file, "not a mapping")
+        unknown = set(configuration) - Repository.CONFIG_KEYS
+        if unknown:
+            raise InvalidFileFormatError(
+                config_file,
+                f"unknown keys {', '.join(sorted(unknown))} "
+                f"(known: {', '.join(sorted(Repository.CONFIG_KEYS))})",
             )
-            for author, data in configuration.get("authors", {}).items()
-        ]
+
+        try:
+            affiliations_by_key: dict[str, Affiliation] = {
+                key: Affiliation.model_validate({**data, "key": key, "short_name": key})
+                for key, data in configuration.get("affiliations", {}).items()
+            }
+
+            self.affiliations: list[Affiliation] = list(affiliations_by_key.values())
+            self.authors: list[RepositoryAuthor] = [
+                RepositoryAuthor.model_validate(
+                    {
+                        **data,
+                        "key": author,
+                        "affiliation": affiliations_by_key[data["affiliation"]]
+                        if "affiliation" in data
+                        else None,
+                    }
+                )
+                for author, data in configuration.get("authors", {}).items()
+            ]
+        except ValidationError as e:
+            raise InvalidFileFormatError(
+                config_file, *validation_problems(e), what="repository configuration"
+            ) from e
 
         self.repository_runscript_directory = base_path / "runscript"
 
@@ -997,10 +1026,22 @@ class Repository:
         # Sorted, so that the languages (and executables) are always created in
         # the same order
         for language_key in sorted(language_keys):
-            if language_key in merged_language_settings:
-                settings = merged_language_settings[language_key]
-            else:
-                raise KeyError(f"Unknown language {language_key}")
+            if language_key not in merged_language_settings:
+                raise InvalidFileFormatError(
+                    config_file,
+                    f"unknown language {language_key!r} (known: "
+                    f"{', '.join(sorted(merged_language_settings))}; "
+                    "others need their settings here)",
+                )
+            settings = merged_language_settings[language_key]
+            unknown = set(settings) - Repository.LANGUAGE_KEYS
+            if unknown:
+                raise InvalidFileFormatError(
+                    config_file,
+                    f"language {language_key}: unknown keys "
+                    f"{', '.join(sorted(unknown))} "
+                    f"(known: {', '.join(sorted(Repository.LANGUAGE_KEYS))})",
+                )
 
             if (repository_languages_directory / language_key).exists():
                 language = Repository.parse_language(
