@@ -1,4 +1,4 @@
-"""Options, logging and configuration loading shared by the dt_* tools."""
+"""Options, logging, completion and configuration loading shared by the tools."""
 
 import argparse
 import logging
@@ -25,6 +25,93 @@ if TYPE_CHECKING:  # importing problemtools is slow, only some tools need it
 LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+def add_logging_options(parser: argparse.ArgumentParser, suppress: bool = False):
+    """--debug and --log. With suppress, unset options leave the values of an
+    enclosing parser alone, so that they can be given before or after a
+    subcommand."""
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS if suppress else False,
+        help="Debug output of pydomjudge and the libraries it uses (problemtools)",
+    )
+    group.add_argument(
+        "--log",
+        choices=LOG_LEVELS,
+        default=argparse.SUPPRESS if suppress else None,
+        help="Log level of pydomjudge (default: INFO)",
+    )
+
+
+def add_shared_options(
+    parser: argparse.ArgumentParser,
+    *,
+    database: bool = False,
+    repository: bool = False,
+    instance: bool = False,
+    problem_filters: bool = False,
+    suppress: bool = False,
+) -> None:
+    """The options several tools share; suppress as in add_logging_options."""
+
+    def default(value):
+        return argparse.SUPPRESS if suppress else value
+
+    if database:
+        parser.add_argument(
+            "--db",
+            type=pathlib.Path,
+            default=default(pathlib.Path("db.yml")),
+            help="Database configuration (default: db.yml)",
+        )
+    if repository:
+        _action = parser.add_argument(
+            "--repository",
+            type=pathlib.Path,
+            default=default(None),
+            help="Problem repository (default: ./repository, or . and its parents)",
+        )
+        _complete(_action, directory_completer)
+    if instance:
+        _action = parser.add_argument(
+            "--instance",
+            type=pathlib.Path,
+            default=default(pathlib.Path("instance.json")),
+            help="Judge instance specification (default: instance.json)",
+        )
+        _complete(_action, json_completer)
+    if problem_filters:
+        _action = parser.add_argument(
+            "--name",
+            action="append",
+            default=default([]),
+            help="Regex on the problem key",
+        )
+        _complete(_action, problem_key_completer)
+        parser.add_argument(
+            "--keyword",
+            action="append",
+            default=default([]),
+            help="Regex on a keyword",
+        )
+        _action = parser.add_argument(
+            "--exclude",
+            action="append",
+            default=default([]),
+            help="Regex on the problem key to exclude",
+        )
+        _complete(_action, problem_key_completer)
+        _action = parser.add_argument(
+            "--contest",
+            action="append",
+            default=default([]),
+            type=pathlib.Path,
+            help="Only the problems of this contest file",
+        )
+        _complete(_action, json_completer)
+
+
 def make_parser(
     description: str | None = None,
     *,
@@ -35,56 +122,75 @@ def make_parser(
 ) -> argparse.ArgumentParser:
     """A parser with the logging options and the requested shared options."""
     parser = argparse.ArgumentParser(description=description)
-    logging_group = parser.add_mutually_exclusive_group()
-    logging_group.add_argument(
-        "--debug",
-        action="store_true",
-        help="Debug output of pydomjudge and the libraries it uses (problemtools)",
+    add_logging_options(parser)
+    add_shared_options(
+        parser,
+        database=database,
+        repository=repository,
+        instance=instance,
+        problem_filters=problem_filters,
     )
-    logging_group.add_argument(
-        "--log", choices=LOG_LEVELS, help="Log level of pydomjudge (default: INFO)"
-    )
-    if database:
-        parser.add_argument(
-            "--db",
-            type=pathlib.Path,
-            default=pathlib.Path("db.yml"),
-            help="Database configuration (default: db.yml)",
-        )
-    if repository:
-        parser.add_argument(
-            "--repository",
-            type=pathlib.Path,
-            help="Problem repository (default: ./repository, or . and its parents)",
-        )
-    if instance:
-        parser.add_argument(
-            "--instance",
-            type=pathlib.Path,
-            default=pathlib.Path("instance.json"),
-            help="Judge instance specification (default: instance.json)",
-        )
-    if problem_filters:
-        parser.add_argument(
-            "--name", action="append", default=[], help="Regex on the problem key"
-        )
-        parser.add_argument(
-            "--keyword", action="append", default=[], help="Regex on a keyword"
-        )
-        parser.add_argument(
-            "--exclude",
-            action="append",
-            default=[],
-            help="Regex on the problem key to exclude",
-        )
-        parser.add_argument(
-            "--contest",
-            action="append",
-            default=[],
-            type=pathlib.Path,
-            help="Only the problems of this contest file",
-        )
     return parser
+
+
+# Shell completion (argcomplete); these must stay cheap, they run on every <Tab>
+
+
+def _complete(action: argparse.Action, completer) -> None:
+    """Attach an argcomplete completer to an option."""
+    vars(action)["completer"] = completer  # argparse.Action has no such field
+
+
+def _repository_candidates(parsed_args) -> list[pathlib.Path]:
+    given = getattr(parsed_args, "repository", None)
+    cwd = pathlib.Path.cwd()
+    if given:
+        return [given / "repository", given, given.parent]
+    return [cwd / "repository", cwd, *cwd.resolve().parents]
+
+
+def problem_key_completer(prefix: str, parsed_args=None, **_kwargs) -> list[str]:
+    """Problem keys: folders with a problem.yaml in the repository's problems/."""
+    for candidate in _repository_candidates(parsed_args):
+        problems = candidate / "problems"
+        if (candidate / "config.yaml").is_file() and problems.is_dir():
+            return sorted(
+                path.name
+                for path in problems.iterdir()
+                if path.name.startswith(prefix) and (path / "problem.yaml").is_file()
+            )
+    return []
+
+
+def _path_completer(prefix: str, suffixes: tuple[str, ...], directories_only: bool):
+    base = pathlib.Path(prefix).parent if prefix else pathlib.Path(".")
+    name_prefix = (
+        pathlib.Path(prefix).name if prefix and not prefix.endswith("/") else ""
+    )
+    if prefix.endswith("/"):
+        base = pathlib.Path(prefix)
+    try:
+        entries = list(base.iterdir())
+    except OSError:
+        return []
+    result = []
+    for entry in entries:
+        if not entry.name.startswith(name_prefix) or entry.name.startswith("."):
+            continue
+        shown = str(entry) if str(base) != "." else entry.name
+        if entry.is_dir():
+            result.append(shown + "/")
+        elif not directories_only and entry.name.endswith(suffixes):
+            result.append(shown)
+    return sorted(result)
+
+
+def json_completer(prefix: str, **_kwargs) -> list[str]:
+    return _path_completer(prefix, (".json", ".json.gz"), directories_only=False)
+
+
+def directory_completer(prefix: str, **_kwargs) -> list[str]:
+    return _path_completer(prefix, (), directories_only=True)
 
 
 def configure_logging(args: argparse.Namespace) -> None:

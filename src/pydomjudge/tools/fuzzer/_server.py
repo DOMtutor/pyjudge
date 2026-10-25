@@ -1,6 +1,6 @@
 """Web interface of the fuzzer.
 
-Run it with ``dt_fuzzer --repository PATH`` (Flask development server) or with
+Run it with ``pyjudge serve fuzzer --repository PATH`` (Flask development server) or with
 gunicorn as ``pydomjudge.tools.fuzzer:create_app()``, configured through the
 environment variables PYJUDGE_REPOSITORY and PYJUDGE_BASE_TIME. Fuzzing runs
 live in the memory of the process, so use a single worker.
@@ -267,37 +267,16 @@ def create_app(
     return app
 
 
-def run_app():
-    parser = argparse.ArgumentParser(description="Fuzzer for seeded test data")
-    parser.add_argument(
-        "-r", "--repository", type=pathlib.Path, required=True, help="Repository"
-    )
-    time_group = parser.add_mutually_exclusive_group()
-    time_group.add_argument(
-        "--base-time",
-        type=float,
-        help="Base time limit in seconds, multiplied by the problem's factor "
-        "(default 1.0)",
-    )
-    time_group.add_argument(
-        "--instance", type=pathlib.Path, help="Take the base time from instance.json"
-    )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--debug", action="store_true", help="Flask debug mode")
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s - %(name)s - %(levelname)s %(message)s",
-    )
-    logging.getLogger("pydomjudge").setLevel(logging.DEBUG if args.debug else "INFO")
-
+def run(args: argparse.Namespace) -> None:
+    """pyjudge serve fuzzer: the Flask development server."""
     base_time = args.base_time
     if args.instance is not None:
-        base_time = JudgeInstance.model_validate_json(
-            args.instance.read_text()
-        ).base_time
-    create_app(args.repository, base_time).run(
-        host=args.host, port=args.port, debug=args.debug
-    )
+        from pydomjudge.scripts._cli import load_model
+
+        base_time = load_model(args.instance, JudgeInstance).base_time
+    repository = args.repository
+    if repository is None:
+        from pydomjudge.scripts._cli import load_repository
+
+        repository = load_repository(args).base_directory
+    create_app(repository, base_time).run(host=args.host, port=args.port)

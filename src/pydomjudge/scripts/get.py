@@ -1,3 +1,4 @@
+import argparse
 import io
 import pathlib
 import shutil
@@ -8,7 +9,6 @@ import zipfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
-from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.scripts import _cli
 
 AddContent = Callable[[bytes | pathlib.Path, str], None]
@@ -80,39 +80,27 @@ def content_writer(destination: pathlib.Path) -> Generator[AddContent, None, Non
         yield add_to_folder
 
 
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser(
-        "Write problem statements or samples", repository=True, problem_filters=True
-    )
-    parser.add_argument(
-        "destination",
-        type=pathlib.Path,
-        help="Folder or .tar/.zip file to write the statements to",
-    )
-
-    subparsers = parser.add_subparsers(required=True)
-
-    statements_parser = subparsers.add_parser("problems", help="Statement PDFs")
-    statements_parser.add_argument(
-        "--language",
-        action="append",
-        help="Statement language, repeat for several (default: en)",
-    )
-    statements_parser.add_argument(
-        "--force", action="store_true", help="Rebuild the PDFs"
-    )
-    statements_parser.set_defaults(func=func_statements)
-
-    samples_parser = subparsers.add_parser("samples", help="Sample inputs and answers")
-    samples_parser.set_defaults(func=func_samples)
-
-    args = parser.parse_args()
-    _cli.configure_logging(args)
-
+def _problems(args: argparse.Namespace):
     problems = _cli.find_problems(_cli.load_repository(args), args)
     if not problems:
         sys.exit("No problems found")
+    return problems
 
+
+def run_statements(args: argparse.Namespace) -> None:
+    """Build the statement PDFs; with a destination, also write them there."""
+    problems = _problems(args)
+    if args.destination is None:
+        for problem in problems:
+            for language in args.language or ["en"]:
+                problem.generate_problem_text_if_required(language, force=args.force)
+        return
     with content_writer(args.destination) as add_content:
-        args.func(args, problems, add_content)
+        func_statements(args, problems, add_content)
+
+
+def run_samples(args: argparse.Namespace) -> None:
+    """Write the sample inputs and answers."""
+    problems = _problems(args)
+    with content_writer(args.destination) as add_content:
+        func_samples(args, problems, add_content)

@@ -86,7 +86,7 @@ def test_changed_jury_solution_is_resubmitted(
 
     source = repository / "problems" / CHANGED
     source.write_text(source.read_text() + "\n# changed\n")
-    # A fresh repository object, like a new dt_judge_upload run: loaded jury
+    # A fresh repository object, like a new pyjudge upload run: loaded jury
     # solutions cache their checksum
     config = _with_fresh_repository(config, repository)
     upload.upload_contest(config, contest, force=True, verify_problems=False)

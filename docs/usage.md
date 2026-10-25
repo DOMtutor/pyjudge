@@ -1,7 +1,21 @@
 # Usage
 
-All command-line tools are installed with the package (`uv sync`, then `uv run <tool>` or activate the environment).
-Every tool except the web tools ([tools.md](tools.md)) accepts `--help`, `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`).
+Everything runs through one command, `pyjudge`, installed with the package (`uv sync`, then `uv run pyjudge ...` or activate the environment):
+
+| Command | Purpose |
+|---------|---------|
+| `pyjudge upload settings\|users\|contest\|problem\|password\|cleanup` | Synchronise files into the DOMjudge database |
+| `pyjudge export contest\|submissions` | Export contest data |
+| `pyjudge anonymize` | Anonymize an export |
+| `pyjudge problem find\|check\|statements\|samples\|seed` | Work with the problem repository, no database needed |
+| `pyjudge make-admin` | Write `admin.json` with one admin user |
+| `pyjudge serve fuzzer\|selfservice` | Web tools, see [tools.md](tools.md) |
+
+`pyjudge --help` and `pyjudge <command> --help` list the options.
+Every command accepts `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`), before or after the command name, like the shared options `--db`, `--repository` and `--instance`.
+
+Shell completion (commands, options, problem keys, JSON files) comes with `argcomplete`; enable it with `eval "$(register-python-argcomplete pyjudge)"` in `~/.bashrc` or `~/.zshrc`.
+
 Errors end the tool with exit code 1 and a short message; problems in a file are reported as `file: location: message` lines (e.g. `instance.json: team_categories[0].order: Input should be a valid integer`).
 `--debug` adds the traceback.
 
@@ -36,7 +50,7 @@ Default location: `./instance.json`; override with `--instance PATH`.
 | `settings.display` | Scoreboard and team-interface display options |
 | `settings.clarification` | Canned clarification answers |
 | `base_time` | Base time limit in seconds. A problem's time limit is `base_time × time_multiplier` from its `problem.yaml`, rounded to 0.1 s |
-| `user_whitelist` | Login names that `dt_judge_upload users --disable` never disables (besides `admin` and `judgehost`) |
+| `user_whitelist` | Login names that `pyjudge upload users --disable` never disables (besides `admin` and `judgehost`) |
 | `allowed_language_keys` | `null`: every language of the repository may be used for submissions. A list restricts submissions to these keys |
 | `team_categories` | Categories to create. The keys `jury`, `solution`, `author`, `system` are reserved for jury solutions |
 
@@ -80,9 +94,9 @@ Roles: `participant`, `jury`, `organizer` (admin + jury + team), `admin`.
 Passwords are bcrypt hashes (`User.hash_password`), only set on creation unless `--overwrite-passwords` is given.
 Every DOMjudge user needs a team to submit; teams reference users, categories and affiliations by key (an unknown key is an error).
 
-`dt_make_admin_user` interactively creates an `admin.json` with one admin user.
+`pyjudge make-admin` interactively creates an `admin.json` with one admin user.
 
-## Uploading: `dt_judge_upload`
+## Uploading: `pyjudge upload`
 
 Synchronises files into the database.
 All subcommands are idempotent; objects are matched by their key (`externalid` in DOMjudge), so renaming a key creates a new object.
@@ -94,14 +108,14 @@ All subcommands are idempotent; objects are matched by their key (`externalid` i
 | `contest FILE [--force] [--skip-verify] [--skip-problems] [--skip-testcases] [--skip-submissions]` | Creates/updates the contest, then its problems (verification, statement PDF, test cases, jury solutions). Problems no longer listed are removed from the contest, unless teams have submitted to them (DOMjudge would delete those submissions). Refuses to touch a running contest without `--force` |
 | `problem (--name KEY \| --regex RE \| --contest FILE)... [--skip-verify] [--skip-testcases] [--skip-submissions]` | Uploads problems without a contest |
 | `password KEY` | Asks for a new password of the user with this key and sets it |
-| `check` | Removes submissions with empty or binary source files and submissions without judging |
+| `cleanup` | Deletes submissions with empty or binary source files and submissions without judging |
 
 A failed problem verification stops the upload before the database is touched, with exit code 1.
 
 Jury solutions are uploaded as submissions of synthetic teams: one "Sample Solution <language>" team per language (category `solution`) for accepted solutions, and one "Author <name>" team (category `author`) per matched author.
 They are judged like any other submission, which immediately shows whether a problem behaves as expected.
 
-## Exporting: `dt_judge_export`
+## Exporting: `pyjudge export`
 
 | Command | Effect |
 |---------|--------|
@@ -114,21 +128,21 @@ Without `-d`, output goes to stdout only if it is a pipe.
 Verdicts use DOMjudge's result strings (see `settings.scoring` above).
 The export is the input for `pydomjudge.evaluate` (statistics and plots) and for grading scripts.
 
-`dt_anonymize contest EXPORT [DEST]` replaces logins, names, e-mail addresses and team names of an export by random words and shifts all times by a random offset, for example to share data for teaching or research.
+`pyjudge anonymize EXPORT [DEST]` replaces logins, names, e-mail addresses and team names of an export by random words and shifts all times by a random offset, for example to share data for teaching or research.
 The same export always gives the same result.
 
-## Working with problems: `dt_kattis_*`
+## Working with problems: `pyjudge problem`
 
-These tools work on the problem repository only, no database needed.
+These commands work on the problem repository only, no database needed.
 They share filters: `--name RE`, `--keyword RE`, `--exclude RE` (regular expressions on the folder name or keywords) and `--contest FILE` (all problems of a contest).
 
-| Tool | Effect |
-|------|--------|
-| `dt_kattis_find [filters]` | Lists matching problems with difficulty and keywords |
-| `dt_kattis_check [filters] [--statement LANG]` | Verifies problems with `problemtools` (generating test data first), or builds the statement PDF |
-| `dt_kattis_get DEST problems [--language LANG]... [--force]` | Writes statement PDFs (default language `en`, `--force` rebuilds them) to a folder, `.zip` or `.tar` |
-| `dt_kattis_get DEST samples` | Writes sample inputs and answers |
-| `dt_generate_seed TEMPLATE --count N [--filename FMT]` | Generates `N` seed files from a Jinja template (variables `n`, `seed`, `random`); see below |
+| Command | Effect |
+|---------|--------|
+| `find [filters]` | Lists matching problems with difficulty and keywords |
+| `check [filters]` | Verifies problems with `problemtools` (generating test data first) |
+| `statements [filters] [DEST] [--language LANG]... [--force]` | Builds the statement PDFs (default language `en`, `--force` rebuilds them), and writes them to a folder, `.zip` or `.tar` |
+| `samples [filters] DEST` | Writes sample inputs and answers |
+| `seed TEMPLATE --count N [--filename FMT]` | Generates `N` seed files from a Jinja template (variables `n`, `seed`, `random`); see below |
 
 ## Problem repository
 
@@ -173,7 +187,7 @@ Each language declares its submission file extensions.
 Besides the Kattis fields, pydomjudge reads:
 
 * `keywords`: list or `-`/`,` separated string.
-  Exactly one of `very easy`, `easy`, `medium`, `hard`, `very hard` sets the difficulty shown by `dt_kattis_find`.
+  Exactly one of `very easy`, `easy`, `medium`, `hard`, `very hard` sets the difficulty shown by `pyjudge problem find`.
 * `limits.time_multiplier`: multiplied with `base_time` from `instance.json`.
   A fixed `time_limit` is ignored.
 * `limits.memory_limit`, `limits.output_limit` in KiB (optional).
@@ -186,7 +200,7 @@ Large inputs are not stored but generated: `data/secret/<name>.seed` holds the g
 Generated `.in` files should be ignored in git; `examples/.gitignore` shows the pattern.
 Names starting with `tiny_`, `small_`, `medium_`, `large_`, `huge_` are expected to have seeds and determine the test case order in DOMjudge.
 
-`dt_generate_seed data/secret/small.jinja --count 3` renders a template such as
+`pyjudge problem seed data/secret/small.jinja --count 3` renders a template such as
 
 ```
 {{ seed }}

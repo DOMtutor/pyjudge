@@ -1,11 +1,9 @@
+import argparse
 import pathlib
 import random
 import sys
 
 import jinja2
-
-from pydomjudge.exc import error_handler_wrapper
-from pydomjudge.scripts import _cli
 
 
 def render_content(
@@ -18,27 +16,8 @@ def render_content(
     return name, content_template.render(n=file_number, seed=seed, random=rnd)
 
 
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser("Generate seed files from a Jinja template")
-    parser.add_argument(
-        "content",
-        action="append",
-        help="Template for content (repetitions are treated as lines). "
-        "If this is a single argument and resolves to an existing file, this file is used instead. "
-        "Available variables: n - iteration number, "
-        "seed - a random long, random - source of randomness (seeded with the filename)",
-    )
-    parser.add_argument(
-        "--filename",
-        help="Python formatting string for the filename. Available variables: n - iteration number",
-    )
-    parser.add_argument(
-        "--count", required=True, type=int, help="How many files to generate"
-    )
-    args = parser.parse_args()
-    _cli.configure_logging(args)
-
+def run(args: argparse.Namespace) -> None:
+    """Render seed files from a template; asks before writing."""
     if args.count <= 0:
         sys.exit("Need a positive count")
 

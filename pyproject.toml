@@ -31,6 +31,7 @@ dependencies = [
   "chardet>=5",
   "pydantic>=2.12",
   "jinja2>=3.1",
+  "argcomplete>=3",
   "matplotlib>=3.8",
   "numpy>=1.26",
   "flask>=3.1.3",
@@ -42,17 +43,8 @@ Repository = "https://github.com/DOMtutor/pyjudge"
 Issues = "https://github.com/DOMtutor/pyjudge/issues"
 
 [project.scripts]
-dt_judge_upload = "pydomjudge.scripts.upload:main"
-dt_judge_export = "pydomjudge.scripts.export:main"
-dt_kattis_find = "pydomjudge.scripts.find_problem:main"
-dt_kattis_check = "pydomjudge.scripts.check:main"
-dt_kattis_get = "pydomjudge.scripts.get:main"
-dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
-dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
+pyjudge = "pydomjudge.scripts.commands:main"
 dt_default_settings = "pydomjudge.scripts.default_instance:main"
-dt_anonymize = "pydomjudge.scripts.anonymize:main"
-dt_fuzzer = "pydomjudge.tools.fuzzer:run_app"
-dt_selfservice = "pydomjudge.tools.selfservice._selfservice:start"
 
 [dependency-groups]
 dev = [

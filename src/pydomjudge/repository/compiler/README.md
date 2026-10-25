@@ -1,7 +1,7 @@
 # Compile scripts
 
 One folder per language key of `../languages.yml`.
-Each folder is a DOMjudge compile executable: `dt_judge_upload settings` uploads its files, DOMjudge runs `build` once to prepare the executable and then, for every submission, `run program <memory limit KiB> <sources...>` in the directory with the sources (see `judge/compile.sh` of DOMjudge).
+Each folder is a DOMjudge compile executable: `pyjudge upload settings` uploads its files, DOMjudge runs `build` once to prepare the executable and then, for every submission, `run program <memory limit KiB> <sources...>` in the directory with the sources (see `judge/compile.sh` of DOMjudge).
 A repository can replace a folder with its own `compiler/<language>/`.
 
 ## Origin
@@ -24,7 +24,7 @@ All scripts except `julia` were also checked in the chroot of the DOMtutor judge
 
 ## Local verification differs
 
-`dt_kattis_check` and the upload's verification use problemtools, which compiles and runs submissions with its own settings (`problemtools/config/languages.yaml`), not with these scripts.
+`pyjudge problem check` and the upload's verification use problemtools, which compiles and runs submissions with its own settings (`problemtools/config/languages.yaml`), not with these scripts.
 So a jury solution can pass locally and behave differently on DOMjudge, for example: `DOMJUDGE` is not defined locally, Python asserts are executed locally but not on the judge, and the C/C++ flags differ.
 
 ## Open questions for the owner

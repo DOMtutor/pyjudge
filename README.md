@@ -11,7 +11,7 @@ It is the core of **DOMtutor**, a setup for using DOMjudge in teaching.
 |-----------|-------|---------|
 | Library | `pydomjudge.model`, `pydomjudge.database` | Pydantic models for contests, users, teams, settings; SQL layer that creates or updates them in DOMjudge |
 | Problem repository | `pydomjudge.repository` | Reads problems in the [Kattis problem package format](https://www.kattis.com/problem-package-format/) (via `problemtools`), with extensions for seeded test data generation |
-| CLI tools | `dt_judge_upload`, `dt_judge_export`, `dt_kattis_*`, ... | Day-to-day operations, see [docs/usage.md](docs/usage.md) |
+| Command line | `pyjudge upload`, `pyjudge export`, `pyjudge problem`, ... | Day-to-day operations, see [docs/usage.md](docs/usage.md) |
 | Statistics | `pydomjudge.evaluate` | Aggregate and plot submission data of exported contests |
 | Web tools | `pydomjudge.tools` | Fuzzer (find failing inputs for a submission) and self-service registration |
 | Watcher | `tools/watcher` | Standalone daemon that sends notifications on judgehost outages and new clarifications |
@@ -29,10 +29,10 @@ git clone --recurse-submodules git@github.com:DOMtutor/pyjudge.git && cd pyjudge
 (cd libs/problemtools && make)      # builds checktestdata, needs automake g++ libboost-dev libgmp-dev
 uv sync
 cd examples                         # edit db.yml to match your DOMjudge database
-uv run dt_judge_upload settings
-uv run dt_judge_upload users users.json
+uv run pyjudge upload settings
+uv run pyjudge upload users users.json
 uv run python script.py --pretty -O contest.json contest   # contest starting in an hour
-uv run dt_judge_upload contest contest.json
+uv run pyjudge upload contest contest.json
 ```
 
 ## Documentation

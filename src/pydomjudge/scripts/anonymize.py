@@ -11,10 +11,8 @@ import pydantic
 from pydomjudge.database import ContestDataExport, TeamDto, UserDto
 from pydomjudge.exc import (
     InvalidFileFormatError,
-    error_handler_wrapper,
     validation_problems,
 )
-from pydomjudge.scripts import _cli
 from pydomjudge.util import default_wordlist, read_str_from, write_str_to
 
 
@@ -120,23 +118,4 @@ def command_contest(args: argparse.Namespace) -> None:
     write_str_to(anonymize(contest).model_dump_json(), destination)
 
 
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser("Anonymize exported contest data")
-
-    subparsers = parser.add_subparsers(help="Help for commands", required=True)
-    contest_data_parser = subparsers.add_parser("contest", help="Anonymize a contest")
-    contest_data_parser.add_argument(
-        "source", help="The contest export (from dt_judge_export)", type=pathlib.Path
-    )
-    contest_data_parser.add_argument(
-        "destination",
-        help="Destination file (default: stdout if it is a pipe)",
-        type=pathlib.Path,
-        nargs="?",
-    )
-    contest_data_parser.set_defaults(func=command_contest)
-
-    arguments = parser.parse_args()
-    _cli.configure_logging(arguments)
-    arguments.func(arguments)
+run = command_contest
