@@ -148,45 +148,6 @@ def write_str_to(data: str, destination: pathlib.Path | None, write_to_terminal=
                 f.write(data)
 
 
-def rasterize_pdf(
-    source: pathlib.Path,
-    destination: pathlib.Path,
-    working_directory: pathlib.Path | None = None,
-    super_sampling: float = 4,
-):
-    from pypdf import PdfReader, PdfWriter
-
-    if working_directory is None:
-        working_directory = source.parent
-
-    metadata = PdfReader(source).metadata
-
-    compressed_pdf = working_directory / f"{source.name}.rasterized.pdf"
-    subprocess.run(
-        [
-            "gs",
-            "-sDEVICE=pdfimage24",
-            "-dCompatibilityLevel=1.4",
-            "-dPDFSETTINGS=/ebook",
-            "-dNOPAUSE",
-            "-dQUIET",
-            "-dBATCH",
-            f"-r{int(300 * super_sampling)}",
-            f"-dDownScaleFactor={super_sampling}",
-            f"-sOutputFile={compressed_pdf.absolute()}",
-            source,
-        ],
-        timeout=60,
-        check=True,
-        cwd=working_directory,
-    )
-
-    output_writer = PdfWriter(clone_from=compressed_pdf)
-    output_writer.metadata = metadata
-    with destination.open("wb") as f:
-        output_writer.write(f)
-
-
 @contextmanager
 def open_file_or_stdout(filename: str | None, mode="w", encoding="utf-8"):
     if filename is None or filename == "-":

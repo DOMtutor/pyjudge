@@ -174,7 +174,7 @@ Besides the Kattis fields, pydomjudge reads:
 
 ### Seeded test data
 
-Large inputs are not stored but generated: `data/secret/<name>.seed` holds the generator parameters (lines, `#` comments stripped), `generators/generator.py` (or a single `*Generator.java`) reads them on stdin and prints the input. pydomjudge generates `<name>.in` when the seed or generator is newer, and `<name>.ans` by running the reference solution (a submission named `reference_*`, otherwise the first accepted one).
+Large inputs are not stored but generated: `data/secret/<name>.seed` holds the generator parameters (lines, `#` comments stripped), `generators/generator.py` (or a single `*Generator.java`) reads them on stdin and prints the input; Python generators run with the interpreter of pydomjudge, so they can use its dependencies (e.g. `numpy`). pydomjudge generates `<name>.in` when the seed or generator is newer, and `<name>.ans` by running the reference solution (a submission named `reference_*`, otherwise the first accepted one).
 Generated `.in` files should be ignored in git; `examples/.gitignore` shows the pattern.
 Names starting with `tiny_`, `small_`, `medium_`, `large_`, `huge_` are expected to have seeds and determine the test case order in DOMjudge.
 
