@@ -30,13 +30,20 @@ def _broken_instance(
     return path
 
 
-def test_validation_errors_name_file_and_location(examples_dir, tmp_path):
+def test_validation_errors_name_file_and_location(examples_dir, tmp_path, monkeypatch):
     path = _broken_instance(examples_dir, tmp_path)
     with pytest.raises(InvalidFileFormatError) as error:
         _cli.load_model(path, JudgeInstance)
     lines = str(error.value).splitlines()
-    assert lines[0].startswith(f"{path}: base_time: Input should be a valid number")
-    assert lines[1].startswith(f"{path}: team_categories[0].order: ")
+    # the full path once, the problems below it
+    assert lines[0] == f"{path}: invalid instance settings"
+    assert lines[1].startswith("  base_time: Input should be a valid number")
+    assert lines[2].startswith("  team_categories[0].order: ")
+    # relative to the working directory, if the file is inside it
+    monkeypatch.chdir(tmp_path)
+    assert (
+        str(error.value).splitlines()[0] == "instance.json: invalid instance settings"
+    )
 
 
 def test_invalid_json_names_position(tmp_path):

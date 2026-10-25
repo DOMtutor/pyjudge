@@ -14,11 +14,19 @@ Everything runs through one command, `pyjudge`, installed with the package (`uv 
 | `pyjudge serve fuzzer\|selfservice` | Web tools, see [tools.md](tools.md) |
 
 `pyjudge --help` and `pyjudge <command> --help` list the options.
-Every command accepts `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`), before or after the command name, like the shared options `--db`, `--repository` and `--instance`.
+Every command accepts `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`); these and the shared options `--db`, `--repository` and `--instance` can be given anywhere on the command line (`pyjudge --db x upload settings` and `pyjudge upload settings --db x` are the same).
 
 Shell completion (commands, options, problem keys, JSON files) comes with `argcomplete`; enable it with `eval "$(register-python-argcomplete pyjudge)"` in `~/.bashrc` or `~/.zshrc`.
 
-Errors end the tool with exit code 1 and a short message; problems in a file are reported as `file: location: message` lines (e.g. `instance.json: team_categories[0].order: Input should be a valid integer`).
+Errors end the command with exit code 1 and a short message.
+Problems in a file are listed below its name, for example
+
+```
+instance.json: invalid instance settings
+  base_time: Input should be a valid number, unable to parse string as a number
+  team_categories[0].order: Input should be a valid integer
+```
+
 `--debug` adds the traceback.
 
 ## Configuration files

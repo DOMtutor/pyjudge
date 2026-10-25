@@ -22,17 +22,37 @@ class InconsistentDataError(PyJudgeError):
     pass
 
 
-class InvalidFileFormatError(PyJudgeError):
-    """A file that cannot be read as what it should be; one problem per line."""
+def display_path(path: pathlib.Path) -> str:
+    """A path as shown to the user: relative to the working directory if it is
+    at most two levels above, else as given."""
+    try:
+        relative = path.resolve().relative_to(
+            pathlib.Path.cwd().resolve(), walk_up=True
+        )
+    except ValueError:  # e.g. on another drive
+        return str(path)
+    if relative.parts[:3].count("..") <= 2:
+        return str(relative)
+    return str(path)
 
-    def __init__(self, source: pathlib.Path | None, *problems: str):
+
+class InvalidFileFormatError(PyJudgeError):
+    """A file that cannot be read as what it should be. One problem is shown in
+    one line, several below a header line."""
+
+    def __init__(self, source: pathlib.Path | None, *problems: str, what: str = "file"):
         super().__init__(*problems)
         self.source = source
         self.problems = problems
+        self.what = what
 
     def __str__(self):
-        prefix = f"{self.source}: " if self.source is not None else ""
-        return "\n".join(f"{prefix}{problem}" for problem in self.problems)
+        name = display_path(self.source) if self.source is not None else self.what
+        if len(self.problems) == 1:
+            return f"{name}: {self.problems[0]}"
+        lines = [f"{name}: invalid {self.what}"]
+        lines += [f"  {problem}" for problem in self.problems]
+        return "\n".join(lines)
 
 
 class ProblemVerificationError(PyJudgeError):

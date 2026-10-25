@@ -26,7 +26,6 @@ def _leaf(
     options: Options | None = None,
     *,
     nested: bool,
-    from_group: bool = False,
     database: bool = False,
     repository: bool = False,
     instance: bool = False,
@@ -34,16 +33,19 @@ def _leaf(
     **defaults,
 ) -> argparse.ArgumentParser:
     """A command: its options, the shared ones, and the function that runs it
-    ("module:function"). Options an enclosing parser has as well (logging when
-    nested, the shared ones when from_group) are suppressed here, so they work
-    before and after the command name without overwriting each other."""
+    ("module:function").
+
+    The shared options (logging, --db, --repository, --instance) have their
+    defaults only in the outermost parser; nested parsers add them with
+    argparse.SUPPRESS, so that a value given at any level survives (argparse
+    copies every attribute a subparser sets onto the result)."""
     _cli.add_logging_options(parser, suppress=nested)
     _cli.add_shared_options(
         parser,
         database=database,
         repository=repository,
         instance=instance,
-        suppress=from_group,
+        suppress=nested,
     )
     if problem_filters:
         _cli.add_shared_options(parser, problem_filters=True)
@@ -141,8 +143,10 @@ def _upload_users_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _upload(parser: argparse.ArgumentParser) -> None:
-    _cli.add_shared_options(parser, database=True, repository=True, instance=True)
+def _upload(parser: argparse.ArgumentParser, *, nested: bool) -> None:
+    _cli.add_shared_options(
+        parser, database=True, repository=True, instance=True, suppress=nested
+    )
     commands = _subcommands(parser, "upload_command")
     run = "pydomjudge.scripts.upload:run"
     for name, help, options in [
@@ -170,7 +174,6 @@ def _upload(parser: argparse.ArgumentParser) -> None:
             run,
             options,
             nested=True,
-            from_group=True,
             database=True,
             repository=True,
             instance=True,
@@ -189,8 +192,8 @@ def _destination(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _export(parser: argparse.ArgumentParser) -> None:
-    _cli.add_shared_options(parser, database=True)
+def _export(parser: argparse.ArgumentParser, *, nested: bool) -> None:
+    _cli.add_shared_options(parser, database=True, suppress=nested)
     commands = _subcommands(parser, "export_command")
     for name, help in [
         ("contest", "Everything about a contest: teams, submissions, clarifications"),
@@ -206,7 +209,6 @@ def _export(parser: argparse.ArgumentParser) -> None:
             "pydomjudge.scripts.export:run",
             options,
             nested=True,
-            from_group=True,
             database=True,
         )
 
@@ -259,8 +261,8 @@ def _seed_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--count", required=True, type=int, help="Number of files")
 
 
-def _problem(parser: argparse.ArgumentParser) -> None:
-    _cli.add_shared_options(parser, repository=True)
+def _problem(parser: argparse.ArgumentParser, *, nested: bool) -> None:
+    _cli.add_shared_options(parser, repository=True, suppress=nested)
     commands = _subcommands(parser, "problem_command")
     for name, help, run, options, filters in [
         (
@@ -304,7 +306,6 @@ def _problem(parser: argparse.ArgumentParser) -> None:
             run,
             options,
             nested=True,
-            from_group=True,
             repository=True,
             problem_filters=filters,
         )
@@ -365,6 +366,8 @@ def build_parser(prog: str = "pyjudge") -> argparse.ArgumentParser:
         package_version = "unknown"
     parser.add_argument("--version", action="version", version=package_version)
     _cli.add_logging_options(parser)
+    # Their defaults live here, so that they can be given anywhere on the line
+    _cli.add_shared_options(parser, database=True, repository=True, instance=True)
     commands = _subcommands(parser, "command")
 
     def group(name: str, help: str) -> argparse.ArgumentParser:
@@ -372,8 +375,12 @@ def build_parser(prog: str = "pyjudge") -> argparse.ArgumentParser:
         _cli.add_logging_options(sub, suppress=True)
         return sub
 
-    _upload(group("upload", "Synchronise files into the DOMjudge database"))
-    _export(group("export", "Export contest data from the DOMjudge database"))
+    _upload(
+        group("upload", "Synchronise files into the DOMjudge database"), nested=True
+    )
+    _export(
+        group("export", "Export contest data from the DOMjudge database"), nested=True
+    )
     help = "Replace names and times in a contest export by random ones"
     _leaf(
         commands.add_parser("anonymize", help=help, description=help),
@@ -381,7 +388,7 @@ def build_parser(prog: str = "pyjudge") -> argparse.ArgumentParser:
         _anonymize_options,
         nested=True,
     )
-    _problem(group("problem", "Work with the problems of the repository"))
+    _problem(group("problem", "Work with the problems of the repository"), nested=True)
     help = "Create pyjudge.yaml, db.yml and instance.json here"
     _leaf(
         commands.add_parser("init", help=help, description=help),

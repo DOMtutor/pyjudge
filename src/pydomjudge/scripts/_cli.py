@@ -14,6 +14,7 @@ from pydomjudge.exc import (
     ConfigurationError,
     InvalidFileFormatError,
     UnlikelyInstructionError,
+    display_path,
     validation_problems,
 )
 from pydomjudge.model import Contest, JudgeInstance, SystemCategory
@@ -221,8 +222,19 @@ def load_database(args: argparse.Namespace) -> Database:
     try:
         config = _config.DatabaseConfig.model_validate(data)
     except pydantic.ValidationError as e:
-        raise InvalidFileFormatError(path, *validation_problems(e)) from e
+        raise InvalidFileFormatError(
+            path, *validation_problems(e), what="database configuration"
+        ) from e
     return Database(**config.connection(path))
+
+
+# What the files read with load_model are, for messages
+FILE_KINDS = {
+    "JudgeInstance": "instance settings",
+    "Contest": "contest",
+    "UsersDescription": "users file",
+    "ContestDataExport": "contest export",
+}
 
 
 def load_model[M: pydantic.BaseModel](
@@ -232,11 +244,15 @@ def load_model[M: pydantic.BaseModel](
     try:
         text = path.read_text()
     except OSError as e:
-        raise ConfigurationError(f"{path}: {e.strerror}") from e
+        raise ConfigurationError(f"{display_path(path)}: {e.strerror}") from e
     try:
         return model.model_validate_json(text, context=context)
     except pydantic.ValidationError as e:
-        raise InvalidFileFormatError(path, *validation_problems(e)) from e
+        raise InvalidFileFormatError(
+            path,
+            *validation_problems(e),
+            what=FILE_KINDS.get(model.__name__, "file"),
+        ) from e
 
 
 def load_repository(args: argparse.Namespace) -> "Repository":

@@ -90,7 +90,9 @@ def read_file(path: pathlib.Path) -> Layer:
     try:
         return Layer(path, ConfigFile.model_validate(data))
     except pydantic.ValidationError as e:
-        raise InvalidFileFormatError(path, *validation_problems(e)) from e
+        raise InvalidFileFormatError(
+            path, *validation_problems(e), what="pyjudge configuration"
+        ) from e
 
 
 def find_project_file(start: pathlib.Path) -> pathlib.Path | None:

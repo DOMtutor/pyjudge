@@ -114,7 +114,9 @@ def command_contest(args: argparse.Namespace) -> None:
     try:
         contest = ContestDataExport.model_validate_json(read_str_from(args.source))
     except pydantic.ValidationError as e:
-        raise InvalidFileFormatError(args.source, *validation_problems(e)) from e
+        raise InvalidFileFormatError(
+            args.source, *validation_problems(e), what="contest export"
+        ) from e
     write_str_to(anonymize(contest).model_dump_json(), destination)
 
 

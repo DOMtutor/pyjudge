@@ -50,6 +50,7 @@ def test_building_the_parser_imports_nothing_heavy():
 @pytest.mark.parametrize(
     "argv",
     [
+        ["--db", "x.yml", "upload", "settings"],
         ["upload", "--db", "x.yml", "settings"],
         ["upload", "settings", "--db", "x.yml"],
     ],
