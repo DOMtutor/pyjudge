@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from pydomjudge.model import PydanticTestcaseVerdict, PydanticVerdict
+from pydomjudge.model import PydanticVerdict
 
 
 def encode_b85(v: bytes) -> str:
@@ -109,7 +109,7 @@ class TeamCategoryDto(BaseModel, frozen=True):
 
 class TestcaseResultDto(BaseModel, frozen=True):
     runtime: float
-    verdict: PydanticTestcaseVerdict
+    verdict: PydanticVerdict
     is_sample: bool = Field(serialization_alias="sample")
     test_name: str = Field(serialization_alias="name")
 

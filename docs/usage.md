@@ -30,7 +30,7 @@ Default location: `./instance.json`; override with `--instance PATH`.
 |-------|---------|
 | `identifier` | Free-form name of this judge instance |
 | `settings.judging` | Memory, output and script limits, time overshoot, lazy evaluation |
-| `settings.scoring` | Penalty time and verdict priorities |
+| `settings.scoring` | Penalty time and verdict priorities (higher wins when test cases disagree), keyed by DOMjudge's result strings: `correct`, `compiler-error`, `timelimit`, `run-error`, `memory-limit`, `output-limit`, `no-output`, `wrong-answer` |
 | `settings.display` | Scoreboard and team-interface display options |
 | `settings.clarification` | Canned clarification answers |
 | `base_time` | Base time limit in seconds. A problem's time limit is `base_time × time_multiplier` from its `problem.yaml`, rounded to 0.1 s |
@@ -106,6 +106,7 @@ They are judged like any other submission, which immediately shows whether a pro
 The contest is selected by its short name (`short_name` in `contest.json`), so the export also works on contests that were not created with pydomjudge.
 Output is JSON (`.gz` suffix compresses).
 Without `-d`, output goes to stdout only if it is a pipe.
+Verdicts use DOMjudge's result strings (see `settings.scoring` above).
 The export is the input for `pydomjudge.evaluate` (statistics and plots) and for grading scripts.
 
 ## Working with problems: `dt_kattis_*`

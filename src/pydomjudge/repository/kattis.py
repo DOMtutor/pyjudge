@@ -31,9 +31,9 @@ from pydomjudge.model import (
     ProblemLimits,
     ProblemLoader,
     ProblemTestCase,
-    SubmissionVerdict,
     SystemCategory,
     Team,
+    Verdict,
     get_md5,
 )
 from pydomjudge.util import link_or_copy, rasterize_pdf
@@ -152,16 +152,16 @@ class RepositoryAuthor(BaseModel):
 
 class JurySubmission(JuryProblemSubmission):
     EXPECTED_RESULTS = {
-        "accepted": {SubmissionVerdict.CORRECT},
-        "too_slow": {SubmissionVerdict.TIME_LIMIT},
-        "time_limit_exceeded": {SubmissionVerdict.TIME_LIMIT},
-        "timelimit_exceeded": {SubmissionVerdict.TIME_LIMIT},
-        "slow_input": {SubmissionVerdict.CORRECT, SubmissionVerdict.TIME_LIMIT},
-        "slow": {SubmissionVerdict.CORRECT, SubmissionVerdict.TIME_LIMIT},
-        "run_time_error": {SubmissionVerdict.RUN_ERROR},
-        "runtime_error": {SubmissionVerdict.RUN_ERROR},
-        "wrong_answer": {SubmissionVerdict.WRONG_ANSWER},
-        "compile_error": {SubmissionVerdict.COMPILER_ERROR},
+        "accepted": {Verdict.CORRECT},
+        "too_slow": {Verdict.TIME_LIMIT},
+        "time_limit_exceeded": {Verdict.TIME_LIMIT},
+        "timelimit_exceeded": {Verdict.TIME_LIMIT},
+        "slow_input": {Verdict.CORRECT, Verdict.TIME_LIMIT},
+        "slow": {Verdict.CORRECT, Verdict.TIME_LIMIT},
+        "run_time_error": {Verdict.RUN_ERROR},
+        "runtime_error": {Verdict.RUN_ERROR},
+        "wrong_answer": {Verdict.WRONG_ANSWER},
+        "compile_error": {Verdict.COMPILER_ERROR},
     }
 
     def __init__(self, path: pathlib.Path, repository: "Repository"):
@@ -204,7 +204,7 @@ class JurySubmission(JuryProblemSubmission):
         return self.path.parent.name
 
     @property
-    def expected_results(self) -> set[SubmissionVerdict]:
+    def expected_results(self) -> set[Verdict]:
         return JurySubmission.EXPECTED_RESULTS[self.category]
 
     @property

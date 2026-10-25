@@ -1,20 +1,20 @@
 import datetime
+import json
 from zoneinfo import ZoneInfo
 
 import bcrypt
 import pytest
 from pydantic import ValidationError
 
-import pydomjudge.model as model
 from pydomjudge.model import (
     Contest,
     ContestProblem,
     DefaultCategory,
     ScoringSettings,
-    SubmissionVerdict,
     Team,
     User,
     UserRole,
+    Verdict,
 )
 
 TZ = ZoneInfo("Europe/Berlin")
@@ -65,28 +65,50 @@ def test_contest_is_running():
     assert not contest.is_running(contest.end_time + datetime.timedelta(seconds=1))
 
 
-@pytest.mark.parametrize("verdict", list(SubmissionVerdict))
-def test_submission_verdict_string_roundtrip(verdict: SubmissionVerdict):
-    assert SubmissionVerdict.from_string(str(verdict)) is verdict
-    assert (
-        SubmissionVerdict.parse_from_expected_result(verdict.expected_result_key())
-        is verdict
-    )
+@pytest.mark.parametrize("verdict", list(Verdict))
+def test_verdict_string_roundtrip(verdict: Verdict):
+    assert Verdict.parse(verdict.value) is verdict
+    assert Verdict.parse(verdict.expected_result_key()) is verdict
+    assert verdict.expected_result_key() == verdict.value.upper()
 
 
-@pytest.mark.parametrize("verdict", list(model.TestcaseVerdict))
-def test_testcase_verdict_string_roundtrip(verdict: model.TestcaseVerdict):
-    assert model.TestcaseVerdict.from_string(str(verdict)) is verdict
+def test_verdict_uses_domjudge_spelling():
+    # etc/judgehost-static.php.in and SubmissionService::PROBLEM_RESULT_REMAP
+    assert Verdict.TIME_LIMIT == "timelimit"
+    assert Verdict.RUN_ERROR.expected_result_key() == "RUN-ERROR"
+    assert Verdict.COMPILER_ERROR.expected_result_key() == "COMPILER-ERROR"
+
+
+@pytest.mark.parametrize(
+    ("text", "verdict"),
+    [
+        # expected_results upper-case DOMjudge's result strings
+        ("TIMELIMIT", Verdict.TIME_LIMIT),
+        ("RUN-ERROR", Verdict.RUN_ERROR),
+        ("WRONG-ANSWER", Verdict.WRONG_ANSWER),
+        (" Correct ", Verdict.CORRECT),
+    ],
+)
+def test_verdict_parses_domjudge_strings_case_insensitively(
+    text: str, verdict: Verdict
+):
+    assert Verdict.parse(text) is verdict
+
+
+@pytest.mark.parametrize("text", ["presentation-error", "AC", ""])
+def test_verdict_rejects_unknown(text: str):
+    with pytest.raises(ValueError, match="Unknown verdict"):
+        Verdict.parse(text)
 
 
 def test_scoring_settings_require_all_verdicts():
     with pytest.raises(ValidationError, match="Missing priorities"):
-        ScoringSettings(result_priority={SubmissionVerdict.CORRECT: 1})
+        ScoringSettings(result_priority={Verdict.CORRECT: 1})
 
 
 def test_scoring_settings_json_uses_verdict_strings():
     dumped = ScoringSettings().model_dump_json()
-    assert '"wrong-answer"' in dumped
+    assert set(json.loads(dumped)["result_priority"]) == {v.value for v in Verdict}
     assert ScoringSettings.model_validate_json(dumped) == ScoringSettings()
 
 

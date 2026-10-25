@@ -17,13 +17,12 @@
     "scoring": {
       "penalty_time": 600.0,
       "result_priority": {
-        "time-limit": 70,
+        "timelimit": 70,
         "memory-limit": 95,
         "output-limit": 90,
         "run-error": 85,
         "wrong-answer": 80,
         "no-output": 99,
-        "presentation-error": 98,
         "compiler-error": 100,
         "correct": 1
       }
