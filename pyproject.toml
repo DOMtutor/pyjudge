@@ -27,7 +27,6 @@ dependencies = [
   "python-dateutil>=2.9",
   "tzlocal>=5",
   "problemtools",
-  "pypdf>=5.3",
   "bcrypt>=4",
   "chardet>=5",
   "pydantic>=2.12",
@@ -76,7 +75,6 @@ where = ["src"]
 "pydomjudge.repository.runscript" = ["**"]
 "pydomjudge.repository.compiler" = ["*/**"]
 "pydomjudge.repository.checker" = ["*/**"]
-"pydomjudge.repository.compare" = ["*/**"]
 "pydomjudge.tools.fuzzer" = ["static/**/*", "templates/**/*"]
 "pydomjudge.tools.selfservice" = ["static/**/*", "templates/**/*", "example_config.yaml"]
 

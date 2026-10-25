@@ -9,6 +9,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Collection, Mapping
 from importlib.resources.abc import Traversable
@@ -36,7 +37,7 @@ from pydomjudge.model import (
     Verdict,
     get_md5,
 )
-from pydomjudge.util import link_or_copy, rasterize_pdf
+from pydomjudge.util import link_or_copy
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class RepositoryTestCase(ProblemTestCase):
 
     @property
     def unique_name(self):
-        return f"{self.input_file.parent.name}/{self.input_file.name[:-3]}"
+        return f"{self.input_file.parent.name}/{self.input_file.stem}"
 
     def _load_image(self) -> bytes | None:
         if not self._image_path:
@@ -173,19 +174,18 @@ class JurySubmission(JuryProblemSubmission):
             self._extension = self._extension[1:]
         self._source_md5 = None
 
+    SHORT_NAMES = {
+        frozenset({Verdict.CORRECT}): "AC",
+        frozenset({Verdict.TIME_LIMIT}): "TLE",
+        frozenset({Verdict.CORRECT, Verdict.TIME_LIMIT}): "SL",
+        frozenset({Verdict.RUN_ERROR}): "RTE",
+        frozenset({Verdict.WRONG_ANSWER}): "WA",
+        frozenset({Verdict.COMPILER_ERROR}): "CE",
+    }
+
     @property
     def name(self) -> str:
-        short_category = {
-            "accepted": "AC",
-            "too_slow": "TLE",
-            "time_limit_exceeded": "TLE",
-            "timelimit_exceeded": "TLE",
-            "slow": "SL",
-            "run_time_error": "RTE",
-            "runtime_error": "RTE",
-            "wrong_answer": "WA",
-            "compile_error": "CE",
-        }[self.category]
+        short_category = JurySubmission.SHORT_NAMES[frozenset(self.expected_results)]
         return f"{short_category}/{self.file_name}"
 
     @property
@@ -205,6 +205,12 @@ class JurySubmission(JuryProblemSubmission):
 
     @property
     def expected_results(self) -> set[Verdict]:
+        if self.category not in JurySubmission.EXPECTED_RESULTS:
+            known = ", ".join(JurySubmission.EXPECTED_RESULTS)
+            raise KattisRepositoryError(
+                f"Unknown submission directory {self.category} of {self.path} "
+                f"(known: {known})"
+            )
         return JurySubmission.EXPECTED_RESULTS[self.category]
 
     @property
@@ -227,7 +233,7 @@ class JurySubmission(JuryProblemSubmission):
         try:
             source_code: str = source_bytes.decode(encoding="utf-8", errors="strict")
         except UnicodeDecodeError as e:
-            raise ValueError(f"Failed to decode {self.path}", e)
+            raise ValueError(f"Failed to decode {self.path}") from e
         if "\x00" in source_code:
             raise ValueError("NUL string in source code")
         return source_code
@@ -450,10 +456,14 @@ class RepositoryProblem(Problem):
         last_verified = self.directory / ".last_verified"
         if last_verified.exists() and not force:
             date = last_verified.stat().st_mtime
+            # Statement PDFs in build/ are created after verification and are
+            # not verified, so they must not invalidate the marker
             if all(
                 f.stat().st_mtime <= date
-                for f in self.directory.rglob("**/*")
+                for f in self.directory.rglob("*")
                 if f.is_file()
+                and f != last_verified
+                and f.relative_to(self.directory).parts[0] != "build"
             ):
                 self.log.debug("Skipping verification of already checked problem")
                 return
@@ -555,13 +565,7 @@ class RepositoryProblem(Problem):
                     raise ValueError(
                         f"Missing problem pdf for {self.name} -- probably a LaTeX error"
                     )
-                rasterize = False
-                if rasterize:
-                    final_pdf = directory / f"{self.name}.final.pdf"
-                    rasterize_pdf(build_pdf, final_pdf)
-                    shutil.copy(final_pdf, destination_pdf)
-                else:
-                    shutil.copy(build_pdf, destination_pdf)
+                shutil.copy(build_pdf, destination_pdf)
         return destination_pdf
 
     def problem_text(self, lang="en") -> tuple[bytes, str]:
@@ -584,8 +588,9 @@ class RepositoryProblem(Problem):
                     python_generator = file
 
         if python_generator is not None:
-            logging.debug("Using python generator %s", python_generator.name)
-            return python_generator.stat().st_mtime, ["python", python_generator]
+            self.log.debug("Using python generator %s", python_generator.name)
+            # The interpreter running pydomjudge: "python" may not exist
+            return python_generator.stat().st_mtime, [sys.executable, python_generator]
 
         java_files = list(generator_dir.glob("*.java"))
         generators = [file for file in java_files if file.stem.endswith("Generator")]
@@ -979,7 +984,7 @@ class Repository:
         return Repository._make_language(
             language_key,
             language_data,
-            Executable.get_directory_contents(base_directory),
+            Executable.get_directory_contents(language_directory),
         )
 
     @staticmethod
@@ -1067,11 +1072,6 @@ class Repository:
                 self.languages_by_extension[extension] = lang
         if not self.languages:
             log.warning("Repository at %s has no languages", base_path)
-
-        if (self.base_directory / "problemset.cls").exists():
-            self.problemset_class = self.base_directory / "problemset.cls"
-        else:
-            self.problemset_class = None
 
         self.problems = RepositoryProblems(self, base_path / "problems")
 

@@ -1,9 +1,17 @@
+import os
 import pathlib
+import shutil
 
 import pytest
 
 from pydomjudge.model import SystemCategory, Verdict
-from pydomjudge.repository.kattis import Repository, RepositoryProblem
+from pydomjudge.repository.kattis import (
+    JurySubmission,
+    KattisRepositoryError,
+    Repository,
+    RepositoryProblem,
+    RepositoryTestCase,
+)
 
 
 @pytest.fixture(scope="module")
@@ -71,3 +79,90 @@ def test_author_teams(repository: Repository):
     team = repository.get_team_of_author(author)
     assert team.category == SystemCategory.Author
     assert repository.get_team_of_author(None).key == "sol_author_unknown"
+
+
+@pytest.fixture
+def repository_copy(examples_dir, tmp_path: pathlib.Path) -> pathlib.Path:
+    """A writable copy of the example repository with only helloworld."""
+    base = tmp_path / "repository"
+    (base / "problems").mkdir(parents=True)
+    shutil.copy(examples_dir / "repository" / "config.yaml", base)
+    shutil.copytree(
+        examples_dir / "repository" / "problems" / "helloworld",
+        base / "problems" / "helloworld",
+        ignore=shutil.ignore_patterns("build", ".last_verified", "*.class"),
+    )
+    return base
+
+
+def test_every_submission_category_has_a_short_name():
+    for verdicts in JurySubmission.EXPECTED_RESULTS.values():
+        assert frozenset(verdicts) in JurySubmission.SHORT_NAMES
+
+
+def test_slow_input_submission_name(repository_copy: pathlib.Path):
+    directory = repository_copy / "problems" / "helloworld" / "submissions"
+    (directory / "slow_input").mkdir()
+    (directory / "slow_input" / "slow_tobias.py").write_text("print()\n")
+    (directory / "unexpected").mkdir()
+    (directory / "unexpected" / "x.py").write_text("print()\n")
+    problem = Repository(repository_copy).problems.load_problem("helloworld")
+    by_name = {s.file_name: s for s in problem.submissions}
+    slow = by_name["slow_tobias.py"]
+    assert slow.name == "SL/slow_tobias.py"
+    assert slow.expected_results == {Verdict.CORRECT, Verdict.TIME_LIMIT}
+    with pytest.raises(KattisRepositoryError, match="Unknown submission directory"):
+        _ = by_name["x.py"].expected_results
+
+
+def test_compiler_override_uses_language_directory(repository_copy: pathlib.Path):
+    for language in ["python", "c"]:
+        directory = repository_copy / "compiler" / language
+        directory.mkdir(parents=True)
+        (directory / "build").write_text(f"# build {language}\n")
+        (directory / "run").write_text(f"# run {language}\n")
+    repository = Repository(repository_copy)
+    python = repository.languages_by_extension["py"]
+    contents = {
+        tuple(file.relative_path): file.open().read()
+        for file in python.compile_script.contents
+    }
+    assert contents == {("build",): b"# build python\n", ("run",): b"# run python\n"}
+
+
+def test_testcase_unique_name(repository: Repository):
+    problem = repository.problems.load_problem("helloworld")
+    sample = RepositoryTestCase(problem.directory / "data" / "sample" / "1")
+    assert sample.unique_name == "sample/1"
+    assert sample.is_sample()
+
+
+def test_verification_marker_ignores_build_output(
+    repository_copy: pathlib.Path, monkeypatch
+):
+    import problemtools.run.limit
+
+    class WouldVerify(Exception):
+        pass
+
+    def would_verify(*_args, **_kwargs):
+        raise WouldVerify
+
+    monkeypatch.setattr(
+        problemtools.run.limit, "check_limit_capabilities", would_verify
+    )
+    problem = Repository(repository_copy).problems.load_problem("helloworld")
+    marker = problem.directory / ".last_verified"
+    marker.touch()
+    past = marker.stat().st_mtime - 10
+    for file in problem.directory.rglob("*"):
+        if file.is_file() and file != marker:
+            os.utime(file, (past, past))
+
+    (problem.directory / "build").mkdir(exist_ok=True)
+    (problem.directory / "build" / "problem.en.pdf").write_bytes(b"%PDF")
+    problem.check()  # statement output is newer, still verified
+
+    (problem.directory / "problem.yaml").touch()
+    with pytest.raises(WouldVerify):
+        problem.check()
