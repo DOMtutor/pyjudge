@@ -3,6 +3,7 @@
 import argparse
 import pathlib
 
+from pydomjudge.exc import display_path
 from pydomjudge.scripts import _config
 
 
@@ -27,12 +28,20 @@ def run_init(args: argparse.Namespace) -> None:
     )
 
 
+def _shown_path(path: pathlib.Path) -> str:
+    shown = display_path(path)
+    home = str(pathlib.Path.home())
+    return "~" + shown[len(home) :] if shown.startswith(home + "/") else shown
+
+
 def _show(value) -> str:
     if isinstance(value, _config.DatabaseConfig):
         password = (
             f"password from ${value.password_env}" if value.password_env else "password"
         )
         return f"{value.user}@{value.host}:{value.port}/{value.database} ({password})"
+    if isinstance(value, pathlib.Path):
+        return _shown_path(value)
     return str(value)
 
 
@@ -47,19 +56,27 @@ OPTIONS = {"database": "db", "repository": "repository", "instance": "instance"}
 
 
 def run_config(args: argparse.Namespace) -> None:
-    """Show the effective settings and where they come from."""
+    """Show the effective settings, grouped by where they come from."""
     layers = _config.layers()
-    print("Configuration files:")
+    print("Configuration files (the first one wins):")
     for layer in layers:
-        print(f"  {layer.path}")
+        print(f"  {_shown_path(layer.path)}")
     if not layers:
         print("  none (pyjudge init creates pyjudge.yaml)")
-    print()
+
+    by_source: dict[str, list[str]] = {}
     for name in _config.SETTINGS:
         option = OPTIONS.get(name)
         value, source = _config.lookup(
             name, getattr(args, option, None) if option else None
         )
-        shown = _show(value) if value is not None else f"(default: {DEFAULTS[name]})"
-        origin = "" if value is None else f"  [{source}]"
-        print(f"  {name:11s} {shown}{origin}")
+        if value is None:
+            heading, shown = "Defaults", DEFAULTS[name]
+        elif source == "command line":
+            heading, shown = "From the command line", _show(value)
+        else:
+            heading, shown = f"From {_shown_path(pathlib.Path(source))}", _show(value)
+        by_source.setdefault(heading, []).append(f"  {name:11s} {shown}")
+    for heading, lines in by_source.items():
+        print(f"\n{heading}:")
+        print("\n".join(lines))

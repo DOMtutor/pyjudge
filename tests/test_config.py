@@ -101,6 +101,10 @@ def test_init_and_config(tmp_path, monkeypatch, capsys):
     capsys.readouterr()
     commands.main(["config", "--instance", "x.json"])
     out = capsys.readouterr().out
-    assert str(tmp_path / "pyjudge.yaml") in out
-    assert "x.json  [command line]" in out
-    assert "contest     (default: none)" in out
+    assert out.splitlines()[:2] == [
+        "Configuration files (the first one wins):",
+        "  pyjudge.yaml",
+    ]
+    assert "From the command line:\n  instance    x.json\n" in out
+    assert "From pyjudge.yaml:\n  database    db.yml\n  repository  repository\n" in out
+    assert "Defaults:\n  contest     none" in out
