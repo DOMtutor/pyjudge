@@ -176,9 +176,12 @@ class AppConfig:
         secret_key = config.secret_key
         if config.secret_key_env:
             secret_key = os.environ.get(config.secret_key_env)
-            if secret_key is None:
+            if not secret_key:
                 raise InvalidFileFormatError(
-                    path, f"environment variable {config.secret_key_env} is not set"
+                    path,
+                    f"environment variable {config.secret_key_env} is not set or "
+                    "empty; generate a key with: "
+                    "python -c 'import secrets; print(secrets.token_urlsafe(32))'",
                 )
         if not secret_key:
             raise InvalidFileFormatError(
@@ -220,8 +223,18 @@ class Backend(Protocol):
 @functools.cache
 def _dummy_hash() -> str:
     # Compared against when the user does not exist, so that the answer takes
-    # about the same time either way
+    # about the same time either way; same cost as DOMjudge's and our hashes
     return User.hash_password("not a password")
+
+
+def _password_matches(password: str, stored: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode(), stored.encode())
+    except ValueError:
+        # Not a bcrypt hash (empty, or of another algorithm): no match, after
+        # as much work as a comparison
+        bcrypt.checkpw(password.encode(), _dummy_hash().encode())
+        return False
 
 
 class UserBackend:
@@ -273,7 +286,7 @@ class UserBackend:
         with self.db as db, db.transaction_cursor() as cursor:
             login = find_login(cursor, username)
             stored = (login.password_hash if login else None) or _dummy_hash()
-            matches = bcrypt.checkpw(current.encode(), stored.encode())
+            matches = _password_matches(current, stored)
             if (
                 login is None
                 or not matches

@@ -396,3 +396,17 @@ def test_selfservice_changes_password():
     assert _change_password(client, "carol", "new password").status_code == 429
     assert _change_password(client, "dave", "x").status_code == 429
     assert backend.passwords["carol"] == "new password"
+
+
+def test_selfservice_password_check_tolerates_foreign_hashes():
+    from pydomjudge.model import User
+    from pydomjudge.tools.selfservice._selfservice import _password_matches
+
+    stored = User.hash_password("secret")
+    assert stored.startswith("$2b$07$")
+    assert _password_matches("secret", stored)
+    # DOMjudge (PHP) writes $2y$, the same algorithm
+    assert _password_matches("secret", "$2y$" + stored[4:])
+    assert not _password_matches("wrong", stored)
+    for foreign in ("", "garbage", "$argon2id$v=19$m=65536,t=4,p=1$c2FsdA$aGFzaA"):
+        assert not _password_matches("secret", foreign)
