@@ -166,3 +166,8 @@ def test_verification_marker_ignores_build_output(
     (problem.directory / "problem.yaml").touch()
     with pytest.raises(WouldVerify):
         problem.check()
+
+
+def test_languages_in_stable_order(repository: Repository):
+    keys = [language.key for language in repository.languages]
+    assert keys == sorted(keys)

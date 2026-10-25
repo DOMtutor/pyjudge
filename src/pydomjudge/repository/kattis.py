@@ -1039,7 +1039,9 @@ class Repository:
             language_keys = set(language_settings)
 
         languages: list[Language] = []
-        for language_key in language_keys:
+        # Sorted, so that the languages (and executables) are always created in
+        # the same order
+        for language_key in sorted(language_keys):
             if language_key in merged_language_settings:
                 settings = merged_language_settings[language_key]
             else:
