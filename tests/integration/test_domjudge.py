@@ -405,3 +405,50 @@ def test_jury_solutions_judged_as_expected(
         ],
     )
     assert not failures, "\n".join(failures)
+
+
+def test_consistency_report_of_the_example(database: Database, uploaded: Contest):
+    from pydomjudge.database import check_consistency
+
+    assert check_consistency(database) == []
+
+
+def test_consistency_report_finds_broken_rows(database: Database, uploaded: Contest):
+    from pydomjudge.database import ERROR, WARNING, Finding, check_consistency
+
+    with database as db, db.transaction_cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO team (name, display_name, categoryid, externalid) "
+            "SELECT 'lonely', 'Lonely', categoryid, 'lonely' FROM team_category "
+            "WHERE externalid = 'participants'"
+        )
+        cursor.execute(
+            "INSERT INTO `user` (username, name, externalid, enabled) "
+            "VALUES ('teamless', 'Teamless', 'teamless', 1)"
+        )
+        user_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO userrole (userid, roleid) "
+            "SELECT %s, roleid FROM role WHERE role = 'team'",
+            (user_id,),
+        )
+    try:
+        findings = check_consistency(database)
+        assert (
+            Finding(
+                ERROR,
+                "user-without-team",
+                "User teamless has the team role but no team, so cannot submit",
+            )
+            in findings
+        )
+        assert (
+            Finding(WARNING, "team-without-users", "Team lonely has no users")
+            in findings
+        )
+        assert findings[0].severity == ERROR  # errors first
+    finally:
+        with database as db, db.transaction_cursor() as cursor:
+            cursor.execute("DELETE FROM `user` WHERE externalid = 'teamless'")
+            cursor.execute("DELETE FROM team WHERE externalid = 'lonely'")
+    assert check_consistency(database) == []

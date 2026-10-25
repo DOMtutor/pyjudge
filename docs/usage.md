@@ -6,6 +6,7 @@ Everything runs through one command, `pyjudge`, installed with the package (`uv 
 |---------|---------|
 | `pyjudge upload settings\|users\|contest\|problem\|password\|cleanup` | Synchronise files into the DOMjudge database |
 | `pyjudge export contest\|submissions` | Export contest data |
+| `pyjudge check` | Report inconsistencies in the database |
 | `pyjudge anonymize` | Anonymize an export |
 | `pyjudge problem find\|check\|statements\|samples\|seed` | Work with the problem repository, no database needed |
 | `pyjudge make-admin` | Write `admin.json` with one admin user |
@@ -141,6 +142,18 @@ A failed problem verification stops the upload before the database is touched, w
 
 Jury solutions are uploaded as submissions of synthetic teams: one "Sample Solution <language>" team per language (category `solution`) for accepted solutions, and one "Author <name>" team (category `author`) per matched author.
 They are judged like any other submission, which immediately shows whether a problem behaves as expected.
+
+## Checking: `pyjudge check`
+
+A read-only report of how users, teams, categories, problems and contests fit together, as a complement to DOMjudge's own check in the jury interface (*Configuration checker*), which validates entities one by one:
+
+| Severity | Finding |
+|----------|---------|
+| error | a user with the team role has no team (cannot submit); a contest problem has no test cases |
+| warning | a team (outside the jury categories) has no users or no category; a language is not judged but submissions wait for it; a jury solution got another verdict than its folder expects; an active contest has no problems or is open to nobody |
+| info | a category has no teams; a problem is in no contest |
+
+The exit code is 1 if there are errors or warnings, so the command can run in scripts; `--json` prints the findings as JSON.
 
 ## Exporting: `pyjudge export`
 

@@ -8,6 +8,13 @@ exports) works by names (contest short name, team name, login), so it also
 works on databases that were not created by pydomjudge.
 """
 
+from ._check import (
+    ERROR as ERROR,
+    INFO as INFO,
+    WARNING as WARNING,
+    Finding as Finding,
+    check_consistency as check_consistency,
+)
 from ._contest import (
     create_or_update_contest as create_or_update_contest,
     create_or_update_contest_problems as create_or_update_contest_problems,
