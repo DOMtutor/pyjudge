@@ -27,8 +27,9 @@ Do not expose it on a public host; bind it to `127.0.0.1:3306:3306` or run `pydo
 
 More judgehosts: duplicate the `judgehost` service with a different `container_name`, `hostname` and `DAEMON_ID`.
 
-The domserver image passes the host name without port to DOMjudge, so its redirects (for example to the login page) would lose a port like 12345. The small start script in the compose file (`domserver-public-port`) adds `DOMJUDGE_PUBLIC_PORT`, which defaults to `DOMJUDGE_PORT`.
+The domserver image's nginx passes the host name without port to DOMjudge, so its redirects (for example to the login page) lose a port like 12345. The DOMtutor domserver image has a start script for this (`45-public-port.sh` in domjudge-packaging) that adds `DOMJUDGE_PUBLIC_PORT`, which the compose file sets to `DOMJUDGE_PORT`.
 Behind a reverse proxy on the standard ports, set `DOMJUDGE_PUBLIC_PORT=` (empty) in `.env`.
+The DOMtutor images published on Docker Hub are currently identical to the official 9.0.1 images, so the script arrives with their next build; until then, and with the official image, use port 80 or a reverse proxy, or add the start script as a compose `configs:` entry as `tests/integration/compose.yml` does.
 
 ## Self-service
 
@@ -64,9 +65,7 @@ With GRUB:
 5. Verify with `cat /proc/cmdline`
 
 If you get `missing cgroup hierarchy prefix`, the system runs hybrid cgroups; add `cgroup_no_v1=all` (or, for old DOMjudge versions, `systemd.unified_cgroup_hierarchy=0`).
-Check `cat /proc/self/cgroup`: any line ending in `:/` besides the `0::` one makes the judgehost refuse to start.
-Some software mounts a cgroup-v1 hierarchy at runtime even on a pure cgroup-v2 system, notably the Mullvad VPN app, which mounts `net_cls` at `/sys/fs/cgroup/net_cls` for split tunnelling; neither `cgroup: private` nor leaving out the `/sys/fs/cgroup` volume helps.
-Stop such software (or `sudo umount /sys/fs/cgroup/net_cls`) before starting the judgehost.
+Check `cat /proc/self/cgroup`: any line besides the `0::` one makes the judgehost refuse to start; software that mounts a cgroup-v1 hierarchy at runtime (some VPN clients do, for split tunnelling) has to be stopped first.
 
 ### No new privileges
 
