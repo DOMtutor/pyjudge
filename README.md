@@ -56,7 +56,16 @@ uv run ty check
 `pre-commit install` enables the ruff hooks.
 CI runs the same steps on every push and pull request.
 `tests/integration/run.sh` uploads the examples into a throwaway DOMjudge (Docker) and checks that its jury, team and public pages work with the data; `JUDGE=1` also judges the jury solutions and a hello world per language.
-Open points and known issues are collected in [TODO.md](TODO.md) and [docs/review.md](docs/review.md).
+Open points are in [TODO.md](TODO.md), changes in [CHANGELOG.md](CHANGELOG.md).
+
+## Design
+
+* **Keys, not names.**
+  The writer (`pydomjudge.database`) identifies every object by its key, stored as DOMjudge's `externalid`, so names and all other properties can change and are synchronised on the next upload.
+  The reader (exports, lookups) works by names (contest short name, team name, login), so it also works on databases not created by pydomjudge.
+* **problemtools behind one module.**
+  Verification, statement PDFs and the fuzzer's runs go through `pydomjudge.repository._problemtools`, the only module that touches problemtools (including some of its internals); its tests fail when a problemtools update changes them.
+* **Compile scripts** in `repository/compiler/` are DOMjudge 9.0.1's with documented deviations; local verification compiles with problemtools' own settings instead, and that folder's README lists how the two differ.
 
 ## License
 
