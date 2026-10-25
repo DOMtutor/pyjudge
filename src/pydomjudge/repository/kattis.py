@@ -19,7 +19,7 @@ import problemtools.run
 import problemtools.verifyproblem
 import yaml
 from problemtools.run import BuildRun
-from pydantic import BaseModel, model_validator
+from pydantic import model_validator
 
 from pydomjudge.model import (
     Affiliation,
@@ -32,6 +32,7 @@ from pydomjudge.model import (
     ProblemLimits,
     ProblemLoader,
     ProblemTestCase,
+    SubmissionAuthor,
     SystemCategory,
     Team,
     Verdict,
@@ -125,9 +126,7 @@ class RepositoryTestCase(ProblemTestCase):
         return None
 
 
-class RepositoryAuthor(BaseModel):
-    key: str
-    name: str
+class RepositoryAuthor(SubmissionAuthor):
     patterns: list[re.Pattern]
     affiliation: Affiliation | None
 

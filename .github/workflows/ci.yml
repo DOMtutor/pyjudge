@@ -44,12 +44,12 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: uv sync --locked
+        # --all-packages: also the watcher (workspace member)
+        run: uv sync --locked --all-packages
       - name: Test
         run: uv run pytest
-      - name: Type check (informational)
+      - name: Type check
         run: uv run ty check
-        continue-on-error: true
 
   docker:
     runs-on: ubuntu-latest

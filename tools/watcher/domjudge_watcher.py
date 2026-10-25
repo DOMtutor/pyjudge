@@ -271,7 +271,7 @@ async def main(config_path: pathlib.Path):
         if not ap.add(url, tag=name):
             log.warning("Could not add channel: %s", name)
 
-    if not ap.servers:
+    if len(ap) == 0:
         log.warning("No valid notification channels configured.")
 
     watchers = []
