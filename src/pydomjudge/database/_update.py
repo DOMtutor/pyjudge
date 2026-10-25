@@ -1,36 +1,36 @@
-from dataclasses import dataclass
 import datetime
+import hashlib
+import itertools
 import json
+import logging
 import time
 import uuid
-import hashlib
-import logging
-
 from collections import defaultdict
-from typing import Collection, Mapping, Callable, Any
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass
+from typing import Any
 
-import itertools
-
+from pydomjudge.exc import ElementNotFoundError
 from pydomjudge.model import (
-    TeamCategory,
-    Team,
+    Affiliation,
+    Contest,
     Executable,
+    ExecutableType,
+    JudgeInstance,
+    JudgeSettings,
     Language,
     Problem,
-    ProblemTestCase,
-    ExecutableType,
-    JudgeSettings,
     ProblemSubmission,
-    Contest,
-    UserRole,
-    User,
-    Affiliation,
-    JudgeInstance,
-    SystemCategory,
+    ProblemTestCase,
     SubmissionVerdict,
+    SystemCategory,
+    Team,
+    TeamCategory,
+    User,
+    UserRole,
 )
-from ._db import DBCursor as Cursor, list_param, field_not_in_list, get_only
-from pydomjudge.exc import ElementNotFoundError
+
+from ._db import DBCursor as Cursor, field_not_in_list, get_only, list_param
 
 log = logging.getLogger(__name__)
 
@@ -1036,7 +1036,7 @@ def create_problem_submissions(
             f"submitid IN {list_param(existing_submissions)}",
             tuple(existing_submissions.keys()),
         )
-        for submission_id, file_id, file_name, file_md5 in cursor:
+        for submission_id, _file_id, file_name, file_md5 in cursor:
             files = submission_files[submission_id]
             if file_name in files:
                 raise ValueError(f"Duplicate file names for submission {submission_id}")
@@ -1058,8 +1058,8 @@ def create_problem_submissions(
         _,
         team_id,
         contest_id,
-        language_id,
-        expected_results,
+        _language_id,
+        _expected_results,
     ) in existing_submissions.items():
         file_names = submission_file_names.get(submission_id, tuple())
         if not file_names:

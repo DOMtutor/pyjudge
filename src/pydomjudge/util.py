@@ -5,8 +5,10 @@ import platform
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
-from typing import Any, Iterable, Sequence, TypeVar, Annotated
+from typing import Annotated, Any, TypeVar
+
 from pydantic import AfterValidator
 
 force_copy = platform.system() == "Windows"
@@ -97,10 +99,9 @@ def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
         invocation,
         cwd=latex_file.parent,
         stdin=None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         timeout=timeout,
-        universal_newlines=True,
+        text=True,
     )
     if process.returncode:
         logging.warning("Compilation of %s failed", latex_file.name)

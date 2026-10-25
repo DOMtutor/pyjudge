@@ -4,9 +4,9 @@ from zoneinfo import ZoneInfo
 
 from pydantic import (
     BaseModel,
-    model_validator,
     field_serializer,
     field_validator,
+    model_validator,
 )
 
 

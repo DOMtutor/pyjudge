@@ -1,8 +1,8 @@
 import abc
 import enum
 import pathlib
+from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Collection
 
 
 class ExecutableType(enum.StrEnum):

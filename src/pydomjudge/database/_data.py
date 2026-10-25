@@ -4,9 +4,9 @@ from typing import Annotated
 import chardet
 from pydantic import (
     BaseModel,
-    PlainSerializer,
     BeforeValidator,
     Field,
+    PlainSerializer,
     field_serializer,
     model_validator,
 )

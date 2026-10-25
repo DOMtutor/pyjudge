@@ -6,20 +6,20 @@ import bcrypt
 import tzlocal
 
 from pydomjudge.model import (
-    JudgeSettings,
-    User,
-    UserRole,
-    Team,
-    DefaultCategory,
-    SystemCategory,
     Affiliation,
+    ClarificationSettings,
     Contest,
     ContestProblem,
-    JudgeInstance,
-    ClarificationSettings,
+    DefaultCategory,
     DisplaySettings,
-    ScoringSettings,
+    JudgeInstance,
+    JudgeSettings,
     JudgingSettings,
+    ScoringSettings,
+    SystemCategory,
+    Team,
+    User,
+    UserRole,
 )
 from pydomjudge.scripts.upload import UsersDescription
 from pydomjudge.util import open_file_or_stdout

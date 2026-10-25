@@ -3,13 +3,13 @@ import logging
 
 from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import (
+    ClarificationSettings,
+    DefaultCategory,
+    DisplaySettings,
+    JudgeInstance,
     JudgeSettings,
     JudgingSettings,
     ScoringSettings,
-    DisplaySettings,
-    ClarificationSettings,
-    JudgeInstance,
-    DefaultCategory,
 )
 from pydomjudge.util import open_file_or_stdout
 

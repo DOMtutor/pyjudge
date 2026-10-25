@@ -1,18 +1,17 @@
 import argparse
 import logging
 import pathlib
-from typing import Optional
 
 from pydantic import BaseModel
 
 import pydomjudge.database as query
 import pydomjudge.scripts.db as db
-from pydomjudge.database import SubmissionDto, ContestDataExport, TeamDto
-from pydomjudge.exc import error_handler_wrapper, ElementNotFoundError
+import pydomjudge.scripts.util as util
+from pydomjudge.database import ContestDataExport, SubmissionDto, TeamDto
+from pydomjudge.exc import ElementNotFoundError, error_handler_wrapper
 from pydomjudge.model import SystemCategory
 from pydomjudge.scripts.db import Database
 from pydomjudge.util import write_str_to
-import pydomjudge.scripts.util as util
 
 log = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ def write_contest(
 
 
 def write_submission_files(
-    database: Database, contest_key: str, destination: Optional[pathlib.Path]
+    database: Database, contest_key: str, destination: pathlib.Path | None
 ):
     with database as connection:
         teams = query.find_teams(

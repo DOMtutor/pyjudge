@@ -1,8 +1,9 @@
+from collections.abc import Sequence
+
 from pydantic import BaseModel, Field, model_validator
-from typing import Sequence
 
 from ._team import TeamCategory
-from ._verdict import SubmissionVerdict, PydanticVerdict
+from ._verdict import PydanticVerdict, SubmissionVerdict
 
 
 class ScoringSettings(BaseModel):

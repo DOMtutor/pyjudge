@@ -6,15 +6,15 @@ from zoneinfo import ZoneInfo
 import dateutil
 
 from pydomjudge.model import (
-    JudgeSettings,
-    DefaultCategory,
+    ClarificationSettings,
     Contest,
     ContestProblem,
-    JudgeInstance,
-    ClarificationSettings,
+    DefaultCategory,
     DisplaySettings,
-    ScoringSettings,
+    JudgeInstance,
+    JudgeSettings,
     JudgingSettings,
+    ScoringSettings,
 )
 from pydomjudge.util import open_file_or_stdout
 

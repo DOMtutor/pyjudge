@@ -61,3 +61,17 @@ where = ["src"]
 "pydomjudge.repository.checker" = ["*/**"]
 "pydomjudge.repository" = ["languages.yml"]
 "pydomjudge" = ["default_wordlist.gz"]
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["libs", "examples/*/repository", "build"]
+
+[tool.ruff.lint]
+# E/F/W: pyflakes + pycodestyle, I: import order, UP: modern syntax, B: bugbear
+select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
+ignore = [
+  "B904", # raise ... from err: worth doing, but touches many lines; see docs/review.md
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pydomjudge"]
+combine-as-imports = true

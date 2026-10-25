@@ -2,11 +2,10 @@ import datetime
 import logging
 import math
 import pathlib
-from typing import List
 
 import matplotlib
-import matplotlib.ticker
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import numpy as np
 
 from pydomjudge.evaluate._statistics import ProblemStatistics, SummaryStatistics
@@ -138,7 +137,7 @@ class SummaryRenderer:
     def __init__(self, data: SummaryStatistics):
         self.data = data
 
-    def render_per_day(self, path: pathlib.Path, day_labels: List[str]):
+    def render_per_day(self, path: pathlib.Path, day_labels: list[str]):
         fig, ax = plt.subplots()
         per_day_x_axis = np.arange(len(day_labels))
         per_day_width = 0.25
@@ -193,7 +192,7 @@ class SummaryRenderer:
         with path.open(mode="wb") as f:
             plt.savefig(f, format="png", transparent=True)
 
-    def render_per_day_hour(self, path: pathlib.Path, day_labels: List[str]):
+    def render_per_day_hour(self, path: pathlib.Path, day_labels: list[str]):
         fig, ax = plt.subplots(figsize=(9, 3))
         im = ax.imshow(self.data.submissions_per_day_hour)
         ax.set_xticks(np.arange(24))

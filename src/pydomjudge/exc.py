@@ -1,7 +1,7 @@
 import functools
+import logging
 import pathlib
 import sys
-import logging
 
 log = logging.getLogger(__name__)
 

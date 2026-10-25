@@ -1,6 +1,6 @@
-import datetime
 import argparse
 import dataclasses
+import datetime
 import logging
 import pathlib
 import random
@@ -8,8 +8,7 @@ import string
 
 from pydomjudge.database import ContestDataExport, TeamDto, UserDto
 from pydomjudge.exc import error_handler_wrapper
-
-from pydomjudge.util import read_str_from, write_str_to, default_wordlist
+from pydomjudge.util import default_wordlist, read_str_from, write_str_to
 
 
 def anonymize(source: pathlib.Path | None, destination: pathlib.Path | None):

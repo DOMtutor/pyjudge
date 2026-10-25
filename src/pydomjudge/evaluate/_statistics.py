@@ -1,11 +1,12 @@
-from dataclasses import dataclass
 import datetime
 import itertools
 import logging
 import math
 import statistics
 from collections import defaultdict
-from typing import Callable, Any
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 import pytz
 

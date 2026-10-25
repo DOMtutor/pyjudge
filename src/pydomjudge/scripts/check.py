@@ -2,8 +2,8 @@ import argparse
 import sys
 
 import pydomjudge.repository.kattis as kattis
-import pydomjudge.scripts.util as script_util
 import pydomjudge.scripts.find_problem as find_problem
+import pydomjudge.scripts.util as script_util
 from pydomjudge.exc import error_handler_wrapper
 
 

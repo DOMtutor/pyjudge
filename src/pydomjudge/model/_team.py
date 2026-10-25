@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 
-from ._user import User
 from pydomjudge.util import FrozenSequence
+
+from ._user import User
 
 
 class TeamCategory(BaseModel, frozen=True):

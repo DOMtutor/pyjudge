@@ -1,7 +1,7 @@
 import enum
 from typing import Annotated
 
-from pydantic import PlainSerializer, BeforeValidator
+from pydantic import BeforeValidator, PlainSerializer
 
 
 class SubmissionVerdict(enum.Enum):

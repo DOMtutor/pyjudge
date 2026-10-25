@@ -1,17 +1,16 @@
 #!/usr/bin/env python
-import math
-import sys
 import argparse
+import math
 import pathlib
 import re
-from typing import Optional, Tuple
+import sys
 
 
 def judge_message(judge_msg, feedback_dir):
     try:
         with (feedback_dir / "judgemessage.txt").open("at") as f:
             f.write(judge_msg)
-    except IOError as e:
+    except OSError as e:
         print(
             f"Failed to write to judgemessage.txt: {e}\nOriginal error: {judge_msg}",
             file=sys.stderr,
@@ -22,14 +21,14 @@ def fail_with_message(
     feedback_dir: pathlib.Path,
     team_msg: str,
     judge_msg: str = "",
-    diff_position: Optional[Tuple[int, int]] = None,
+    diff_position: tuple[int, int] | None = None,
 ):
     if judge_msg:
         judge_message(judge_msg, feedback_dir)
     try:
         with (feedback_dir / "teammessage.txt").open(mode="wt") as f:
             f.write(team_msg)
-    except IOError as e:
+    except OSError as e:
         judge_message(
             f"Failed to write to teammessage.txt: {e}\nTeam feedback: {team_msg}",
             feedback_dir,
@@ -39,7 +38,7 @@ def fail_with_message(
         try:
             with (feedback_dir / "diffposition.txt").open(mode="wt") as f:
                 f.write(f"{judge_pos} {team_pos}")
-        except IOError as e:
+        except OSError as e:
             judge_message(f"Failed to write to diffposition.txt: {e}", feedback_dir)
 
     sys.exit(43)
@@ -55,7 +54,7 @@ def check(args):
     def fail(
         msg="Wrong Answer",
         judge_msg="",
-        diff_position: Optional[Tuple[int, int]] = None,
+        diff_position: tuple[int, int] | None = None,
     ):
         fail_with_message(feedback_dir, msg, judge_msg, diff_position)
 

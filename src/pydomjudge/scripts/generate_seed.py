@@ -1,9 +1,9 @@
 import argparse
 import pathlib
+import random
 import sys
 
 import jinja2
-import random
 
 import pydomjudge.scripts.util as script_util
 from pydomjudge.exc import error_handler_wrapper

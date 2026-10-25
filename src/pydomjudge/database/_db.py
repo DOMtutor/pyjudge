@@ -1,4 +1,5 @@
-from typing import Optional, Protocol, Any, Iterator, Sequence
+from collections.abc import Iterator, Sequence
+from typing import Any, Protocol
 
 import pymysql
 from pymysql.connections import Connection
@@ -22,13 +23,13 @@ class DBCursor(Protocol):
     def __iter__(self) -> Iterator[tuple[Any, ...]]: ...
 
     rowcount: int
-    lastrowid: Optional[int]
+    lastrowid: int | None
     arraysize: int
-    description: Optional[Sequence[tuple]]
+    description: Sequence[tuple] | None
 
 
 # noinspection PyTypeChecker
-class DatabaseTransactionCursor(object):
+class DatabaseTransactionCursor:
     def __init__(
         self,
         connection: Connection,
@@ -50,7 +51,7 @@ class DatabaseTransactionCursor(object):
             self.cursor.close()
 
 
-class Database(object):
+class Database:
     def __init__(self, **config):
         self.host = str(config["host"])
         self.port = int(config.get("port", 3306))

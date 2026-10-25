@@ -11,26 +11,25 @@ from dataclasses import dataclass
 
 import yaml
 from flask import (
+    Blueprint,
     Flask,
     current_app,
     flash,
-    render_template,
     redirect,
+    render_template,
     url_for,
-    Blueprint,
 )
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, validators
+from wtforms import PasswordField, StringField, validators
 
 from pydomjudge.database import (
     Database,
-    create_or_update_users,
-    find_users_by_login,
-    find_teams_by_name,
     create_or_update_teams,
+    create_or_update_users,
+    find_teams_by_name,
+    find_users_by_login,
 )
-from pydomjudge.model import User, Team
-from pydomjudge.model import UserRole, DefaultCategory
+from pydomjudge.model import DefaultCategory, Team, User, UserRole
 
 logger = logging.getLogger(__name__)
 

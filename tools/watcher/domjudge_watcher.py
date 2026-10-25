@@ -256,7 +256,7 @@ async def main(config_path: pathlib.Path):
     try:
         with config_path.open("r") as f:
             config = yaml.safe_load(f)
-    except (IOError, yaml.YAMLError) as e:
+    except (OSError, yaml.YAMLError) as e:
         logging.critical("Failed to load config file %s: %s", config_path, e)
         return
 

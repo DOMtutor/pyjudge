@@ -1,20 +1,19 @@
+import argparse
 import logging
 import pathlib
 import sys
 import threading
 import uuid
-import argparse
 from dataclasses import dataclass
 from io import StringIO
-from typing import List, Dict
 
-from flask import Flask, jsonify, request, url_for, redirect, current_app, Blueprint
+from flask import Blueprint, Flask, current_app, jsonify, redirect, request, url_for
 from flask_inputs import Inputs
 from flask_inputs.validators import JsonSchema
 
-from ._fuzzer import FuzzingRequest, Fuzzer
+from pydomjudge.repository.kattis import Repository, RepositoryProblem
 
-from pydomjudge.repository.kattis import RepositoryProblem, Repository
+from ._fuzzer import Fuzzer, FuzzingRequest
 
 schema = {
     "type": "object",
@@ -113,11 +112,11 @@ class FuzzingThread(threading.Thread):
         return state
 
 
-class FuzzingManager(object):
+class FuzzingManager:
     def __init__(self, repository: "Repository", fuzzer: "Fuzzer"):
         self.repository = repository
         self.fuzzer = fuzzer
-        self.state: Dict[str, FuzzingThread] = {}
+        self.state: dict[str, FuzzingThread] = {}
         pass
 
     def run(self, submission):
@@ -223,7 +222,7 @@ def create_app():
     logging.getLogger("fuzzer").setLevel(logging.DEBUG)
 
     repository = Repository(repository_path)
-    problems: List[RepositoryProblem] = []
+    problems: list[RepositoryProblem] = []
     for problem in repository.problems:
         secret_dir = problem.directory / "data" / "secret"
         if any(True for secret in secret_dir.glob("*.seed")):

@@ -8,24 +8,25 @@ import re
 import shutil
 import tempfile
 from collections import defaultdict
+from collections.abc import Collection, Iterable
 from pathlib import Path
-from typing import Collection, Iterable
 
 from problemtools import languages
-from problemtools.run import SourceCode, Program
+from problemtools.run import Program, SourceCode
 from problemtools.verifyproblem import (
+    Context,
+    SubmissionResult,
     TestCase,
     TestCaseGroup,
     re_argument,
-    SubmissionResult,
-    Context,
 )
-from pydomjudge.repository.kattis import RepositoryProblem, ExecutionError
+
+from pydomjudge.repository.kattis import ExecutionError, RepositoryProblem
 
 logger = logging.getLogger(__name__)
 
 
-class ProblemLayout(object):
+class ProblemLayout:
     @staticmethod
     def first_failing_case(judge_message: list[str], solution):
         tokens = judge_message[0].split()
@@ -129,7 +130,7 @@ class RunVerdict(enum.StrEnum):
         raise KeyError(key)
 
 
-class RunResult(object):
+class RunResult:
     def __init__(
         self,
         problem,
@@ -152,7 +153,7 @@ class SeedStructure(enum.Enum):
     SINGLE_CASE = "single"
 
 
-class FuzzingRun(object):
+class FuzzingRun:
     RANDOM_RUNS = 200
 
     @staticmethod
@@ -420,12 +421,12 @@ class FuzzingRun(object):
         for file in [self.input_file, self.seed_file, self.answer_file]:
             try:
                 file.unlink(missing_ok=True)
-            except IOError as e:
+            except OSError as e:
                 self.submission_logger.info("Failed to remove file %s", exc_info=e)
 
 
 @dataclasses.dataclass
-class FuzzingRequest(object):
+class FuzzingRequest:
     sources: dict[str, str]
     language: str | None
 
@@ -442,7 +443,7 @@ class FuzzingResult:
     run_results: Collection[RunResult]
 
 
-class Fuzzer(object):
+class Fuzzer:
     MAX_FAILS = 3
 
     def __init__(self):

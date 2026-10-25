@@ -6,40 +6,40 @@ import logging
 import pathlib
 import re
 import sys
-from typing import List, Tuple, Collection, Dict, Set
+from collections.abc import Collection
 
-from pydantic import BaseModel, field_validator, field_serializer
+from problemtools.verifyproblem import VerifyError
+from pydantic import BaseModel, field_serializer, field_validator
 from pydantic_core.core_schema import ValidationInfo
 
 import pydomjudge.database as update
 import pydomjudge.repository.kattis as kattis
 import pydomjudge.scripts.db as db
 import pydomjudge.scripts.util as script_util
-from problemtools.verifyproblem import VerifyError
+from pydomjudge.database import Database, DBCursor as Cursor
 from pydomjudge.exc import (
-    UnlikelyInstructionError,
     ConfigurationError,
+    UnlikelyInstructionError,
     error_handler_wrapper,
 )
 from pydomjudge.model import (
-    Contest,
-    SubmissionVerdict,
-    ProblemSubmission,
-    Team,
-    User,
     Affiliation,
-    TeamCategory,
+    Contest,
     JudgeInstance,
+    ProblemSubmission,
+    SubmissionVerdict,
     SystemCategory,
+    Team,
+    TeamCategory,
+    User,
 )
-from pydomjudge.repository.kattis import Repository, RepositoryProblem, JurySubmission
-from pydomjudge.database import Database, DBCursor as Cursor
+from pydomjudge.repository.kattis import JurySubmission, Repository, RepositoryProblem
 
 log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
-class PyjudgeConfig(object):
+class PyjudgeConfig:
     repository: Repository
     judge: JudgeInstance
     database: Database
@@ -59,7 +59,7 @@ def _update_problem_submissions(
             log.warning("Did not find a language for submission %s", submission)
             continue
 
-        submission_expected_results: Tuple[SubmissionVerdict, ...] = tuple(
+        submission_expected_results: tuple[SubmissionVerdict, ...] = tuple(
             submission.expected_results
         )
         if set(submission_expected_results) == {SubmissionVerdict.CORRECT}:
@@ -76,7 +76,7 @@ def _update_problem_submissions(
     affiliations = set(
         team.affiliation for team in teams if team.affiliation is not None
     )
-    users: Set[User] = set()
+    users: set[User] = set()
     for team in teams:
         users.update(set(member for member in team.members))
 
@@ -129,7 +129,7 @@ def upload_contest(
             contest_id = update.create_or_update_contest(cursor, contest, force=force)
 
         if update_problems:
-            problem_ids: Dict[str, int] = {}
+            problem_ids: dict[str, int] = {}
             for contest_problem in contest.problems:
                 with connection.transaction_cursor() as cursor:
                     problem_ids[contest_problem.problem_key] = (
@@ -162,7 +162,7 @@ def upload_contest(
 
 def upload_problems(
     config: PyjudgeConfig,
-    problems: List[RepositoryProblem],
+    problems: list[RepositoryProblem],
     update_submissions: bool = True,
     verify_problems: bool = False,
 ):
@@ -217,9 +217,9 @@ class UsersDescription(BaseModel):
 
         if info.context is None:
             raise ValueError("Context is None")
-        category_by_key: Dict[str, TeamCategory] = info.context.get("category_by_key")
+        category_by_key: dict[str, TeamCategory] = info.context.get("category_by_key")
         user_by_key: dict[str, User] = {user.key: user for user in info.data["users"]}
-        affiliation_by_key: Dict[str, Affiliation] = {
+        affiliation_by_key: dict[str, Affiliation] = {
             affiliation.key: affiliation for affiliation in info.data["affiliations"]
         }
         return [
@@ -283,7 +283,7 @@ def check_database(config: PyjudgeConfig):
 
 
 def command_problem(config: PyjudgeConfig, args):
-    problems: List[RepositoryProblem] = []
+    problems: list[RepositoryProblem] = []
     if args.regex:
         patterns = [re.compile(pattern) for pattern in args.regex]
         # noinspection PyUnresolvedReferences

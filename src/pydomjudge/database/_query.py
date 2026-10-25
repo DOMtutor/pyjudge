@@ -1,26 +1,27 @@
 import logging
 from collections import defaultdict
+from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Collection
 
-from pydomjudge.model import TeamCategory, SubmissionVerdict, TestcaseVerdict
+from pydomjudge.model import SubmissionVerdict, TeamCategory, TestcaseVerdict
+
 from ._data import (
-    SubmissionFileDto,
     ClarificationDto,
     ContestDescriptionDto,
-    TestcaseResultDto,
-    SubmissionDto,
-    UserDto,
-    TeamDto,
     ContestProblemDto,
+    SubmissionDto,
+    SubmissionFileDto,
+    TeamDto,
+    TestcaseResultDto,
+    UserDto,
 )
 from ._db import (
     Database,
     DBCursor as Cursor,
-    list_param,
     field_in_list,
     field_not_in_list,
     get_unique_with_error,
+    list_param,
 )
 
 

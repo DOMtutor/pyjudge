@@ -10,33 +10,33 @@ import shutil
 import stat
 import subprocess
 import tempfile
+from collections.abc import Callable, Collection, Mapping
 from importlib.resources.abc import Traversable
-from typing import Collection, Any, Mapping, Callable
-
-import yaml
-from pydantic import BaseModel, model_validator
+from typing import Any
 
 import problemtools.run
 import problemtools.verifyproblem
+import yaml
 from problemtools.run import BuildRun
+from pydantic import BaseModel, model_validator
+
 from pydomjudge.model import (
-    ProblemTestCase,
     Affiliation,
+    Executable,
+    ExecutableType,
+    FileData,
     JuryProblemSubmission,
-    SubmissionVerdict,
     Language,
     Problem,
     ProblemLimits,
-    Executable,
     ProblemLoader,
-    ExecutableType,
-    Team,
-    FileData,
+    ProblemTestCase,
+    SubmissionVerdict,
     SystemCategory,
+    Team,
     get_md5,
 )
-from pydomjudge.util import link_or_copy
-from pydomjudge.util import rasterize_pdf
+from pydomjudge.util import link_or_copy, rasterize_pdf
 
 log = logging.getLogger(__name__)
 
@@ -602,9 +602,8 @@ class RepositoryProblem(Problem):
             cwd=generator_dir.absolute(),
             timeout=30,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
+            capture_output=True,
+            text=True,
         )
         generator_name = generators[0].with_suffix("").name
         change_time = max(file.stat().st_mtime for file in java_files)

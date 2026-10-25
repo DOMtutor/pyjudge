@@ -1,7 +1,6 @@
 import argparse
 import pathlib
 import re
-from typing import List
 
 import pydomjudge.repository.kattis as kattis
 import pydomjudge.scripts.util as script_util
@@ -39,7 +38,7 @@ def add_arguments(parser: argparse.ArgumentParser):
 
 def find_problems(
     repository: kattis.Repository, args: argparse.Namespace
-) -> List[RepositoryProblem]:
+) -> list[RepositoryProblem]:
     name_patterns = [re.compile(pattern) for pattern in args.name]
     keyword_patterns = [re.compile(pattern) for pattern in args.keyword]
     exclude_patterns = [re.compile(pattern) for pattern in args.exclude]

@@ -1,6 +1,7 @@
 import abc
 import dataclasses
-from typing import Collection, TypeVar, Generic
+from collections.abc import Collection
+from typing import Generic, TypeVar
 
 from ._language import Executable
 from ._submission import JuryProblemSubmission
@@ -50,6 +51,7 @@ class ProblemTestCase(abc.ABC):
             return None
 
         import io
+
         from PIL import Image
 
         thumbnail = io.BytesIO()
@@ -68,7 +70,7 @@ class ProblemTestCase(abc.ABC):
 
 
 @dataclasses.dataclass
-class ProblemLimits(object):
+class ProblemLimits:
     time_factor: float
     memory_kib: int | None
     output_kib: int | None
@@ -81,7 +83,7 @@ class Problem(abc.ABC):
     def name(self) -> str:
         pass
 
-    def check(self) -> None:
+    def check(self) -> None:  # noqa: B027 - verification is optional for a problem source
         pass
 
     @property
