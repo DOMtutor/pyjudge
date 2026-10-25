@@ -23,4 +23,5 @@ dt_judge_upload contest contest.json
 
 `python script.py --pretty -O <file> <settings|users|contest>` regenerates any of the JSON files; the committed `contest.json` has fixed times, so regenerate it before uploading.
 All three problems generate their larger test inputs from seed files; those of `dfamin` were created from the Jinja templates in its `data/secret/` with `dt_generate_seed`.
+`pastryperfection/attachments/` holds a solution skeleton for students.
 Generated files (`build/`, `.last_verified`, generated `.in` files) are ignored via `.gitignore`.

@@ -155,6 +155,6 @@ From here on, [usage.md](usage.md) is the reference.
 * `Access denied for user 'domjudge'`: `db.yml` password does not match `DOMJUDGE_DB_DOMJUDGE_PASSWORD`.
 * Problem verification fails: run `dt_kattis_check --name <problem> --debug` for the full `problemtools` output.
   Missing `pypy3` or `checktestdata` are the usual suspects.
-* Statement does not build: `latexmk` or a LaTeX package is missing; the build log is printed with `--debug`.
+* Statement does not build: `lualatex` or a LaTeX package is missing; the build log is printed with `--debug`.
 * Submissions stay pending: `docker compose logs judgehost`; see [deployment.md](deployment.md).
 * Starting over: `docker compose down -v` deletes the database, then redo steps 3 to 5.
