@@ -16,9 +16,10 @@ import httpx
 import pytest
 
 from pydomjudge.database import Database
-from pydomjudge.model import Contest, JudgeInstance
+from pydomjudge.model import Contest, JudgeInstance, SystemCategory
 from pydomjudge.repository.kattis import Repository
-from pydomjudge.scripts.upload import PyjudgeConfig
+from pydomjudge.scripts import upload
+from pydomjudge.scripts.upload import PyjudgeConfig, UsersDescription
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "examples"
@@ -107,6 +108,29 @@ def contest() -> Contest:
             )
         }
     )
+
+
+def upload_all(config: PyjudgeConfig, contest: Contest) -> None:
+    upload.update_settings(config)
+    description = UsersDescription.model_validate_json(
+        (EXAMPLES / "users.json").read_text(),
+        context={
+            "category_by_key": {
+                category.key: category
+                for category in config.judge.team_categories + [SystemCategory.Jury]
+            }
+        },
+    )
+    upload.upload_users(config, description, overwrite_passwords=True)
+    # The contest is running, which the upload refuses without force
+    upload.upload_contest(config, contest, force=True)
+
+
+@pytest.fixture(scope="session")
+def uploaded(pyjudge_config: PyjudgeConfig, contest: Contest) -> Contest:
+    """The example setup, uploaded once for all modules."""
+    upload_all(pyjudge_config, contest)
+    return contest
 
 
 def client(base_url: str, **kwargs) -> httpx.Client:

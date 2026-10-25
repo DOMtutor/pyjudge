@@ -13,7 +13,8 @@ shift
 case "$TOOL" in
     "selfservice")
         echo "Starting Self-Service via Gunicorn..."
-        exec gunicorn --bind 0.0.0.0:8000 "pydomjudge.tools.selfservice:create_app()" "$@"
+        # The limit of failed password attempts lives in the worker process
+        exec gunicorn --bind 0.0.0.0:8000 --workers 1 "pydomjudge.tools.selfservice:create_app()" "$@"
         ;;
     "fuzzer")
         echo "Starting Fuzzer via Gunicorn"

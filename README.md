@@ -13,7 +13,7 @@ It is the core of **DOMtutor**, a setup for using DOMjudge in teaching.
 | Problem repository | `pydomjudge.repository` | Reads problems in the [Kattis problem package format](https://www.kattis.com/problem-package-format/) (via `problemtools`), with extensions for seeded test data generation |
 | Command line | `pyjudge upload`, `pyjudge export`, `pyjudge problem`, ... | Day-to-day operations, see [docs/usage.md](docs/usage.md) |
 | Statistics | `pydomjudge.evaluate` | Aggregate and plot submission data of exported contests |
-| Web tools | `pydomjudge.tools` | Fuzzer (find failing inputs for a submission) and self-service registration |
+| Web tools | `pydomjudge.tools` | Fuzzer (find failing inputs for a submission) and self-service (registration, password change) |
 | Watcher | `tools/watcher` | Standalone daemon that sends notifications on judgehost outages and new clarifications |
 
 ## Quick start
@@ -41,7 +41,7 @@ uv run pyjudge upload contest contest.json
 * [Installing](docs/installing.md): dependencies and installation variants
 * [Usage](docs/usage.md): command-line tools, configuration files, problem repository layout
 * [Deployment](docs/deployment.md): running DOMjudge itself with Docker
-* [Tools](docs/tools.md): fuzzer, self-service registration, watcher, Docker image
+* [Tools](docs/tools.md): fuzzer, self-service (registration, password change), watcher, Docker image
 * [Examples](examples/README.md): a ready-to-use example setup
 
 ## Development

@@ -54,5 +54,5 @@ problemtools = { git = "https://github.com/DOMtutor/problemtools.git" }
 
 ## Docker image
 
-The `Dockerfile` builds an image with pydomjudge, `problemtools` and `gunicorn`, intended for running the fuzzer or self-service registration.
+The `Dockerfile` builds an image with pydomjudge, `problemtools` and `gunicorn`, intended for running the fuzzer or the self-service.
 See [tools.md](tools.md).
