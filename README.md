@@ -55,7 +55,7 @@ uv run ty check
 
 `pre-commit install` enables the ruff hooks.
 CI runs the same steps on every push and pull request.
-`tests/integration/run.sh` uploads the examples into a throwaway DOMjudge (Docker) and checks that its jury, team and public pages work with the data; `JUDGE=1` also judges the jury solutions.
+`tests/integration/run.sh` uploads the examples into a throwaway DOMjudge (Docker) and checks that its jury, team and public pages work with the data; `JUDGE=1` also judges the jury solutions and a hello world per language.
 Open points and known issues are collected in [TODO.md](TODO.md) and [docs/review.md](docs/review.md).
 
 ## License
