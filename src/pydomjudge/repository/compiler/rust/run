@@ -1,13 +1,12 @@
 #!/bin/sh
 
-destination="$1"
-# memory_limit="$2"
-shift 2
-# main_source="$1"
+DEST="$1" ; shift
+MEMLIMIT="$1" ; shift
 
-temp_dir="$(mktemp -d --tmpdir=$(pwd) javac_output.XXXXXX)" || exit 1
-export TMPDIR="${temp_dir}"
-rustc --cfg 'DOMJUDGE' -C opt-level=3 -o "$destination" --crate-type bin --edition=2024 "$@"
-rustc_exit_code=$?
-rm -rf "${temp_dir}"
-exit $rustc_exit_code
+# first you need to ./dj_make_chroot -i rustc
+
+mkdir rust_tmp_dir
+export TMPDIR=rust_tmp_dir
+rustc -C opt-level=3 -o "$DEST" "$@"
+rmdir rust_tmp_dir
+exit 0
