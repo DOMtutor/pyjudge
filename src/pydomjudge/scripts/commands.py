@@ -389,6 +389,14 @@ def build_parser(prog: str = "pyjudge") -> argparse.ArgumentParser:
         nested=True,
     )
     _problem(group("problem", "Work with the problems of the repository"), nested=True)
+    help = "Report inconsistencies in the DOMjudge database (read only)"
+    _leaf(
+        commands.add_parser("check", help=help, description=help),
+        "pydomjudge.scripts.consistency:run",
+        lambda p: p.add_argument("--json", action="store_true", help="JSON output"),
+        nested=True,
+        database=True,
+    )
     help = "Create pyjudge.yaml, db.yml and instance.json here"
     _leaf(
         commands.add_parser("init", help=help, description=help),
