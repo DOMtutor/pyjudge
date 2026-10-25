@@ -1,3 +1,10 @@
+"""Writing the desired state (settings, users, problems, contests) to DOMjudge.
+
+The writer identifies every object by its key, stored as DOMjudge's
+``externalid``, so names and all other properties can change freely and are
+synchronised on the next upload. The reader in ``_query`` works by name instead.
+"""
+
 import datetime
 import hashlib
 import itertools
@@ -30,7 +37,7 @@ from pydomjudge.model import (
     Verdict,
 )
 
-from ._db import DBCursor as Cursor, field_not_in_list, get_only, list_param
+from ._db import DBCursor as Cursor, field_not_in_list, get_scalar, list_param
 
 log = logging.getLogger(__name__)
 
@@ -215,9 +222,6 @@ def create_or_update_teams(
         raise ElementNotFoundError("Some users do not exist")
     user_ids.update(missing_user_ids)
 
-    assigned_users = set()
-    for team in teams:
-        assigned_users.update(set(team.members))
     for team in teams:
         team_category = category_ids[team.category] if team.category else None
         affiliation_id = affiliation_ids[team.affiliation] if team.affiliation else None
@@ -238,19 +242,20 @@ def create_or_update_teams(
             assert team_id is not None
             existing_teams[team] = team_id
 
-        if team.members:
-            member_ids = [user_ids[user] for user in team.members]
+        member_ids = [user_ids[user] for user in team.members]
+        if member_ids:
             cursor.execute(
                 f"UPDATE `user` SET teamid = %s WHERE userid IN {list_param(member_ids)}",
                 (team_id, *member_ids),
             )
-            unassigned = set(team.members) - assigned_users
-            if unassigned:
-                cursor.execute(
-                    f"UPDATE `user` SET teamid = NULL "
-                    f"WHERE teamid = %s AND userid NOT IN {list_param(unassigned)}",
-                    (team_id, *[user_ids[user] for user in unassigned]),
-                )
+        # Detach users that are no longer members (all of them for an empty team)
+        cursor.execute(
+            f"UPDATE `user` SET teamid = NULL "
+            f"WHERE teamid = %s AND {field_not_in_list('userid', member_ids)}",
+            (team_id, *member_ids),
+        )
+        if cursor.rowcount:
+            log.info("Removed %d users from team %s", cursor.rowcount, team.name)
 
     return existing_teams
 
@@ -534,10 +539,9 @@ def create_or_update_problem_testcases(
             output_md5=output_md5,
         )
         if not file_name or file_name in testcases_by_name:
+            # Unnamed or duplicate: reused for new cases or deleted below
             leftover_cases.append(test_case)
         else:
-            if file_name in testcases_by_name:
-                raise KeyError(f"Duplicate case for problem {problem_id}")
             testcases_by_name[file_name] = test_case
 
     log.debug(
@@ -572,7 +576,7 @@ def create_or_update_problem_testcases(
         if description != database_case.description:
             cursor.execute(
                 "UPDATE testcase SET description = %s WHERE testcaseid = %s",
-                (database_case.case_id, description),
+                (description, database_case.case_id),
             )
             database_case.description = description
 
@@ -580,7 +584,7 @@ def create_or_update_problem_testcases(
             "SELECT EXISTS(SELECT * FROM testcase_content WHERE testcaseid = %s)",
             (database_case.case_id,),
         )
-        if get_only(cursor):
+        if get_scalar(cursor):
             if (
                 problem_testcase.input_md5 != database_case.input_md5
                 or problem_testcase.output_md5 != database_case.output_md5
@@ -867,7 +871,7 @@ def set_global_languages(
 def clear_invalid_submissions(cursor):
     cursor.execute(
         "DELETE FROM submission_file "
-        "WHERE LENGTH(submission_file.sourcecode) = '' OR LOCATE('\\0', submission_file.sourcecode) > 0"
+        "WHERE LENGTH(submission_file.sourcecode) = 0 OR LOCATE('\\0', submission_file.sourcecode) > 0"
     )
     if cursor.rowcount:
         log.warning("Dropped %d invalid submission files", cursor.rowcount)
@@ -885,6 +889,10 @@ def clear_invalid_submissions(cursor):
     )
     if cursor.rowcount:
         log.warning("Dropped %d submissions without judging", cursor.rowcount)
+
+
+def jury_submission_external_id() -> str:
+    return f"pydomjudge-{uuid.uuid4().hex}"
 
 
 def create_problem_submissions(
@@ -944,6 +952,10 @@ def create_problem_submissions(
             continue
         used_team_ids[team_id] = team
         submissions_grouped[key] = submission
+    if not submissions_grouped:
+        # Existing jury submissions are only matched per team of this call
+        log.info("No jury submissions for problem %s", problem.name)
+        return
 
     cursor.execute(
         f"SELECT "
@@ -1124,6 +1136,7 @@ def create_problem_submissions(
                 elif set(file_names) != set(existing_file_hashes.keys()):
                     log.debug(
                         "%s changed files from %s to %s",
+                        submission,
                         ",".join(file_names),
                         ",".join(existing_file_hashes.keys()),
                     )
@@ -1294,10 +1307,10 @@ def create_problem_submissions(
                     }
                 )
 
-                external_id = f"{team_id} {submission.name} {''.join(reversed(str(int(submission.last_modified()))))}"
-                # The external_id is used in the event column as endpointid, which has at most 64
-                if len(external_id) > 64:
-                    external_id = external_id[:64]
+                # Unique per contest in DOMjudge and used as event endpoint id
+                # (at most 64 characters). Every version of a jury submission
+                # is a new row, so this cannot be derived from its content.
+                external_id = jury_submission_external_id()
 
                 cursor.execute(
                     "INSERT INTO submission (origsubmitid, cid, teamid, probid, "
@@ -1421,14 +1434,60 @@ def create_problem_submissions(
         log.info("Updated submissions, no changes required")
 
 
+def _remove_dropped_contest_problems(
+    cursor: Cursor, contest_id: int, problem_ids: list[int]
+):
+    """Remove contest problems that are no longer part of the contest.
+
+    DOMjudge deletes the submissions of a removed contest problem (foreign key
+    with ON DELETE CASCADE), so this refuses to remove problems with submissions
+    by teams outside the system categories (jury solutions are regenerated).
+    """
+    system_keys = [category.key for category in SystemCategory.values()]
+    cursor.execute(
+        "SELECT cp.probid, cp.shortname, COUNT(s.submitid) "
+        "FROM contestproblem cp "
+        "  LEFT JOIN submission s ON s.cid = cp.cid AND s.probid = cp.probid "
+        "    AND s.teamid NOT IN ("
+        "      SELECT t.teamid FROM team t "
+        "        JOIN team_category tc ON t.categoryid = tc.categoryid "
+        f"      WHERE tc.externalid IN {list_param(system_keys)}) "
+        f"WHERE cp.cid = %s AND {field_not_in_list('cp.probid', problem_ids)} "
+        "GROUP BY cp.probid, cp.shortname",
+        (*system_keys, contest_id, *problem_ids),
+    )
+    dropped = cursor.fetchall()
+    with_submissions = [name for _, name, count in dropped if count]
+    if with_submissions:
+        raise ValueError(
+            f"Problems {', '.join(with_submissions)} were removed from the contest "
+            "but have team submissions, which DOMjudge would delete with them. "
+            "Remove them in DOMjudge if this is intended."
+        )
+    if dropped:
+        dropped_ids = [problem_id for problem_id, _, _ in dropped]
+        log.info(
+            "Removing problems %s from the contest",
+            ", ".join(name for _, name, _ in dropped),
+        )
+        cursor.execute(
+            f"DELETE FROM contestproblem WHERE cid = %s "
+            f"AND probid IN {list_param(dropped_ids)}",
+            (contest_id, *dropped_ids),
+        )
+
+
 def create_or_update_contest_problems(
     cursor: Cursor,
     contest: Contest,
     contest_id: int,
     problem_ids: dict[str, int],
 ):
-    # TODO Does not yet handle the case when a contest problem is changed
-
+    _remove_dropped_contest_problems(
+        cursor,
+        contest_id,
+        [problem_ids[problem.problem_key] for problem in contest.problems],
+    )
     for contest_problem in contest.problems:
         # Cannot REPLACE INTO because of database triggers
         problem_id = problem_ids[contest_problem.problem_key]
@@ -1436,7 +1495,7 @@ def create_or_update_contest_problems(
             "SELECT EXISTS(SELECT * FROM contestproblem WHERE cid = %s AND probid = %s)",
             (contest_id, problem_id),
         )
-        if get_only(cursor):
+        if get_scalar(cursor):
             # Setting lazy_eval_results to EVAL_DEFAULT, which is 0, see domjudge/webapp/src/Service/DOMJudgeService.php
             cursor.execute(
                 "UPDATE contestproblem SET "
@@ -1497,12 +1556,12 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
             "endtime = %s, endtime_string = %s, "
             "freezetime = %s, freezetime_string = %s, "
             "b = 0, enabled = TRUE, starttime_enabled = TRUE, process_balloons = FALSE, "
-            "public = %s, open_to_all_teams = %s "
+            "public = %s, open_to_all_teams = %s, warning_message = %s "
             "WHERE cid = %s",
             (
                 contest.key,
                 contest.name,
-                contest.key,
+                contest.short_name,
                 str(contest.activation_time.timestamp()),
                 format_datetime(contest.activation_time),
                 str(contest.deactivation_time.timestamp())
@@ -1517,6 +1576,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
                 format_datetime(contest.freeze_time),
                 contest.public_scoreboard,
                 contest.access is None,
+                contest.warning_message,
                 contest_id,
             ),
         )
@@ -1581,7 +1641,7 @@ def create_or_update_contest(cursor: Cursor, contest: Contest, force=False) -> i
             )
             category_ids = cursor.fetchall()
             if len(category_ids) != len(category_keys):
-                raise ValueError("Non-existing teams specified")
+                raise ValueError("Non-existing team categories specified")
             for (category_id,) in category_ids:
                 cursor.execute(
                     "INSERT INTO contestteamcategory (cid, categoryid) VALUES (%s, %s)",
