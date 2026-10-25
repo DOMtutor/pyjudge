@@ -47,7 +47,8 @@ def _teams_without_users(cursor: Cursor) -> list[Finding]:
         "SELECT t.name FROM team t "
         "LEFT JOIN team_category c ON c.categoryid = t.categoryid "
         f"WHERE {_not_system_category('c')} AND NOT EXISTS "
-        "(SELECT 1 FROM `user` u WHERE u.teamid = t.teamid) ORDER BY t.name",
+        "(SELECT 1 FROM `user` u WHERE u.teamid = t.teamid) "
+        "ORDER BY t.name",
         _SYSTEM_KEYS,
     )
     return [
@@ -92,7 +93,8 @@ def _unused_categories(cursor: Cursor) -> list[Finding]:
         cursor,
         "SELECT c.name FROM team_category c "
         f"WHERE {_not_system_category('c')} AND NOT EXISTS "
-        "(SELECT 1 FROM team t WHERE t.categoryid = c.categoryid) ORDER BY c.name",
+        "(SELECT 1 FROM team t WHERE t.categoryid = c.categoryid) "
+        "ORDER BY c.name",
         _SYSTEM_KEYS,
     )
     return [
@@ -104,8 +106,8 @@ def _unused_categories(cursor: Cursor) -> list[Finding]:
 def _problems_without_contest(cursor: Cursor) -> list[Finding]:
     rows = _rows(
         cursor,
-        "SELECT p.name FROM problem p WHERE NOT EXISTS "
-        "(SELECT 1 FROM contestproblem cp WHERE cp.probid = p.probid) "
+        "SELECT p.name FROM problem p "
+        "WHERE NOT EXISTS (SELECT 1 FROM contestproblem cp WHERE cp.probid = p.probid) "
         "ORDER BY p.name",
     )
     return [
@@ -118,7 +120,8 @@ def _contest_problems_without_testcases(cursor: Cursor) -> list[Finding]:
     rows = _rows(
         cursor,
         "SELECT c.shortname, cp.shortname, p.name FROM contestproblem cp "
-        "JOIN contest c ON c.cid = cp.cid JOIN problem p ON p.probid = cp.probid "
+        "JOIN contest c ON c.cid = cp.cid "
+        "JOIN problem p ON p.probid = cp.probid "
         "WHERE NOT EXISTS (SELECT 1 FROM testcase t "
         "  WHERE t.probid = cp.probid AND NOT t.deleted) "
         "ORDER BY c.shortname, cp.shortname",
@@ -174,7 +177,8 @@ def _languages_not_judged(cursor: Cursor) -> list[Finding]:
         "JOIN language l ON l.langid = s.langid "
         "JOIN judging j ON j.submitid = s.submitid AND j.valid = 1 "
         "WHERE l.allow_judge = 0 AND s.valid = 1 AND j.result IS NULL "
-        "GROUP BY l.langid ORDER BY l.langid",
+        "GROUP BY l.langid "
+        "ORDER BY l.langid",
     )
     return [
         Finding(
@@ -192,10 +196,12 @@ def _unexpected_jury_results(cursor: Cursor) -> list[Finding]:
         "SELECT s.submitid, t.name, p.name, f.filename, s.expected_results, j.result "
         "FROM submission s "
         "JOIN judging j ON j.submitid = s.submitid AND j.valid = 1 "
-        "JOIN team t ON t.teamid = s.teamid JOIN problem p ON p.probid = s.probid "
+        "JOIN team t ON t.teamid = s.teamid "
+        "JOIN problem p ON p.probid = s.probid "
         "LEFT JOIN submission_file f ON f.submitid = s.submitid AND f.ranknumber = 1 "
         "WHERE s.valid = 1 AND s.expected_results IS NOT NULL "
-        "  AND j.result IS NOT NULL ORDER BY p.name, f.filename",
+        "  AND j.result IS NOT NULL "
+        "ORDER BY p.name, f.filename",
     )
     findings = []
     for submit_id, team, problem, file_name, expected, result in rows:

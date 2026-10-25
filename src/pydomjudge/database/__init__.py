@@ -6,6 +6,15 @@ DOMjudge's ``externalid``, so names and all other properties can change freely
 and are synchronised on the next upload. The reader (``_query``, used by
 exports) works by names (contest short name, team name, login), so it also
 works on databases that were not created by pydomjudge.
+
+SQL style (checked by tests/test_sql_style.py): keywords and functions in
+upper case, names in lower case, the table ``user`` always in backticks.
+A statement that does not fit on one line has one clause per string piece,
+each ending in a space: ``SELECT ... FROM ...`` (a short select list may
+share the line with FROM), ``JOIN ... ON ...``, ``WHERE``, ``GROUP BY``,
+``ORDER BY``, ``UPDATE ... SET``, ``INSERT INTO ... VALUES``,
+``ON DUPLICATE KEY UPDATE``; short subqueries stay inline. Values go in as
+``%s`` parameters, lists through ``list_param`` and ``field_in_list``.
 """
 
 from ._check import (

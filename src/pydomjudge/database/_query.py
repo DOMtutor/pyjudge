@@ -109,9 +109,9 @@ def find_submissions(
             "SELECT "
             "  s.submitid, cp.shortname, p.name, s.submittime, s.langid, s.externalid, t.name "
             "FROM submission s "
-            "  JOIN team t on s.teamid = t.teamid "
-            "  JOIN problem p on s.probid = p.probid "
-            "  JOIN contestproblem cp on ( s.probid = cp.probid and s.cid = cp.cid ) "
+            "  JOIN team t ON s.teamid = t.teamid "
+            "  JOIN problem p ON s.probid = p.probid "
+            "  JOIN contestproblem cp ON (s.probid = cp.probid AND s.cid = cp.cid) "
             "WHERE "
             "  s.cid = %s",
             (contest_id,),
@@ -143,7 +143,7 @@ def find_submissions(
                 f"SELECT "
                 f"  s.submitid, j.judgingid, j.result "
                 f"FROM submission s "
-                f"  JOIN judging j on s.submitid = j.submitid "
+                f"  JOIN judging j ON s.submitid = j.submitid "
                 f"WHERE "
                 f"  j.valid = 1 AND "
                 f"  {field_in_list('s.submitid', submission_data)}",
@@ -154,7 +154,7 @@ def find_submissions(
                 f"SELECT "
                 f"  s.submitid, j.judgingid, j.result "
                 f"FROM submission s "
-                f"  JOIN judging j on s.submitid = j.submitid "
+                f"  JOIN judging j ON s.submitid = j.submitid "
                 f"WHERE "
                 f"  {field_in_list('s.submitid', submission_data)}",
                 tuple(submission_data.keys()),
@@ -177,7 +177,7 @@ def find_submissions(
                 f"SELECT "
                 f"  s.submitid, sf.filename, sf.sourcecode "
                 f"FROM submission s "
-                f"  JOIN submission_file sf on s.submitid = sf.submitid "
+                f"  JOIN submission_file sf ON s.submitid = sf.submitid "
                 f"WHERE "
                 f"  {field_in_list('s.submitid', submission_data)}",
                 tuple(submission_data.keys()),
@@ -195,7 +195,7 @@ def find_submissions(
             f"SELECT "
             f"  j.judgingid, jr.runtime, jr.testcaseid, jr.runresult "
             f"FROM judging j "
-            f"  JOIN judging_run jr on j.judgingid = jr.judgingid "
+            f"  JOIN judging_run jr ON j.judgingid = jr.judgingid "
             f"WHERE "
             f"  {field_in_list('j.judgingid', judging_ids)}",
             tuple(judging_ids),
@@ -298,7 +298,7 @@ def find_clarifications(
 ) -> Collection[ClarificationDto]:
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
-            "SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) as from_jury, c.body, c.respid, c.submittime, c.externalid "
+            "SELECT c.clarid, c.probid, t.name, (c.recipient = t.teamid) AS from_jury, c.body, c.respid, c.submittime, c.externalid "
             "FROM contest con, clarification c, team t "
             "WHERE "
             "  (t.teamid = c.sender OR t.teamid = c.recipient) AND "
@@ -393,7 +393,7 @@ def find_users_by_login(database: Database, login_names: set[str]) -> list[UserD
     with database.transaction_cursor(readonly=True) as cursor:
         # noinspection SqlType
         cursor.execute(
-            f"SELECT u.name, u.username, u.email, u.teamid, u.externalid FROM user u "
+            f"SELECT u.name, u.username, u.email, u.teamid, u.externalid FROM `user` u "
             f"WHERE u.username IN {list_param(login_names)}",
             tuple(login_names),
         )
@@ -422,7 +422,7 @@ class TeamData:
 def _teams_from_data(cursor: Cursor, team_data: list[TeamData]) -> list[TeamDto]:
     team_by_id = {t.db_id: t for t in team_data}
     cursor.execute(
-        f"SELECT u.teamid, u.username FROM user u "
+        f"SELECT u.teamid, u.username FROM `user` u "
         f"WHERE "
         f"  {field_in_list('u.teamid', team_by_id)}",
         tuple(team_by_id.keys()),
@@ -450,8 +450,8 @@ def find_teams_by_name(database: Database, names: set[str]) -> list[TeamDto]:
     with database.transaction_cursor(readonly=True) as cursor:
         cursor.execute(
             f"SELECT t.teamid, t.name, t.display_name, t.label, t.externalid, tc.name, ta.name FROM team t "
-            f"  JOIN team_category tc on t.categoryid = tc.categoryid "
-            f"  LEFT OUTER JOIN team_affiliation ta on t.affilid = ta.affilid "
+            f"  JOIN team_category tc ON t.categoryid = tc.categoryid "
+            f"  LEFT OUTER JOIN team_affiliation ta ON t.affilid = ta.affilid "
             f"WHERE "
             f"  {field_in_list('t.name', names)}",
             tuple(names),
@@ -485,8 +485,8 @@ def find_teams(
         ]
         cursor.execute(
             f"SELECT t.teamid, t.name, t.display_name, t.label, t.externalid, tc.name, ta.name FROM team t "
-            f"  JOIN team_category tc on t.categoryid = tc.categoryid "
-            f"  LEFT OUTER JOIN team_affiliation ta on t.affilid = ta.affilid "
+            f"  JOIN team_category tc ON t.categoryid = tc.categoryid "
+            f"  LEFT OUTER JOIN team_affiliation ta ON t.affilid = ta.affilid "
             f"WHERE "
             f"  {field_not_in_list('tc.name', except_category_names)} ",
             tuple(except_category_names),
