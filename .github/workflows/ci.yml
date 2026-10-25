@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+      # Only the dev group: ruff comes from uv.lock, the project itself is not needed
+      - name: Install linters
+        run: uv sync --only-group dev --locked
+      - name: Ruff lint
+        run: uv run --no-sync ruff check --output-format=github .
+      - name: Ruff format
+        run: uv run --no-sync ruff format --check --diff .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install problemtools build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends automake g++ make libboost-regex-dev libgmp-dev
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: uv sync --locked
+      - name: Test
+        run: uv run pytest
+      - name: Type check (informational)
+        run: uv run ty check
+        continue-on-error: true
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t pyjudge:ci .
+      - name: Smoke test image
+        run: docker run --rm --entrypoint python pyjudge:ci -c "import pydomjudge.tools.selfservice, pydomjudge.tools.fuzzer; print('ok')"
