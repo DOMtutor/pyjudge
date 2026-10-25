@@ -5,8 +5,11 @@ MEMLIMIT="$1" ; shift
 
 # first you need to ./dj_make_chroot -i rustc
 
+# pydomjudge: --cfg DOMJUDGE (for #[cfg(DOMJUDGE)]), edition 2024 (rustc >= 1.85),
+# and report compile errors (upstream always exits 0)
 mkdir rust_tmp_dir
-export TMPDIR=rust_tmp_dir
-rustc -C opt-level=3 -o "$DEST" "$@"
-rmdir rust_tmp_dir
-exit 0
+export TMPDIR="$PWD/rust_tmp_dir"
+rustc --cfg DOMJUDGE -C opt-level=3 --crate-type bin --edition=2024 -o "$DEST" "$@"
+EXITCODE=$?
+rm -rf rust_tmp_dir
+exit $EXITCODE

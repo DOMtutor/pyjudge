@@ -1,27 +1,42 @@
-#! /bin/sh
+#!/bin/sh
 
-destination="$1"
-# memory_limit="$2"
-shift 2
-main_source="$1"
+# Julia compile wrapper-script for 'compile.sh' (pydomjudge; DOMjudge ships
+# none). Like the other interpreted languages, it writes a shell script that
+# runs the source with the interpreter.
+#
+# This script requires that julia is installed in the chroot.
 
-# Check for '#!' interpreter line: don't allow it to prevent teams from passing options to the interpreter.
-if grep '^#!' "$main_source" >/dev/null 2>&1 ; then
-    echo "Error: interpreter statement(s) found:"
-    grep -n '^#!' "$main_source"
-    exit 1
+DEST="$1" ; shift
+MEMLIMIT="$1" ; shift
+MAINSOURCE="${ENTRY_POINT:-$1}"
+
+# Report the entry point, so it can be saved, e.g. for later replay:
+if [ -z "$ENTRY_POINT" ]; then
+	echo "Info: detected entry_point: $MAINSOURCE"
+fi
+
+# Do not allow an interpreter line, which could pass options to julia
+if grep -n '^#!' "$MAINSOURCE"; then
+	echo "Error: interpreter statement(s) found"
+	exit 1
 fi
 
 # Write executing script:
-cat > "$destination" <<EOF
+cat > "$DEST" <<EOF
 #!/bin/sh
 # Generated shell-script to execute julia interpreter on source.
 
-# Detect dirname and change dir to prevent class not found errors.
+# Detect dirname and change dir to find other source files.
 if [ "\${0%/*}" != "\$0" ]; then
-    cd "\${0%/*}"
+	cd "\${0%/*}"
 fi
-HOME=$PWD JULIA_LOAD_PATH=$PWD LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjulia.so.1 /usr/bin/julia "$main_source"
+
+# julia needs a HOME for its package depot; the trailing ':' keeps the
+# default load path (standard library) after the submission directory.
+export HOME="\$PWD" JULIA_LOAD_PATH="\$PWD:"
+exec julia "$MAINSOURCE" "\$@"
 EOF
-chmod a+x "$destination"
+
+chmod a+x "$DEST"
+
 exit 0
