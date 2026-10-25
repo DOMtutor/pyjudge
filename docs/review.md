@@ -6,11 +6,9 @@ Each item is a proposal or a known limitation, not a decision.
 ## Design
 
 * **Keys vs. names (by design).**
-  The writer (`database/_update.py`) identifies every object by its key, stored as DOMjudge's `externalid`, so all other properties can change and are synchronised on the next upload.
+  The writer (`database/_users.py`, `_problems.py`, `_contest.py`, ...) identifies every object by its key, stored as DOMjudge's `externalid`, so all other properties can change and are synchronised on the next upload.
   The reader (`database/_query.py`, exports) works by names (contest short name, team name, login), so it also works on databases not created by pydomjudge.
-* **`_update.py` is about 1800 lines.**
-  Splitting it by entity (`_users.py`, `_problems.py`, `_submissions.py`, `_contest.py`, `_settings.py`) behind the `database/__init__.py` façade would make the SQL easier to review.
-  `create_problem_submissions` alone is 500 lines and re-queries the global configuration for every inserted submission.
+* **`create_problem_submissions`** (`database/_submissions.py`) is 500 lines and re-queries the global configuration for every inserted submission.
 * **problemtools coupling** goes through private attributes (`p.output_validators._validators`, `submissions._submissions`) and `argparse.Namespace` stand-ins (`kattis.py`, `_fuzzer.py`).
   Every problemtools update can break these silently; a thin adapter module would localise the damage (see also the long-term TODO "migrate away from problemtools").
 * **Compile scripts** in `repository/compiler/*` are copies of DOMjudge's.
