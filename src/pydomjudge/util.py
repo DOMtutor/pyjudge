@@ -4,11 +4,10 @@ import logging
 import pathlib
 import platform
 import shutil
-import subprocess
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from contextlib import contextmanager
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, TypeVar
 
 from pydantic import AfterValidator
 
@@ -30,22 +29,6 @@ def default_wordlist() -> list[str]:
         .decode()
         .splitlines()
     )
-
-
-def list_if_not_none(iterable: Iterable[Any] | None):
-    if iterable is None:
-        return None
-    return list(iterable)
-
-
-def filter_none(data: dict[str, Any], except_keys: set[str] | None = None):
-    if except_keys is None:
-        except_keys = set()
-    return {
-        key: value
-        for key, value in data.items()
-        if value is not None or key in except_keys
-    }
 
 
 def mkdir(path: pathlib.Path) -> pathlib.Path:
@@ -86,40 +69,6 @@ def link_or_copy(from_path: pathlib.Path, to_path: pathlib.Path, force=False):
             shutil.copytree(from_path, to_path, symlinks=True, dirs_exist_ok=True)
         else:
             shutil.copy(from_path, to_path)
-
-
-def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
-    invocation = ["latexmk", "-halt-on-error", "-pdflatex=lualatex"]
-    if shell_escape:
-        invocation.append("-shell-escape")
-    invocation.append(latex_file.name)
-    log.debug("Compiling latex file %s", latex_file)
-    process = subprocess.run(
-        invocation,
-        cwd=latex_file.parent,
-        stdin=None,
-        capture_output=True,
-        timeout=timeout,
-        text=True,
-    )
-    if process.returncode:
-        log.warning("Compilation of %s failed", latex_file.name)
-        log.debug(process.stdout)
-        log.debug(process.stderr)
-        return None
-    compiled_file = latex_file.parent / latex_file.with_suffix(".pdf")
-    if not compiled_file.exists():
-        log.warning("Compilation succeeded but %s does not exist", compiled_file)
-        return None
-    return compiled_file
-
-
-def check_output_defined_or_pipe(path: pathlib.Path | None):
-    return path is not None or not sys.stdout.isatty()
-
-
-def check_input_defined_or_pipe(path: pathlib.Path | None):
-    return path is not None or not sys.stdin.isatty()
 
 
 def read_str_from(source: pathlib.Path | None, read_from_terminal=False) -> str:

@@ -97,15 +97,6 @@ def field_not_in_list(field, prohibited):
     return "1 = 1"
 
 
-def get_unique(cursor: DBCursor):
-    result = cursor.fetchmany(2)
-    if not result:
-        raise ElementNotFoundError("No result found")
-    if len(result) > 1:
-        raise MultipleElementsFoundError("Multiple results found")
-    return result[0]
-
-
 def get_scalar(cursor: DBCursor) -> Any:
     """The single column of the single row of the last query."""
     result = cursor.fetchmany(2)

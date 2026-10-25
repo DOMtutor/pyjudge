@@ -830,10 +830,6 @@ class RepositoryProblem(Problem):
                             )
         return self._submissions
 
-    @property
-    def json_ref(self):
-        return self.repository_key
-
     def __hash__(self):
         return hash(self.repository_key)
 
@@ -930,16 +926,6 @@ def get_components_of_traversable(traversable: Traversable) -> tuple[FileData, .
 
 
 class Repository:
-    @staticmethod
-    def _default_checker_files() -> Mapping[str, Collection[FileData]]:
-        standard_checkers = res.files("pydomjudge.repository.checker")
-        by_key = {
-            checker.name: get_components_of_traversable(checker)
-            for checker in standard_checkers.iterdir()
-        }
-        Repository._default_checker_files = lambda: by_key  # ty:ignore[invalid-assignment]
-        return by_key
-
     @staticmethod
     def _get_files_for_default_language(language_key):
         return get_components_of_traversable(
