@@ -2,7 +2,8 @@
 
 All command-line tools are installed with the package (`uv sync`, then `uv run <tool>` or activate the environment).
 Every tool except the web tools ([tools.md](tools.md)) accepts `--help`, `--log LEVEL` (pydomjudge messages, default `INFO`) and `--debug` (everything, including `problemtools`).
-Configuration and data errors are reported in one line with exit code 1 (`--debug` adds the stack trace).
+Errors end the tool with exit code 1 and a short message; problems in a file are reported as `file: location: message` lines (e.g. `instance.json: team_categories[0].order: Input should be a valid integer`).
+`--debug` adds the traceback.
 
 ## Configuration files
 
