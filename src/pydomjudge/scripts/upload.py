@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import datetime
 import getpass
@@ -302,7 +303,7 @@ def check_database(config: PyjudgeConfig):
             update.clear_invalid_submissions(cursor)
 
 
-def command_problem(config: PyjudgeConfig, args):
+def command_problem(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     problems: list[RepositoryProblem] = []
     if args.regex:
         patterns = [re.compile(pattern) for pattern in args.regex]
@@ -334,7 +335,7 @@ def command_problem(config: PyjudgeConfig, args):
     )
 
 
-def command_contest(config: PyjudgeConfig, args):
+def command_contest(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     upload_contest(
         config,
         Contest.model_validate_json(args.contest.read_text()),
@@ -346,7 +347,7 @@ def command_contest(config: PyjudgeConfig, args):
     )
 
 
-def command_users(config: PyjudgeConfig, args):
+def command_users(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     description = UsersDescription.model_validate_json(
         args.users.read_text(),
         context={
@@ -369,15 +370,15 @@ def command_users(config: PyjudgeConfig, args):
     )
 
 
-def command_settings(config: PyjudgeConfig, _):
+def command_settings(config: PyjudgeConfig, _: argparse.Namespace) -> None:
     update_settings(config)
 
 
-def command_check(config: PyjudgeConfig, _):
+def command_check(config: PyjudgeConfig, _: argparse.Namespace) -> None:
     check_database(config)
 
 
-def command_reset_password(config: PyjudgeConfig, args):
+def command_reset_password(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     password = getpass.getpass(f"New password for {args.user}: ")
     if not password:
         sys.exit("Empty password")

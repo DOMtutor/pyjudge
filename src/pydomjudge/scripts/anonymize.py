@@ -1,5 +1,6 @@
 """Replace names, logins and times of a contest export by random ones."""
 
+import argparse
 import datetime
 import pathlib
 import random
@@ -102,7 +103,7 @@ def anonymize(contest: ContestDataExport) -> ContestDataExport:
     )
 
 
-def command_contest(args):
+def command_contest(args: argparse.Namespace) -> None:
     destination: pathlib.Path | None = args.destination
     if destination is not None and destination.exists():
         raise FileExistsError(f"Destination {destination} already exists")

@@ -33,7 +33,6 @@ dependencies = [
   "jinja2>=3.1",
   "matplotlib>=3.8",
   "numpy>=1.26",
-  "pytz",
   "flask>=3.1.3",
   "Flask-WTF>=1.2",
 ]
@@ -84,9 +83,6 @@ extend-exclude = ["libs", "examples/repository", "build"]
 [tool.ruff.lint]
 # E/F/W: pyflakes + pycodestyle, I: import order, UP: modern syntax, B: bugbear
 select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
-ignore = [
-  "B904", # raise ... from err: worth doing, but touches many lines; see docs/review.md
-]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pydomjudge"]

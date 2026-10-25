@@ -1,3 +1,4 @@
+import functools
 import gzip
 import logging
 import pathlib
@@ -11,26 +12,24 @@ from typing import Annotated, Any, TypeVar
 
 from pydantic import AfterValidator
 
+log = logging.getLogger(__name__)
+
 force_copy = platform.system() == "Windows"
-_wordlist_cache: list[str] | None = None
 
 
+@functools.cache
 def default_wordlist() -> list[str]:
-    global _wordlist_cache
-    if _wordlist_cache is None:
-        import importlib.resources
+    import importlib.resources
 
-        _wordlist_cache = (
-            gzip.decompress(
-                importlib.resources.files("pydomjudge")
-                .joinpath("default_wordlist.gz")
-                .read_bytes()
-            )
-            .decode()
-            .splitlines()
+    return (
+        gzip.decompress(
+            importlib.resources.files("pydomjudge")
+            .joinpath("default_wordlist.gz")
+            .read_bytes()
         )
-    assert _wordlist_cache is not None
-    return _wordlist_cache
+        .decode()
+        .splitlines()
+    )
 
 
 def list_if_not_none(iterable: Iterable[Any] | None):
@@ -55,7 +54,7 @@ def mkdir(path: pathlib.Path) -> pathlib.Path:
 
 
 def link_or_copy(from_path: pathlib.Path, to_path: pathlib.Path, force=False):
-    logging.debug("Linking %s to %s", from_path, to_path)
+    log.debug("Linking %s to %s", from_path, to_path)
 
     from_path = from_path.resolve()
     if not from_path.exists():
@@ -80,7 +79,7 @@ def link_or_copy(from_path: pathlib.Path, to_path: pathlib.Path, force=False):
                     from_path.absolute(), target_is_directory=from_path.is_dir()
                 )
             except OSError as e:
-                logging.warning("Cannot create symlink, copying (%s)", e)
+                log.warning("Cannot create symlink, copying (%s)", e)
                 link_failed = True
     if link_failed:
         if from_path.is_dir():
@@ -94,7 +93,7 @@ def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
     if shell_escape:
         invocation.append("-shell-escape")
     invocation.append(latex_file.name)
-    logging.debug("Compiling latex file %s", latex_file)
+    log.debug("Compiling latex file %s", latex_file)
     process = subprocess.run(
         invocation,
         cwd=latex_file.parent,
@@ -104,13 +103,13 @@ def compile_latex(latex_file: pathlib.Path, shell_escape=False, timeout=None):
         text=True,
     )
     if process.returncode:
-        logging.warning("Compilation of %s failed", latex_file.name)
-        logging.debug(process.stdout)
-        logging.debug(process.stderr)
+        log.warning("Compilation of %s failed", latex_file.name)
+        log.debug(process.stdout)
+        log.debug(process.stderr)
         return None
     compiled_file = latex_file.parent / latex_file.with_suffix(".pdf")
     if not compiled_file.exists():
-        logging.warning("Compilation succeeded but %s does not exist", compiled_file)
+        log.warning("Compilation succeeded but %s does not exist", compiled_file)
         return None
     return compiled_file
 
