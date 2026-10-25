@@ -48,21 +48,13 @@
                     <div class="me-3">
                         <label for="source_lang" class="form-label">Language</label>
                         <select id="source_lang" class="form-control">
-                            <option value="unknown">Unknown</option>
-                            <option value="c">C</option>
-                            <option value="cpp">C++</option>
-                            <option value="haskell">Haskell</option>
-                            <option value="java">Java</option>
-                            <option value="javascript">JavaScript</option>
-                            <option value="julia">Julia</option>
-                            <option value="pascal">Pascal</option>
-                            <option value="python">Python</option>
-                            <option value="rust">Rust</option>
+                            <option value="unknown">Unknown (detect)</option>
                         </select>
                     </div>
                     <div class="me-3">
                         <label for="java_name" class="form-label">Java Name</label>
-                        <input type="text" id="java_name" class="form-control" placeholder="Java Class Name"/>
+                        <input type="text" id="java_name" class="form-control" placeholder="Java Class Name"
+                               disabled="disabled"/>
                     </div>
                 </div>
 
@@ -83,6 +75,9 @@
                 <span class="" role="status" aria-hidden="true" id="submit-spinner"></span>
                 Send request
             </button>
+            <button class="btn btn-lg btn-outline-danger" type="button" id="cancel" disabled="disabled">
+                Cancel
+            </button>
         </div>
 
         <div class="col-6">
@@ -91,6 +86,15 @@
             <div class="row mb-2">
                 <label for="uuid" class="form-label">Fuzzing Id</label><br/>
                 <input type="text" class="form-control" readonly="readonly" size=60 id="uuid"/><br/>
+            </div>
+
+            <div class="row mb-2">
+                <span class="form-label">Progress</span>
+                <div class="progress p-0" id="progress">
+                    <div class="progress-bar" id="progress_bar" role="progressbar" aria-label="Fuzzing progress" style="width: 0%" aria-valuenow="0"
+                         aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <small class="text-muted" id="progress_text"></small>
             </div>
 
             <div class="row mb-2">

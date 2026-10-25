@@ -122,7 +122,13 @@ const display = function (cases) {
 
 const source_change = function () {
     const source = $("#source").val();
-    const source_lang = $("#source_lang");
+    const source_lang = {
+        val: function (key) {
+            // Only languages of the repository can be chosen
+            const select = $("#source_lang");
+            return select.val(key in languages ? key : "unknown");
+        }
+    };
 
     const java_regex = /public\s+(static\s+)?(final\s+)?class\s+([a-zA-Z_$][a-zA-Z\d_$]*)/;
     const java_match = source.match(java_regex);
@@ -155,6 +161,46 @@ const source_change = function () {
     source_lang.val("unknown").change();
 }
 
+// Id of the run shown, null when none runs
+let current_run = null;
+
+const show_progress = function (state) {
+    const total = state.runs_total || 0;
+    const done = state.runs_done || 0;
+    const percent = total ? Math.round(100 * done / total) : 0;
+    const bar = $("#progress_bar");
+    bar.css("width", percent + "%").attr("aria-valuenow", percent);
+    bar.toggleClass("bg-danger", (state.failures || 0) > 0);
+    let text = done + " of " + total + " runs, " + (state.failures || 0) + " failed";
+    if (state.cancelled) {
+        text += " (cancelled)";
+    }
+    $("#progress_text").text(text);
+};
+
+const cancel_run = function () {
+    if (current_run === null) {
+        return;
+    }
+    const uuid = current_run;
+    current_run = null;
+    $.ajax({
+        type: 'DELETE',
+        url: "/submission/" + uuid,
+        success: function (response) {
+            if (response.success) {
+                response.state.cancelled = true;
+                show_progress(response.state);
+                $("#log").val(response.state.log);
+            }
+            toggle_button(true);
+        },
+        error: function (_) {
+            warn("Error in cancel request.");
+        }
+    });
+};
+
 const toggle_button = function (ready) {
     if (ready) {
         $('#submit-spinner').removeClass("spinner-border spinner-border-sm");
@@ -162,6 +208,10 @@ const toggle_button = function (ready) {
         $('#submit-spinner').addClass("spinner-border spinner-border-sm");
     }
     $('#submit').prop("disabled", !ready);
+    $('#cancel').prop("disabled", ready);
+    if (ready) {
+        current_run = null;
+    }
 }
 
 const submit_problem = function () {
@@ -175,46 +225,24 @@ const submit_problem = function () {
     // Secret file
     let secret_name = $('#secret_name').val();
 
-    // Language
+    // Language: the repository's key, the file named main.<usual extension>,
+    // Java files after their public class
     const source_lang = $('#source_lang').val();
-    let lang;
-    let source_name;
-    if (source_lang === "c") {
-        lang = "c";
-        source_name = "main.c";
-    } else if (source_lang === "cpp") {
-        lang = "cpp";
-        source_name = "a.cpp";
-    } else if (source_lang === "haskell") {
-        lang = "haskell";
-        source_name = "main.hs"
-    } else if (source_lang === "java") {
-        const classname = $("#java_name").val();
-        if (!classname) {
-            warn("No Java class name!");
-            return;
+    let lang = null;
+    let source_name = "main";
+    const language = languages[source_lang];
+    if (language) {
+        lang = language.key;
+        if (lang === "java") {
+            const classname = $("#java_name").val();
+            if (!classname) {
+                warn("No Java class name!");
+                return;
+            }
+            source_name = classname + ".java";
+        } else if (language.extensions.length) {
+            source_name = "main." + language.extensions[0];
         }
-
-        lang = "java";
-        source_name = classname + ".java";
-    } else if (source_lang === "javascript") {
-        lang = "javascript";
-        source_name = "main.js";
-    } else if (source_lang === "julia") {
-        lang = "julia";
-        source_name = "main.jl";
-    } else if (source_lang === "pascal") {
-        lang = "pascal"
-        source_name = "main.pas";
-    } else if (source_lang === "python") {
-        lang = "python";
-        source_name = "main.py";
-    } else if (source_lang === "rust") {
-        lang = "rust";
-        source_name = "main.rs";
-    } else {
-        lang = null;
-        source_name = "main";
     }
 
     const runs = parseInt($('#runs').val());
@@ -232,10 +260,14 @@ const submit_problem = function () {
     };
 
     let uuid = 0;
+    current_run = null;
 
     const log = $("#log");
 
     let update_fun = function () {
+        if (current_run !== uuid) {
+            return;
+        }
         $.ajax({
             type: 'GET',
             url: "/submission/" + uuid,
@@ -244,6 +276,7 @@ const submit_problem = function () {
 
                 if (response.success) {
                     log.val(response.state.log);
+                    show_progress(response.state);
                     if (response.state.finished) {
                         display(response.state.cases);
                         toggle_button(true);
@@ -285,6 +318,8 @@ const submit_problem = function () {
                 toggle_button(false);
                 $("#uuid").val(response.id);
                 uuid = response.id;
+                current_run = uuid;
+                show_progress({runs_done: 0, runs_total: runs, failures: 0});
                 console.log("Started fuzzing with id " + response.id);
                 update_fun();
             } else {
@@ -332,6 +367,20 @@ function problem_change() {
 }
 
 let problems = [];
+// The repository's languages by key
+let languages = {};
+
+function set_languages(data) {
+    const select = $("#source_lang");
+    select.empty();
+    select.append(new Option("Unknown (detect)", "unknown"));
+    languages = {};
+    for (const language of data) {
+        languages[language.key] = language;
+        select.append(new Option(language.name, language.key));
+    }
+    select.val("unknown").change();
+}
 
 function set_problems(data) {
     problems.length = 0;
@@ -374,6 +423,19 @@ $(document).ready(function () {
         } else {
             java_name.prop("disabled", true);
             java_name.val("");
+        }
+    });
+
+    $("#cancel").click(function (event) {
+        event.preventDefault();
+        cancel_run();
+    });
+
+    $.get('/languages', function (data) {
+        if (data.success) {
+            set_languages(data.languages);
+        } else {
+            warn("Failed to fetch languages")
         }
     });
 

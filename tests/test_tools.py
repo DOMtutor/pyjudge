@@ -1,13 +1,18 @@
-"""Fuzzer and self-service web apps, without database and without fuzzing runs."""
+"""Fuzzer and self-service web apps, without database and without real fuzzing runs."""
 
+import logging
 import pathlib
+import threading
+import time
+import types
 
 import pydantic
 import pytest
 
 from pydomjudge.database import Database
 from pydomjudge.exc import ConfigurationError, InvalidFileFormatError
-from pydomjudge.tools.fuzzer import create_app as create_fuzzer
+from pydomjudge.tools.fuzzer import _fuzzer, create_app as create_fuzzer
+from pydomjudge.tools.fuzzer._fuzzer import FuzzingRequest, RunVerdict
 from pydomjudge.tools.selfservice._selfservice import (
     REFUSED,
     AppConfig,
@@ -63,6 +68,110 @@ def test_fuzzer_rejects_invalid_requests(fuzzer_client, overrides, message):
     data = response.get_json()
     assert not data["success"]
     assert any(message in error for error in data["errors"]), data["errors"]
+
+
+def test_fuzzer_lists_languages(fuzzer_client):
+    languages = fuzzer_client.get("/languages").get_json()["languages"]
+    by_key = {language["key"]: language for language in languages}
+    assert set(by_key) == {"c", "java", "python"}
+    assert by_key["python"]["name"] == "Python"
+    # The usual extension first, the client names the file main.<extension>
+    assert by_key["python"]["extensions"][0] == "py"
+
+
+class _BlockingFuzzer:
+    """Reports progress like Fuzzer.run, then waits for the cancel flag."""
+
+    def __init__(self):
+        self.cancelled = threading.Event()
+
+    def run(self, request):
+        request.progress(1, request.run_count, 1)
+        assert request.cancel.wait(10)
+        self.cancelled.set()
+
+
+def test_fuzzer_reports_progress_and_cancels(examples_dir: pathlib.Path):
+    app = create_fuzzer(examples_dir / "repository", base_time=1.0)
+    fuzzer = _BlockingFuzzer()
+    app.extensions["pydomjudge"].fuzzer = fuzzer
+    client = app.test_client()
+
+    run_id = client.post("/submission", json=_submission(runs=5)).get_json()["id"]
+    deadline = time.monotonic() + 10
+    while True:
+        state = client.get(f"/submission/{run_id}").get_json()["state"]
+        if state["runs_done"] or time.monotonic() > deadline:
+            break
+        time.sleep(0.01)
+    assert (state["runs_done"], state["runs_total"], state["failures"]) == (1, 5, 1)
+    assert not state["finished"] and not state["cancelled"]
+
+    # A second run on the problem waits for the first one
+    second_id = client.post("/submission", json=_submission()).get_json()["id"]
+    while (
+        "Waiting"
+        not in client.get(f"/submission/{second_id}").get_json()["state"]["log"]
+    ):
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    state = client.delete(f"/submission/{run_id}").get_json()["state"]
+    assert state["cancelled"]
+    assert fuzzer.cancelled.wait(10)
+    assert not client.get(f"/submission/{run_id}").get_json()["success"]
+
+    # Now the second one runs
+    while not client.get(f"/submission/{second_id}").get_json()["state"]["runs_done"]:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    client.delete(f"/submission/{second_id}")
+
+
+class _FakeRun:
+    """Stands in for FuzzingRun: every run fails."""
+
+    runs = 0
+
+    def __init__(self, *args):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def evaluate(self):
+        _FakeRun.runs += 1
+        return types.SimpleNamespace(verdict=RunVerdict.WRONG_ANSWER)
+
+
+def test_fuzzer_loop_stops_when_cancelled(monkeypatch, tmp_path):
+    monkeypatch.setattr(_fuzzer, "FuzzingRun", _FakeRun)
+    monkeypatch.setattr(_fuzzer.Fuzzer, "MAX_FAILS", 100)
+    _FakeRun.runs = 0
+    progress = []
+    request = FuzzingRequest(
+        sources={},
+        language=None,
+        problem=None,  # ty: ignore[invalid-argument-type]
+        seed_file=tmp_path / "x.seed",
+        logger=logging.getLogger("test"),
+        time_limit=1.0,
+        run_count=10,
+    )
+
+    def report(done, total, failures):
+        progress.append((done, total, failures))
+        if done == 3:
+            request.cancel.set()
+
+    request.progress = report
+    results = _fuzzer.Fuzzer._fuzz(request, None, tmp_path)  # ty: ignore[invalid-argument-type]
+    assert _FakeRun.runs == 3
+    assert len(results) == 3
+    assert progress == [(1, 10, 1), (2, 10, 2), (3, 10, 3)]
 
 
 def test_fuzzer_needs_a_repository(monkeypatch):
