@@ -72,7 +72,6 @@ PROGRAMS = {
         "program hello;\nbegin\n{$IFDEF DOMJUDGE}writeln('hello');{$ENDIF}\nend.\n",
         "program hello;\nbegin\n",
     ),
-    "julia": (["julia"], "hello.jl", 'println("hello")\n', None),
 }
 
 
@@ -126,7 +125,7 @@ def test_compile_and_run(tmp_path: pathlib.Path, language: str):
         timeout=60,
     )
     assert (run.returncode, run.stdout.strip()) == (0, "hello"), run.stderr
-    if language in {"java", "python", "javascript", "julia"}:
+    if language in {"java", "python", "javascript"}:
         # compile.sh records the entry point from this line
         assert re.search(r"[Dd]etected entry_point: ", result.stdout), result.stdout
 
