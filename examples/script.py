@@ -35,31 +35,36 @@ def make_settings():
     return JudgeInstance(
         identifier="local",
         settings=judge_settings,
-        base_time=1.5,
+        base_time=1.0,
         user_whitelist=set(),
-        allowed_language_keys=set(),
+        allowed_language_keys=None,
         team_categories=[DefaultCategory.Participants],
     )
 
 
 def make_contest():
-    contest_problem = ContestProblem(
-        name="helloworld", points=4, color="blue", problem_key="helloworld"
-    )
+    contest_problems = [
+        ContestProblem(name="A", points=4, color="green", problem_key="helloworld"),
+        ContestProblem(
+            name="B", points=4, color="blue", problem_key="pastryperfection"
+        ),
+        ContestProblem(name="C", points=4, color="yellow", problem_key="dfamin"),
+    ]
 
+    # Times relative to now, so a freshly generated contest.json is usable at once
     base_time = datetime.datetime.now(tzlocal.get_localzone()).replace(
         minute=0, second=0, microsecond=0
     )
     return Contest(
-        key="sample",
-        short_name="sample",
-        name="Sample Contest",
+        key="example",
+        short_name="example",
+        name="Example Contest",
         activation_time=base_time,
         start_time=base_time + datetime.timedelta(hours=1),
         freeze_time=None,
         end_time=base_time + datetime.timedelta(days=14),
         deactivation_time=base_time + datetime.timedelta(days=15),
-        problems=[contest_problem],
+        problems=contest_problems,
         public_scoreboard=False,
     )
 
@@ -119,7 +124,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
-    subparsers = parser.add_subparsers(help="Help for commands")
+    subparsers = parser.add_subparsers(help="Help for commands", required=True)
     settings = subparsers.add_parser("settings", help="Create settings")
     settings.set_defaults(func=make_settings)
 

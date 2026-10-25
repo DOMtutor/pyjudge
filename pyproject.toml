@@ -82,7 +82,7 @@ where = ["src"]
 
 [tool.ruff]
 target-version = "py312"
-extend-exclude = ["libs", "examples/*/repository", "build"]
+extend-exclude = ["libs", "examples/repository", "build"]
 
 [tool.ruff.lint]
 # E/F/W: pyflakes + pycodestyle, I: import order, UP: modern syntax, B: bugbear

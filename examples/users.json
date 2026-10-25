@@ -6,7 +6,7 @@
       "display_name": "User",
       "email": "user@localhost",
       "role": "participant",
-      "password_hash": "$2b$12$T1YsWPBWJOxRj4p0zRtZTeKg7skaFtwUU3/hccR6rX5yqUTub0fle"
+      "password_hash": "$2b$12$oYpvjZw9vadw.TV/y22f7.F5TNLGpVQCYJu2ZasZA1KaF6hYMlKSy"
     },
     {
       "key": "admin",
@@ -14,7 +14,7 @@
       "display_name": "Admin",
       "email": "admin@localhost",
       "role": "admin",
-      "password_hash": "$2b$12$T1YsWPBWJOxRj4p0zRtZTeCXiMeBb5Pfcy.vMZs69i0mHJW2g3/o2"
+      "password_hash": "$2b$12$oYpvjZw9vadw.TV/y22f7.zY5sWv0svdIAv12vc.OJXfz.FKSFKlW"
     }
   ],
   "affiliations": [

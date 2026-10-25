@@ -44,9 +44,9 @@
       ]
     }
   },
-  "base_time": 1.5,
+  "base_time": 1.0,
   "user_whitelist": [],
-  "allowed_language_keys": [],
+  "allowed_language_keys": null,
   "team_categories": [
     {
       "key": "participants",

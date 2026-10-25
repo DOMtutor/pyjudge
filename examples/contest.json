@@ -1,0 +1,33 @@
+{
+  "key": "example",
+  "short_name": "example",
+  "name": "Example Contest",
+  "activation_time": "2026-10-25T09:00:00 Europe/Berlin",
+  "start_time": "2026-10-25T10:00:00 Europe/Berlin",
+  "end_time": "2026-11-08T09:00:00 Europe/Berlin",
+  "freeze_time": null,
+  "deactivation_time": "2026-11-09T09:00:00 Europe/Berlin",
+  "problems": [
+    {
+      "name": "A",
+      "points": 4,
+      "color": "green",
+      "problem_key": "helloworld"
+    },
+    {
+      "name": "B",
+      "points": 4,
+      "color": "blue",
+      "problem_key": "pastryperfection"
+    },
+    {
+      "name": "C",
+      "points": 4,
+      "color": "yellow",
+      "problem_key": "dfamin"
+    }
+  ],
+  "public_scoreboard": false,
+  "access": null,
+  "warning_message": ""
+}
