@@ -56,6 +56,7 @@ dt_selfservice = "pydomjudge.tools.selfservice._selfservice:start"
 
 [dependency-groups]
 dev = [
+  "httpx>=0.27",
   "pytest>=8",
   "ruff>=0.17",
   "ty>=0.0.90",
@@ -98,3 +99,6 @@ include = ["src", "tests", "tools/watcher"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "integration: needs a running DOMjudge, see tests/integration/run.sh (skipped otherwise)",
+]

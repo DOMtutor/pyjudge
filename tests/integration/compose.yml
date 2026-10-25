@@ -1,0 +1,64 @@
+# Throwaway DOMjudge for the integration tests, see run.sh. Mirrors
+# docs/docker-compose.yml (database settings) without backups and persistence.
+name: pyjudge-it
+
+services:
+  mariadb:
+    image: mariadb:12
+    # Same server options as docs/docker-compose.yml; DOMjudge needs
+    # innodb_snapshot_isolation=OFF
+    # (the 2G log file lives in the tmpfs, i.e. in memory)
+    command: --innodb_snapshot_isolation=OFF --max-connections=1000 --innodb-log-file-size=2G --max-allowed-packet=1G --net_read_timeout=3600 --net_write_timeout=3600
+    tmpfs:
+      - /var/lib/mysql
+    ports:
+      - 127.0.0.1:${PYJUDGE_IT_DB_PORT:-13306}:3306
+    environment:
+      MARIADB_ROOT_PASSWORD: root-it
+      MARIADB_USER: domjudge
+      MARIADB_PASSWORD: domjudge-it
+      MARIADB_DATABASE: domjudge
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      retries: 60
+
+  domserver:
+    image: ${DOMJUDGE_IMAGE:-domjudge}/domserver:${DOMJUDGE_VERSION:-9.0.1}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${PYJUDGE_IT_WEB_PORT:-18080}:80
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_ROOT_PASSWORD: root-it
+      MYSQL_USER: domjudge
+      MYSQL_PASSWORD: domjudge-it
+      MYSQL_DATABASE: domjudge
+      CONTAINER_TIMEZONE: Europe/Berlin
+      DJ_DB_INSTALL_BARE: 1
+    healthcheck:
+      test: ["CMD", "/scripts/bin/healthcheck"]
+      interval: 3s
+      start_period: 120s
+      retries: 60
+
+  judgehost:
+    profiles: [judge]
+    image: ${DOMJUDGE_IMAGE:-domjudge}/judgehost:${DOMJUDGE_VERSION:-9.0.1}
+    depends_on:
+      domserver:
+        condition: service_healthy
+    privileged: true
+    cgroup: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+    hostname: judgehost-it
+    environment:
+      CONTAINER_TIMEZONE: Europe/Berlin
+      DOMSERVER_BASEURL: http://domserver/
+      JUDGEDAEMON_USERNAME: judgehost
+      # Set by run.sh through pyjudge before the judgehost starts
+      JUDGEDAEMON_PASSWORD: judgehost-it
+      DAEMON_ID: 0
