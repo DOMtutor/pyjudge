@@ -3,28 +3,27 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field, model_validator
 
 from ._team import TeamCategory
-from ._verdict import PydanticVerdict, SubmissionVerdict
+from ._verdict import PydanticVerdict, Verdict
 
 
 class ScoringSettings(BaseModel):
     penalty_time: float = 600.0
     result_priority: dict[PydanticVerdict, int] = Field(
         default_factory=lambda: {
-            SubmissionVerdict.TIME_LIMIT: 70,
-            SubmissionVerdict.MEMORY_LIMIT: 95,
-            SubmissionVerdict.OUTPUT_LIMIT: 90,
-            SubmissionVerdict.RUN_ERROR: 85,
-            SubmissionVerdict.WRONG_ANSWER: 80,
-            SubmissionVerdict.NO_OUTPUT: 99,
-            SubmissionVerdict.PRESENTATION_ERROR: 98,
-            SubmissionVerdict.COMPILER_ERROR: 100,
-            SubmissionVerdict.CORRECT: 1,
+            Verdict.TIME_LIMIT: 70,
+            Verdict.MEMORY_LIMIT: 95,
+            Verdict.OUTPUT_LIMIT: 90,
+            Verdict.RUN_ERROR: 85,
+            Verdict.WRONG_ANSWER: 80,
+            Verdict.NO_OUTPUT: 99,
+            Verdict.COMPILER_ERROR: 100,
+            Verdict.CORRECT: 1,
         }
     )
 
     @model_validator(mode="after")
     def _validate_all_verdicts_present(self):
-        missing = set(SubmissionVerdict) - set(self.result_priority.keys())
+        missing = set(Verdict) - set(self.result_priority.keys())
         if missing:
             missing_str = ", ".join(v.name for v in missing)
             raise ValueError(f"Missing priorities for verdicts: {missing_str}")

@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from pydomjudge.model import SubmissionVerdict, SystemCategory
+from pydomjudge.model import SystemCategory, Verdict
 from pydomjudge.repository.kattis import Repository, RepositoryProblem
 
 
@@ -57,11 +57,11 @@ def test_submissions_language_author_and_verdict(repository: Repository):
     by_name = {s.file_name: s for s in problem.submissions}
     accepted = by_name["pastry_perfection_tobias.py"]
     assert accepted.language is repository.languages_by_extension["py"]
-    assert accepted.expected_results == {SubmissionVerdict.CORRECT}
+    assert accepted.expected_results == {Verdict.CORRECT}
     assert accepted.author is not None
     assert accepted.author.key == "tobias_meggendorfer"
     slow = by_name["pastry_perfection_tobias_bruteforce.py"]
-    assert slow.expected_results == {SubmissionVerdict.TIME_LIMIT}
+    assert slow.expected_results == {Verdict.TIME_LIMIT}
     assert slow.name.startswith("TLE/")
 
 

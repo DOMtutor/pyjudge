@@ -9,13 +9,13 @@ import matplotlib.ticker
 import numpy as np
 
 from pydomjudge.evaluate._statistics import ProblemStatistics, SummaryStatistics
-from pydomjudge.model import SubmissionVerdict
+from pydomjudge.model import Verdict
 
 verdict_formats = [
-    ({SubmissionVerdict.CORRECT}, {"label": "AC", "color": "green"}),
-    ({SubmissionVerdict.WRONG_ANSWER}, {"label": "WA", "color": "red"}),
-    ({SubmissionVerdict.RUN_ERROR}, {"label": "RTE", "color": "orange"}),
-    ({SubmissionVerdict.TIME_LIMIT}, {"label": "TLE", "color": "purple"}),
+    ({Verdict.CORRECT}, {"label": "AC", "color": "green"}),
+    ({Verdict.WRONG_ANSWER}, {"label": "WA", "color": "red"}),
+    ({Verdict.RUN_ERROR}, {"label": "RTE", "color": "orange"}),
+    ({Verdict.TIME_LIMIT}, {"label": "TLE", "color": "purple"}),
 ]
 fallback_format = {"label": "Other", "color": "gray"}
 
@@ -60,7 +60,7 @@ class ProblemRenderer:
     ):
         x_axis = np.arange(0, stop=self.submission_buckets)
 
-        verdict_data = {verdict: np.zeros(len(x_axis)) for verdict in SubmissionVerdict}
+        verdict_data = {verdict: np.zeros(len(x_axis)) for verdict in Verdict}
         for (
             verdict,
             timestamps,
@@ -89,10 +89,10 @@ class ProblemRenderer:
                 graph_data.append(
                     (values, verdict_format["label"], verdict_format["color"])
                 )
-        if len(SubmissionVerdict) > len(handled_verdicts):
+        if len(Verdict) > len(handled_verdicts):
             other_verdict_values = sum(
                 verdict_data[verdict]
-                for verdict in SubmissionVerdict
+                for verdict in Verdict
                 if verdict not in handled_verdicts
             )
             # noinspection PyUnresolvedReferences

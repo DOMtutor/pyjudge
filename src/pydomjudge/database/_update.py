@@ -22,12 +22,12 @@ from pydomjudge.model import (
     Problem,
     ProblemSubmission,
     ProblemTestCase,
-    SubmissionVerdict,
     SystemCategory,
     Team,
     TeamCategory,
     User,
     UserRole,
+    Verdict,
 )
 
 from ._db import DBCursor as Cursor, field_not_in_list, get_only, list_param
@@ -749,17 +749,6 @@ def create_or_update_problem_testcases(
 
 def update_settings(cursor: Cursor, settings: JudgeSettings):
     log.info("Updating judge settings")
-    verdict_names = {
-        SubmissionVerdict.COMPILER_ERROR: "compiler-error",
-        SubmissionVerdict.PRESENTATION_ERROR: "presentation-error",
-        SubmissionVerdict.CORRECT: "correct",
-        SubmissionVerdict.WRONG_ANSWER: "wrong-answer",
-        SubmissionVerdict.OUTPUT_LIMIT: "output-limit",
-        SubmissionVerdict.RUN_ERROR: "run-error",
-        SubmissionVerdict.TIME_LIMIT: "timelimit",
-        SubmissionVerdict.MEMORY_LIMIT: "memory-limit",
-        SubmissionVerdict.NO_OUTPUT: "no-output",
-    }
 
     def write(key, value):
         cursor.execute(
@@ -772,7 +761,7 @@ def update_settings(cursor: Cursor, settings: JudgeSettings):
         "results_prio",
         json.dumps(
             {
-                f"{verdict_names[verdict]}": str(priority)
+                verdict.value: str(priority)
                 for verdict, priority in scoring.result_priority.items()
             }
         ),
@@ -972,7 +961,7 @@ def create_problem_submissions(
     invalid_submission_ids = set()
     invalid_submissions_groups = set()
     existing_submissions: dict[
-        int, tuple[int | None, int, int, str, tuple[SubmissionVerdict, ...]]
+        int, tuple[int | None, int, int, str, tuple[Verdict, ...]]
     ] = {}
     submission_successor: dict[int, int] = {}
     for (
@@ -983,15 +972,16 @@ def create_problem_submissions(
         expected_results_string,
         language_id,
     ) in cursor:
-        expected_results_list = (
-            json.loads(expected_results_string) if expected_results_string else []
-        )
         try:
-            expected_results: tuple[SubmissionVerdict, ...] = tuple(
-                SubmissionVerdict.parse_from_expected_result(verdict)
-                for verdict in expected_results_list
+            expected_results: tuple[Verdict, ...] = tuple(
+                Verdict.parse(str(verdict))
+                for verdict in (
+                    json.loads(expected_results_string)
+                    if expected_results_string
+                    else []
+                )
             )
-        except KeyError:
+        except ValueError:
             log.warning(
                 "Submission %s has invalid results %s",
                 submission_id,
@@ -1154,11 +1144,11 @@ def create_problem_submissions(
                     updated_submissions += 1
 
             assert submission.expected_results is not None
-            # noinspection PyTypeChecker
-            expected_keys = [
+            # DOMjudge compares these with the upper-cased judging result
+            expected_keys = sorted(
                 expected_result.expected_result_key()
                 for expected_result in submission.expected_results
-            ]
+            )
             expected_results_string = json.dumps(expected_keys)
             if insert:
                 source_code: str = submission.source

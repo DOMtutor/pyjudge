@@ -34,8 +34,6 @@ from ._team import (
 from ._user import User as User, UserRole as UserRole
 from ._util import get_md5 as get_md5
 from ._verdict import (
-    PydanticTestcaseVerdict as PydanticTestcaseVerdict,
     PydanticVerdict as PydanticVerdict,
-    SubmissionVerdict as SubmissionVerdict,
-    TestcaseVerdict as TestcaseVerdict,
+    Verdict as Verdict,
 )

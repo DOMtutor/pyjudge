@@ -27,11 +27,11 @@ from pydomjudge.model import (
     Contest,
     JudgeInstance,
     ProblemSubmission,
-    SubmissionVerdict,
     SystemCategory,
     Team,
     TeamCategory,
     User,
+    Verdict,
 )
 from pydomjudge.repository.kattis import JurySubmission, Repository, RepositoryProblem
 
@@ -59,10 +59,10 @@ def _update_problem_submissions(
             log.warning("Did not find a language for submission %s", submission)
             continue
 
-        submission_expected_results: tuple[SubmissionVerdict, ...] = tuple(
+        submission_expected_results: tuple[Verdict, ...] = tuple(
             submission.expected_results
         )
-        if set(submission_expected_results) == {SubmissionVerdict.CORRECT}:
+        if set(submission_expected_results) == {Verdict.CORRECT}:
             submissions.append(
                 ((config.get_solution_team_of_language(language)), submission)
             )

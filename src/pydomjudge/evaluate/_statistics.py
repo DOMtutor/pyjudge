@@ -17,7 +17,7 @@ from pydomjudge.database import (
     TeamDto,
 )
 from pydomjudge.exc import InconsistentDataError
-from pydomjudge.model import SubmissionVerdict
+from pydomjudge.model import Verdict
 
 log = logging.getLogger(__name__)
 
@@ -39,15 +39,15 @@ class ProblemGroupStatistics:
     shortest_teams: list[tuple[str, SubmissionDto]]
     smallest_teams: list[tuple[str, SubmissionDto]]
 
-    verdict_count: dict[SubmissionVerdict, int]
-    verdicts_by_time: dict[SubmissionVerdict, list[float]]
+    verdict_count: dict[Verdict, int]
+    verdicts_by_time: dict[Verdict, list[float]]
 
     @staticmethod
     def of(submissions: list[SubmissionDto]):
         correct_submissions = [
             submission
             for submission in submissions
-            if submission.verdict == SubmissionVerdict.CORRECT
+            if submission.verdict == Verdict.CORRECT
         ]
         submission_count: int = len(submissions)
         correct_submission_count: int = len(correct_submissions)
@@ -72,7 +72,7 @@ class ProblemGroupStatistics:
             correct_submissions = [
                 submission
                 for submission in team_submissions
-                if submission.verdict == SubmissionVerdict.CORRECT
+                if submission.verdict == Verdict.CORRECT
             ]
             if correct_submissions:
                 correct_submissions_by_team[team_key] = correct_submissions
@@ -122,10 +122,11 @@ class ProblemGroupStatistics:
             key=lambda item: item[1].byte_size,
         )
 
-        verdict_count: dict[SubmissionVerdict, int] = defaultdict(lambda: 0)
-        verdicts_by_time: dict[SubmissionVerdict, list[float]] = defaultdict(list)
+        verdict_count: dict[Verdict, int] = defaultdict(lambda: 0)
+        verdicts_by_time: dict[Verdict, list[float]] = defaultdict(list)
         for submission in submissions:
-            assert submission.verdict is not None
+            if submission.verdict is None:  # still pending
+                continue
             verdicts_by_time[submission.verdict].append(submission.submission_time)
             verdict_count[submission.verdict] += 1
 
@@ -337,7 +338,7 @@ class SummaryStatistics:
                 )
             ] += 1
 
-            if submission.verdict == SubmissionVerdict.CORRECT:
+            if submission.verdict == Verdict.CORRECT:
                 submissions_by_language_correct[submission.language_key] += 1
                 solved_problems.add(problem_unique_key)
                 smallest_solution_by_problem[problem_unique_key] = min(

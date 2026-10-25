@@ -3,7 +3,7 @@ from collections import defaultdict
 from collections.abc import Collection
 from dataclasses import dataclass
 
-from pydomjudge.model import SubmissionVerdict, TeamCategory, TestcaseVerdict
+from pydomjudge.model import TeamCategory, Verdict
 
 from ._data import (
     ClarificationDto,
@@ -23,6 +23,19 @@ from ._db import (
     get_unique_with_error,
     list_param,
 )
+
+log = logging.getLogger(__name__)
+
+
+def _parse_result(result: str | None) -> Verdict | None:
+    """A judging or run result; NULL while pending."""
+    if result is None:
+        return None
+    try:
+        return Verdict.parse(result)
+    except ValueError:
+        log.warning("Ignoring unknown result %s", result)
+        return None
 
 
 def _find_contest_end(cursor: Cursor, contest_key: str) -> tuple[str, float]:
@@ -144,7 +157,7 @@ def find_submissions(
                 tuple(submission_data.keys()),
             )
         judging_ids = set()
-        judging_data: dict[int, tuple[int, SubmissionVerdict | None]] = {}
+        judging_data: dict[int, tuple[int, Verdict | None]] = {}
         for submission_id, judging_id, judging_result in cursor:
             if submission_id in judging_data:
                 logging.warning("Multiple runs for submission %s", submission_id)
@@ -153,10 +166,7 @@ def find_submissions(
                 logging.warning("Multiple judging ids for submission %s", submission_id)
                 continue
             judging_ids.add(judging_id)
-            judging_data[submission_id] = (
-                judging_id,
-                SubmissionVerdict.from_string(judging_result),
-            )
+            judging_data[submission_id] = (judging_id, _parse_result(judging_result))
 
         source_data: dict[str, dict[str, bytes]] = defaultdict(dict)
         if include_files:
@@ -191,12 +201,15 @@ def find_submissions(
         judging_testcases_db = defaultdict(list)
         testcase_ids = set()
         for judging_id, runtime, testcase_id, result in cursor:
-            judging_testcases_db[judging_id].append(
-                (
-                    testcase_id,
-                    round(float(runtime), 3),
-                    TestcaseVerdict.from_string(result),
+            verdict = _parse_result(result)
+            if verdict is None or runtime is None:
+                # Not run (yet), e.g. pending or skipped by lazy evaluation
+                log.debug(
+                    "Skipping run of judging %s on case %s", judging_id, testcase_id
                 )
+                continue
+            judging_testcases_db[judging_id].append(
+                (testcase_id, round(float(runtime), 3), verdict)
             )
             testcase_ids.add(testcase_id)
 
@@ -244,8 +257,7 @@ def find_submissions(
         judging_id, judging_result = judging_data[submission_id]
         testcases = judging_testcases.get(judging_id, [])
         if not testcases and (
-            judging_result != SubmissionVerdict.COMPILER_ERROR
-            and judging_result is not None
+            judging_result != Verdict.COMPILER_ERROR and judging_result is not None
         ):
             logging.warning(
                 "No testcases found for submission %s/judging %s with result %s",

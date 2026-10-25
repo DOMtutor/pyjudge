@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from ._language import Language
 from ._util import get_md5
-from ._verdict import SubmissionVerdict
+from ._verdict import Verdict
 
 
 class ProblemSubmission(abc.ABC):
@@ -31,7 +31,7 @@ class ProblemSubmission(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def expected_results(self) -> set[SubmissionVerdict] | None:
+    def expected_results(self) -> set[Verdict] | None:
         pass
 
     @property
