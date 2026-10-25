@@ -9,8 +9,9 @@ It repeatedly generates fresh inputs from a chosen seed file, runs the submissio
 pyjudge serve fuzzer --repository path/to/repository [--base-time 1.5 | --instance instance.json] [--host H --port P]
 ```
 
-Opens a small web UI at <http://127.0.0.1:5000>: choose problem, seed file, language, paste the source, and start.
-Only problems with at least one `.seed` file in `data/secret` are offered, and only the languages of the repository are accepted.
+Opens a small web UI at <http://127.0.0.1:5000>: choose problem, seed file, language, paste the source, and start; a progress bar shows the runs done and failed, and a run can be cancelled (it stops after the current fuzzing run).
+Only problems with at least one `.seed` file in `data/secret` are offered, and only the languages of the repository (`GET /languages`) are accepted; the source is saved as `main.<extension>`, Java sources after their class name.
+Runs on the same problem wait for each other.
 The time limit is the base time (default 1 s, or `base_time` of the given `instance.json`) times the problem's `time_multiplier`, as in DOMjudge.
 The fuzzer uses `problemtools` to compile and run, so the same system dependencies as for problem verification apply.
 

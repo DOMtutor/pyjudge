@@ -6,8 +6,9 @@ import random
 import re
 import shutil
 import tempfile
+import threading
 from collections import defaultdict
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
 
 from problemtools import languages
@@ -434,6 +435,11 @@ class FuzzingRequest:
     time_limit: float
     run_count: int = 10
 
+    # Called after each run with (runs done, runs total, failed runs)
+    progress: Callable[[int, int, int], None] | None = None
+    # Set to stop after the current run
+    cancel: threading.Event = dataclasses.field(default_factory=threading.Event)
+
 
 @dataclasses.dataclass
 class FuzzingResult:
@@ -490,42 +496,10 @@ class Fuzzer:
                         f"Compile error for program {program.name}: {error}"
                     )
 
-                run_results = []
-
                 request.logger.info("Setting up problem")
 
                 with request.problem as _:
-                    request.logger.info("Starting randomization")
-                    fails = 0
-                    for i in range(request.run_count):
-                        with FuzzingRun(
-                            request.problem,
-                            program,
-                            request.logger,
-                            request.seed_file,
-                            fuzzing_directory,
-                            request.time_limit,
-                        ) as run:
-                            run_result = run.evaluate()
-                            if run_result.verdict == RunVerdict.FEEDBACK_INCONSISTENCY:
-                                request.logger.warning(
-                                    "Program has feedback inconsistencies"
-                                )
-                                break
-                            if run_result.verdict != RunVerdict.CORRECT:
-                                fails += 1
-                                run_results.append(run_result)
-
-                        request.logger.info(
-                            "Finished %d runs of %d (%d failed)",
-                            i + 1,
-                            request.run_count,
-                            fails,
-                        )
-                        if fails >= Fuzzer.MAX_FAILS:
-                            request.logger.info("Enough runs failed, ending run")
-                            break
-
+                    run_results = self._fuzz(request, program, fuzzing_directory)
                     request.logger.info("Fuzzing finished")
                     logger.info("Finished fuzzing")
 
@@ -543,3 +517,41 @@ class Fuzzer:
             if fuzzing_directory is not None:
                 shutil.rmtree(fuzzing_directory, ignore_errors=True)
         return None
+
+    @staticmethod
+    def _fuzz(
+        request: FuzzingRequest, program: Program, fuzzing_directory: Path
+    ) -> list[RunResult]:
+        """The failing runs, up to MAX_FAILS, of at most request.run_count."""
+        request.logger.info("Starting randomization")
+        run_results: list[RunResult] = []
+        fails = 0
+        for i in range(request.run_count):
+            if request.cancel.is_set():
+                request.logger.info("Cancelled after %d runs", i)
+                break
+            with FuzzingRun(
+                request.problem,
+                program,
+                request.logger,
+                request.seed_file,
+                fuzzing_directory,
+                request.time_limit,
+            ) as run:
+                run_result = run.evaluate()
+                if run_result.verdict == RunVerdict.FEEDBACK_INCONSISTENCY:
+                    request.logger.warning("Program has feedback inconsistencies")
+                    break
+                if run_result.verdict != RunVerdict.CORRECT:
+                    fails += 1
+                    run_results.append(run_result)
+
+            request.logger.info(
+                "Finished %d runs of %d (%d failed)", i + 1, request.run_count, fails
+            )
+            if request.progress is not None:
+                request.progress(i + 1, request.run_count, fails)
+            if fails >= Fuzzer.MAX_FAILS:
+                request.logger.info("Enough runs failed, ending run")
+                break
+        return run_results

@@ -12,6 +12,7 @@ import os
 import pathlib
 import threading
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field
 from io import StringIO
 from typing import Annotated
@@ -86,13 +87,36 @@ def seed_names(problem: RepositoryProblem) -> list[str]:
 class FuzzingThread(threading.Thread):
     FORMATTER = logging.Formatter("%(message)s")
 
-    def __init__(self, fuzzer_id: str, fuzzer: Fuzzer, fuzzing_request: FuzzingRequest):
+    def __init__(
+        self,
+        fuzzer_id: str,
+        fuzzer: Fuzzer,
+        fuzzing_request: FuzzingRequest,
+        problem_lock: threading.Lock,
+    ):
         super().__init__(daemon=True)
+        self.problem_lock = problem_lock
         self.fuzzer_id = fuzzer_id
         self.fuzzer = fuzzer
         self.request = fuzzing_request
-        self.state: dict = {"id": self.fuzzer_id, "finished": False}
+        self.request.progress = self._progress
+        self.state: dict = {
+            "id": self.fuzzer_id,
+            "finished": False,
+            "cancelled": False,
+            "runs_done": 0,
+            "runs_total": fuzzing_request.run_count,
+            "failures": 0,
+        }
         self.log_stream = StringIO()
+
+    def _progress(self, done: int, total: int, failures: int) -> None:
+        self.state.update(runs_done=done, runs_total=total, failures=failures)
+
+    def cancel(self) -> None:
+        """Stops the run after the current fuzzing run."""
+        self.state["cancelled"] = True
+        self.request.cancel.set()
 
     def run(self):
         submission_logger = self.request.logger
@@ -105,7 +129,15 @@ class FuzzingThread(threading.Thread):
         submission_logger.propagate = False  # shown to the user, not in the app log
 
         try:
-            result = self.fuzzer.run(self.request)
+            # A problem is one object with one temporary directory, so runs on
+            # the same problem wait for each other
+            if not self.problem_lock.acquire(blocking=False):
+                submission_logger.info("Waiting for another run on this problem")
+                self.problem_lock.acquire()
+            try:
+                result = self.fuzzer.run(self.request)
+            finally:
+                self.problem_lock.release()
             if result is not None:
                 self.state["cases"] = {
                     f"{index + 1}_{run_result.verdict}": {
@@ -142,6 +174,9 @@ class FuzzerState:
     base_time: float
     fuzzer: Fuzzer = field(default_factory=Fuzzer)
     runs: dict[str, FuzzingThread] = field(default_factory=dict)
+    problem_locks: dict[str, threading.Lock] = field(
+        default_factory=lambda: defaultdict(threading.Lock)
+    )
 
     @property
     def language_keys(self) -> set[str]:
@@ -162,7 +197,9 @@ class FuzzerState:
             time_limit=round(self.base_time * problem.limits.time_factor, 1),
             run_count=body.runs,
         )
-        thread = FuzzingThread(fuzzing_id, self.fuzzer, fuzzing_request)
+        thread = FuzzingThread(
+            fuzzing_id, self.fuzzer, fuzzing_request, self.problem_locks[body.problem]
+        )
         self.runs[fuzzing_id] = thread
         thread.start()
         return fuzzing_id
@@ -183,6 +220,20 @@ def home():
 @main_bp.route("/problems")
 def show_problems():
     return jsonify(success=True, problems=sorted(state().problems))
+
+
+@main_bp.route("/languages")
+def show_languages():
+    # The usual extension first: shortest, then alphabetical (cc before cpp)
+    languages = [
+        {
+            "key": language.key,
+            "name": language.name,
+            "extensions": sorted(language.extensions, key=lambda e: (len(e), e)),
+        }
+        for language in state().repository.languages
+    ]
+    return jsonify(success=True, languages=languages)
 
 
 @main_bp.route("/problem/<problem_name>/seeds", methods=["GET"])
@@ -224,10 +275,11 @@ def show_single_status(fuzzing_id):
 
 @main_bp.route("/submission/<fuzzing_id>", methods=["DELETE"])
 def stop_fuzzing(fuzzing_id):
-    # Forgets the run; a running thread finishes in the background
+    # Forgets the run; a running thread stops after its current fuzzing run
     run = state().runs.pop(fuzzing_id, None)
     if run is None:
         return jsonify(success=False, state=None)
+    run.cancel()
     return jsonify(success=True, state=run.get_state())
 
 
