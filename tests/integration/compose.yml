@@ -3,17 +3,16 @@
 name: pyjudge-it
 
 configs:
-  # The image's nginx passes the Host header without port to DOMjudge, whose
-  # absolute redirects then point to port 80. The DOMtutor domserver image does
-  # this itself (domjudge-packaging docker/domserver/scripts/start.d/
-  # 45-public-port.sh); remove this hook once the tests use that image.
+  # Same as in docs/docker-compose.yml: the image's nginx passes the Host header
+  # without port to DOMjudge, whose absolute redirects then point to port 80
   domserver-public-port:
     content: |
       #!/bin/sh
       host='$$host'
-      if [ -n "$${DOMJUDGE_PUBLIC_PORT:-}" ] && [ "$${DOMJUDGE_PUBLIC_PORT}" != 80 ]; then
-        host="$$host:$${DOMJUDGE_PUBLIC_PORT}"
-      fi
+      case "$${DOMJUDGE_PUBLIC_PORT:-}" in
+        ""|80|443) ;;
+        *) host="$$host:$${DOMJUDGE_PUBLIC_PORT}" ;;
+      esac
       sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
       echo "[ok] DOMjudge passes HTTP_HOST $$host"
 

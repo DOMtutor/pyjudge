@@ -7,6 +7,22 @@ networks:
     driver: bridge
 
 configs:
+  # The domserver image's nginx passes the Host header without port to DOMjudge,
+  # so with a direct port mapping its absolute redirects (e.g. to the login
+  # page) would point to port 80. This start script makes it use
+  # DOMJUDGE_PUBLIC_PORT instead; behind a reverse proxy on 80/443 it is not
+  # needed (set DOMJUDGE_PUBLIC_PORT empty).
+  domserver-public-port:
+    content: |
+      #!/bin/sh
+      host='$$host'
+      case "$${DOMJUDGE_PUBLIC_PORT:-}" in
+        ""|80|443) ;;
+        *) host="$$host:$${DOMJUDGE_PUBLIC_PORT}" ;;
+      esac
+      sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
+      echo "[ok] DOMjudge passes HTTP_HOST $$host"
+
   # Configuration of the self-service (profile "selfservice"), see docs/tools.md
   selfservice-config:
     content: |
@@ -97,11 +113,13 @@ services:
       MYSQL_DATABASE: domjudge
       CONTAINER_TIMEZONE: ${TZ}
       DJ_DB_INSTALL_BARE: 1
-      # The port in the browser, so that DOMjudge's redirects keep it: a start
-      # script of the DOMtutor image from its next build on (see
-      # docs/deployment.md), ignored by the official image. Set
+      # The port in the browser, used by the domserver-public-port script; set
       # DOMJUDGE_PUBLIC_PORT= (empty) behind a reverse proxy on port 80/443
       DOMJUDGE_PUBLIC_PORT: ${DOMJUDGE_PUBLIC_PORT-${DOMJUDGE_PORT:-12345}}
+    configs:
+      - source: domserver-public-port
+        target: /scripts/start.ro/40-public-port.sh
+        mode: 0555
 
   judgehost:
     <<: *judgehost-config
