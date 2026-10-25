@@ -69,10 +69,6 @@ def _find_category_ids(
     return category_ids
 
 
-def _find_system_category_ids(cursor: Cursor) -> Mapping[TeamCategory, int]:
-    return _find_category_ids(cursor, list(SystemCategory.values()))
-
-
 def _find_affiliation_ids(
     cursor: Cursor, affiliations: Collection[Affiliation]
 ) -> dict[Affiliation, int]:
@@ -393,28 +389,6 @@ def create_or_update_language(
             allow_submit,
         ),
     )
-
-
-def update_problem_statement(cursor: Cursor, problem: Problem) -> int:
-    cursor.execute("SELECT probid FROM problem WHERE externalid = %s", (problem.key,))
-    id_query = cursor.fetchone()
-    if not id_query:
-        raise KeyError(f"Problem {problem.key} does not exist in database")
-
-    problem_id = id_query[0]
-
-    text_data, text_type = problem.problem_text()
-
-    cursor.execute(
-        "UPDATE problem SET name = %s, problemstatement_type = %s WHERE probid = %s",
-        (
-            problem.name,
-            text_type,
-            problem_id,
-        ),
-    )
-    _write_problem_statement(cursor, problem_id, text_data)
-    return problem_id
 
 
 def create_or_update_problem_data(
