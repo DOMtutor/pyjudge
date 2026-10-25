@@ -4,16 +4,23 @@ import argparse
 import logging
 import pathlib
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import pydantic
 import yaml
 
 from pydomjudge.database import Database
-from pydomjudge.exc import ConfigurationError, UnlikelyInstructionError
+from pydomjudge.exc import (
+    ConfigurationError,
+    InvalidFileFormatError,
+    UnlikelyInstructionError,
+    validation_problems,
+)
 from pydomjudge.model import Contest, JudgeInstance, SystemCategory
 
 if TYPE_CHECKING:  # importing problemtools is slow, only some tools need it
     from pydomjudge.repository.kattis import Repository, RepositoryProblem
+
 
 LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -100,14 +107,31 @@ def load_database(args: argparse.Namespace) -> Database:
         raise ConfigurationError(
             f"No database configuration found at {path}; create one or set --db"
         )
-    with path.open(mode="rt") as f:
-        config = yaml.safe_load(f)
+    try:
+        with path.open(mode="rt") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise InvalidFileFormatError(path, f"invalid YAML: {e}") from e
     if not isinstance(config, dict):
-        raise ConfigurationError(f"{path} does not contain a mapping")
+        raise InvalidFileFormatError(path, "expected a mapping (host, user, ...)")
     try:
         return Database(**config)
     except KeyError as e:
-        raise ConfigurationError(f"{path} lacks the entry {e}") from e
+        raise InvalidFileFormatError(path, f"missing entry {e.args[0]}") from e
+
+
+def load_model[M: pydantic.BaseModel](
+    path: pathlib.Path, model: type[M], context: Any = None
+) -> M:
+    """A JSON file as pydantic model; problems are reported with the file."""
+    try:
+        text = path.read_text()
+    except OSError as e:
+        raise ConfigurationError(f"{path}: {e.strerror}") from e
+    try:
+        return model.model_validate_json(text, context=context)
+    except pydantic.ValidationError as e:
+        raise InvalidFileFormatError(path, *validation_problems(e)) from e
 
 
 def load_repository(args: argparse.Namespace) -> "Repository":
@@ -134,7 +158,7 @@ def load_instance(args: argparse.Namespace) -> JudgeInstance:
             f"No instance.json found (expected one at {path}). Set the correct path "
             f"with --instance or generate one with dt_default_settings."
         )
-    instance = JudgeInstance.model_validate_json(path.read_text())
+    instance = load_model(path, JudgeInstance)
     if not instance.team_categories:
         raise UnlikelyInstructionError(
             "Instance has no defined categories, this is very likely not what you want"
@@ -160,7 +184,7 @@ def find_problems(
     if args.contest:
         candidates = []
         for contest_file in args.contest:
-            contest = Contest.model_validate_json(contest_file.read_bytes())
+            contest = load_model(contest_file, Contest)
             for contest_problem in contest.problems:
                 problem = repository.problems.load_problem(contest_problem.problem_key)
                 if problem not in candidates:

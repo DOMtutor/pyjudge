@@ -315,7 +315,7 @@ def command_problem(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     problems.extend(config.repository.problems.load_problem(name) for name in args.name)
     for contest_json in args.contest:
         contest_json: pathlib.Path
-        contest = Contest.model_validate_json(contest_json.read_text())
+        contest = _cli.load_model(contest_json, Contest)
         for contest_problem in contest.problems:
             # noinspection PyUnresolvedReferences
             problems.append(
@@ -338,7 +338,7 @@ def command_problem(config: PyjudgeConfig, args: argparse.Namespace) -> None:
 def command_contest(config: PyjudgeConfig, args: argparse.Namespace) -> None:
     upload_contest(
         config,
-        Contest.model_validate_json(args.contest.read_text()),
+        _cli.load_model(args.contest, Contest),
         force=args.force,
         update_problems=args.update_problems,
         verify_problems=args.verify,
@@ -348,8 +348,9 @@ def command_contest(config: PyjudgeConfig, args: argparse.Namespace) -> None:
 
 
 def command_users(config: PyjudgeConfig, args: argparse.Namespace) -> None:
-    description = UsersDescription.model_validate_json(
-        args.users.read_text(),
+    description = _cli.load_model(
+        args.users,
+        UsersDescription,
         context={
             "category_by_key": {
                 category.key: category

@@ -6,8 +6,14 @@ import pathlib
 import random
 import string
 
+import pydantic
+
 from pydomjudge.database import ContestDataExport, TeamDto, UserDto
-from pydomjudge.exc import error_handler_wrapper
+from pydomjudge.exc import (
+    InvalidFileFormatError,
+    error_handler_wrapper,
+    validation_problems,
+)
 from pydomjudge.scripts import _cli
 from pydomjudge.util import default_wordlist, read_str_from, write_str_to
 
@@ -107,7 +113,10 @@ def command_contest(args: argparse.Namespace) -> None:
     destination: pathlib.Path | None = args.destination
     if destination is not None and destination.exists():
         raise FileExistsError(f"Destination {destination} already exists")
-    contest = ContestDataExport.model_validate_json(read_str_from(args.source))
+    try:
+        contest = ContestDataExport.model_validate_json(read_str_from(args.source))
+    except pydantic.ValidationError as e:
+        raise InvalidFileFormatError(args.source, *validation_problems(e)) from e
     write_str_to(anonymize(contest).model_dump_json(), destination)
 
 

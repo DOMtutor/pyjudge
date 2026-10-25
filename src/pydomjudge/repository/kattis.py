@@ -21,6 +21,7 @@ import yaml
 from problemtools.run import BuildRun
 from pydantic import model_validator
 
+from pydomjudge.exc import InvalidFileFormatError, PyJudgeError
 from pydomjudge.model import (
     Affiliation,
     Executable,
@@ -62,8 +63,16 @@ class StatusExecutionError(ExecutionError):
         return f"Exit with {self.code}{f' {self.details}' if self.details else ''}\n{self.out}\n{self.err}"
 
 
-class KattisRepositoryError(Exception):
+class KattisRepositoryError(PyJudgeError):
     pass
+
+
+def _read_yaml(path: pathlib.Path) -> Any:
+    try:
+        with path.open(mode="rt", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise InvalidFileFormatError(path, f"invalid YAML: {e}") from e
 
 
 class RepositoryTestCase(ProblemTestCase):
@@ -273,9 +282,9 @@ class RepositoryProblem(Problem):
             raise ValueError(
                 f"Problem {self.repository_key} not found at {description_file}"
             )
-        with description_file.open(mode="rt", encoding="utf-8") as f:
-            self.description = yaml.safe_load(f)
-
+        self.description = _read_yaml(description_file)
+        if not isinstance(self.description, dict) or "name" not in self.description:
+            raise InvalidFileFormatError(description_file, "no problem name ('name:')")
         self._name = self.description["name"]
         if self.description and "keywords" in self.description:
             k = self.description["keywords"]
@@ -997,9 +1006,7 @@ class Repository:
 
         self.base_directory = base_path
 
-        config_path = base_path / "config.yaml"
-        with config_path.open(mode="rt") as f:
-            configuration = yaml.safe_load(f)
+        configuration = _read_yaml(base_path / "config.yaml") or {}
 
         affiliations_by_key: dict[str, Affiliation] = {
             key: Affiliation.model_validate({**data, "short_name": key})

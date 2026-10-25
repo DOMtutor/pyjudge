@@ -23,9 +23,16 @@ class InconsistentDataError(PyJudgeError):
 
 
 class InvalidFileFormatError(PyJudgeError):
-    def __init__(self, source: pathlib.Path | None, *args):
-        super().__init__(*args)
+    """A file that cannot be read as what it should be; one problem per line."""
+
+    def __init__(self, source: pathlib.Path | None, *problems: str):
+        super().__init__(*problems)
         self.source = source
+        self.problems = problems
+
+    def __str__(self):
+        prefix = f"{self.source}: " if self.source is not None else ""
+        return "\n".join(f"{prefix}{problem}" for problem in self.problems)
 
 
 class ProblemVerificationError(PyJudgeError):
@@ -40,18 +47,57 @@ class MultipleElementsFoundError(PyJudgeError):
     pass
 
 
+def validation_problems(error) -> list[str]:
+    """A pydantic ValidationError as "location: message" lines."""
+    problems = []
+    for detail in error.errors(include_url=False):
+        location = ""
+        for part in detail["loc"]:
+            location += f"[{part}]" if isinstance(part, int) else f".{part}"
+        location = location.lstrip(".")
+        problems.append(f"{location}: {detail['msg']}" if location else detail["msg"])
+    return problems
+
+
+def describe_error(error: BaseException) -> str:
+    """The message shown for an error that ends a command."""
+    import pydantic
+    import yaml
+
+    if isinstance(error, PyJudgeError):
+        return str(error)
+    if isinstance(error, pydantic.ValidationError):
+        return "\n".join(validation_problems(error))
+    if isinstance(error, yaml.YAMLError):
+        return f"Invalid YAML: {error}"
+    if type(error).__module__.startswith("pymysql"):
+        detail = error.args[1] if len(error.args) > 1 else error
+        return (
+            f"Database error: {detail}\n"
+            "Check the database configuration (db.yml or --db) and that DOMjudge's "
+            "database is running."
+        )
+    if isinstance(error, OSError) and error.filename:
+        return f"{error.filename}: {error.strerror}"
+    return f"Unexpected error: {error!r}"
+
+
 def error_handler_wrapper(func):
+    """Run a command; report errors in a few lines, the traceback with --debug."""
+
     @functools.wraps(func)
     def run_wrapped(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except PyJudgeError as e:
-            print(f"{e}", file=sys.stderr)
-            log.debug("Error information", exc_info=e)
-            sys.exit(1)
+        except KeyboardInterrupt:
+            sys.exit(130)
         except Exception as e:
-            print(f"Unexpected error: {e}", file=sys.stderr)
-            log.error("Stacktrace", exc_info=e)
+            message = describe_error(e)
+            print(message, file=sys.stderr)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Traceback", exc_info=e)
+            elif message.startswith("Unexpected error"):
+                print("(run with --debug for the traceback)", file=sys.stderr)
             sys.exit(1)
 
     return run_wrapped
