@@ -150,7 +150,7 @@ A read-only report of how users, teams, categories, problems and contests fit to
 | Severity | Finding |
 |----------|---------|
 | error | a user with the team role has no team (cannot submit); a contest problem has no test cases |
-| warning | a team (outside the jury categories) has no users or no category; a language is not judged but submissions wait for it; a jury solution got another verdict than its folder expects; an active contest has no problems or is open to nobody |
+| warning | a team (outside the jury categories) has no users or no category; a language is not judged but submissions wait for it; a jury solution got another verdict than its folder expects; an active contest has no problems or is open to nobody; users or teams have no external ID (created outside pyjudge: pyjudge cannot match them, so uploading the same login name fails and the same team name creates a second team) |
 | info | a category has no teams; a problem is in no contest |
 
 The exit code is 1 if there are errors or warnings, so the command can run in scripts; `--json` prints the findings as JSON.

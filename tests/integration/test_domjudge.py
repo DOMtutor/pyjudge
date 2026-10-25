@@ -503,3 +503,36 @@ def test_consistency_report_finds_broken_rows(database: Database, uploaded: Cont
             cursor.execute("DELETE FROM `user` WHERE externalid = 'teamless'")
             cursor.execute("DELETE FROM team WHERE externalid = 'lonely'")
     assert check_consistency(database) == []
+
+
+def test_consistency_report_finds_rows_without_external_id(
+    database: Database, uploaded: Contest
+):
+    from pydomjudge.database import WARNING, check_consistency
+
+    # As DOMjudge's UI or pydomjudge 0.2 created them
+    with database as db, db.transaction_cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO team (name, display_name, categoryid) "
+            "SELECT 'unkeyed', 'Unkeyed', categoryid FROM team_category "
+            "WHERE externalid = 'participants'"
+        )
+        team_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO `user` (username, name, teamid, enabled) "
+            "VALUES ('unkeyed', 'Unkeyed', %s, 1)",
+            (team_id,),
+        )
+    try:
+        findings = {
+            finding.check: finding
+            for finding in check_consistency(database)
+            if finding.severity == WARNING
+        }
+        assert "unkeyed" in findings["user-without-external-id"].message
+        assert "unkeyed" in findings["team-without-external-id"].message
+    finally:
+        with database as db, db.transaction_cursor() as cursor:
+            cursor.execute("DELETE FROM `user` WHERE username = 'unkeyed'")
+            cursor.execute("DELETE FROM team WHERE name = 'unkeyed'")
+    assert check_consistency(database) == []

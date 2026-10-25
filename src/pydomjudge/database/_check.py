@@ -221,6 +221,50 @@ def _unexpected_jury_results(cursor: Cursor) -> list[Finding]:
     return findings
 
 
+def _without_external_id(cursor: Cursor) -> list[Finding]:
+    # pyjudge matches users and teams by externalid (the key); rows created
+    # elsewhere (DOMjudge's UI, older pydomjudge versions) may have none
+    def listed(names: list[str]) -> str:
+        shown = ", ".join(names[:5])
+        return shown + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+
+    findings = []
+    users = [
+        name
+        for (name,) in _rows(
+            cursor,
+            "SELECT username FROM `user` WHERE externalid IS NULL ORDER BY username",
+        )
+    ]
+    if users:
+        findings.append(
+            Finding(
+                WARNING,
+                "user-without-external-id",
+                f"{len(users)} users have no external ID ({listed(users)}): pyjudge "
+                "cannot match them, so uploading a user with one of these login "
+                "names fails",
+            )
+        )
+    teams = [
+        name
+        for (name,) in _rows(
+            cursor, "SELECT name FROM team WHERE externalid IS NULL ORDER BY name"
+        )
+    ]
+    if teams:
+        findings.append(
+            Finding(
+                WARNING,
+                "team-without-external-id",
+                f"{len(teams)} teams have no external ID ({listed(teams)}): pyjudge "
+                "cannot match them, so uploading a team with one of these names "
+                "creates a second team",
+            )
+        )
+    return findings
+
+
 CHECKS = [
     _team_users_without_team,
     _contest_problems_without_testcases,
@@ -230,6 +274,7 @@ CHECKS = [
     _unexpected_jury_results,
     _unused_categories,
     _problems_without_contest,
+    _without_external_id,
 ]
 
 
