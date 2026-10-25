@@ -8,8 +8,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import pytz
-
 from pydomjudge.database import (
     ClarificationDto,
     ContestDataExport,
@@ -20,6 +18,12 @@ from pydomjudge.exc import InconsistentDataError
 from pydomjudge.model import Verdict
 
 log = logging.getLogger(__name__)
+
+
+def _runtime(submission: SubmissionDto) -> float:
+    runtime = submission.maximum_runtime
+    assert runtime is not None
+    return runtime
 
 
 def all_false(_: Any) -> bool:
@@ -42,8 +46,8 @@ class ProblemGroupStatistics:
     verdict_count: dict[Verdict, int]
     verdicts_by_time: dict[Verdict, list[float]]
 
-    @staticmethod
-    def of(submissions: list[SubmissionDto]):
+    @classmethod
+    def of(cls, submissions: list[SubmissionDto]):
         correct_submissions = [
             submission
             for submission in submissions
@@ -67,7 +71,7 @@ class ProblemGroupStatistics:
             for team_key, team_submissions in submissions_by_team.items()
         }
 
-        correct_submissions_by_team = dict()
+        correct_submissions_by_team = {}
         for team_key, team_submissions in submissions_by_team_sorted.items():
             correct_submissions = [
                 submission
@@ -97,13 +101,19 @@ class ProblemGroupStatistics:
             list(first_correct_submission_by_team.items()),
             key=lambda item: item[1].submission_time,
         )
-        fastest_correct_submission_by_team: dict[str, SubmissionDto] = {
-            team_key: min(team_submissions, key=lambda s: s.maximum_runtime)
+        # Only submissions with recorded runs have a runtime
+        timed_correct_submissions_by_team = {
+            team_key: timed
             for team_key, team_submissions in correct_submissions_by_team.items()
+            if (timed := [s for s in team_submissions if s.maximum_runtime is not None])
+        }
+        fastest_correct_submission_by_team: dict[str, SubmissionDto] = {
+            team_key: min(team_submissions, key=_runtime)
+            for team_key, team_submissions in timed_correct_submissions_by_team.items()
         }
         fastest_teams = sorted(
-            list(fastest_correct_submission_by_team.items()),
-            key=lambda item: item[1].maximum_runtime,
+            fastest_correct_submission_by_team.items(),
+            key=lambda item: _runtime(item[1]),
         )
         shortest_correct_submission_by_team: dict[str, SubmissionDto] = {
             team_key: min(team_submissions, key=lambda s: s.line_count)
@@ -122,7 +132,7 @@ class ProblemGroupStatistics:
             key=lambda item: item[1].byte_size,
         )
 
-        verdict_count: dict[Verdict, int] = defaultdict(lambda: 0)
+        verdict_count: dict[Verdict, int] = defaultdict(int)
         verdicts_by_time: dict[Verdict, list[float]] = defaultdict(list)
         for submission in submissions:
             if submission.verdict is None:  # still pending
@@ -130,7 +140,7 @@ class ProblemGroupStatistics:
             verdicts_by_time[submission.verdict].append(submission.submission_time)
             verdict_count[submission.verdict] += 1
 
-        return ProblemGroupStatistics(
+        return cls(
             submission_count=submission_count,
             correct_submission_count=correct_submission_count,
             teams_with_attempt=teams_with_attempt,
@@ -150,8 +160,8 @@ class ProblemStatistics:
     by_language: dict[str, ProblemGroupStatistics]
     overall: ProblemGroupStatistics
 
-    @staticmethod
-    def of(submissions: list[SubmissionDto]):
+    @classmethod
+    def of(cls, submissions: list[SubmissionDto]):
         submissions_by_language = defaultdict(list)
         for submission in submissions:
             submissions_by_language[submission.language_key].append(submission)
@@ -161,7 +171,7 @@ class ProblemStatistics:
             for language_key, language_submissions in submissions_by_language.items()
         }
         overall = ProblemGroupStatistics.of(submissions)
-        return ProblemStatistics(by_language=by_language, overall=overall)
+        return cls(by_language=by_language, overall=overall)
 
 
 @dataclass
@@ -170,8 +180,9 @@ class ContestStatistics:
     language_name_by_key: dict[str, str]
     problem_statistics_by_key: dict[str, ProblemStatistics]
 
-    @staticmethod
+    @classmethod
     def of(
+        cls,
         contest_data: ContestDataExport,
         team_filter: Callable[[TeamDto], bool] | None = None,
     ):
@@ -201,7 +212,7 @@ class ContestStatistics:
             problem_key: ProblemStatistics.of(submissions)
             for problem_key, submissions in submissions_by_problem.items()
         }
-        return ContestStatistics(
+        return cls(
             team_name_by_key=team_name_by_key,
             language_name_by_key=language_name_by_key,
             problem_statistics_by_key=problem_statistics_by_key,
@@ -220,8 +231,9 @@ class SummaryStatistics:
     total_lines_of_code: int
     total_clarification_count: int
 
-    average_clarification_time: float
-    median_clarification_time: float
+    # In minutes; None without answered clarifications
+    average_clarification_time: float | None
+    median_clarification_time: float | None
     average_submissions_per_contest: float
     average_clarifications_per_contest: float
 
@@ -243,17 +255,15 @@ class SummaryStatistics:
     clarifications_by_key: dict[str, ClarificationDto]
     clarifications_by_problem: dict[str, int]
 
-    @staticmethod
+    @classmethod
     def of(
+        cls,
         contests_data: list[ContestDataExport],
-        timezone: pytz.BaseTzInfo,
+        timezone: datetime.tzinfo,
         submission_filter=None,
     ) -> "SummaryStatistics":
-        contests_data.sort(key=lambda contest_data: contest_data.description.start)
-        contest_data_by_key = {
-            contest_data.description.contest_key: contest_data
-            for contest_data in contests_data
-        }
+        if not contests_data:
+            raise InconsistentDataError("No contests given")
         for contest_data in contests_data:
             if contest_data.description.start is None:
                 raise InconsistentDataError(
@@ -263,6 +273,15 @@ class SummaryStatistics:
                 raise InconsistentDataError(
                     f"Given contest {contest_data.description.contest_key} has no end time"
                 )
+
+        # Sorted copy, the caller's list stays as it is
+        contests_data = sorted(
+            contests_data, key=lambda contest_data: contest_data.description.start or 0
+        )
+        contest_data_by_key = {
+            contest_data.description.contest_key: contest_data
+            for contest_data in contests_data
+        }
 
         all_clarifications: list[ClarificationDto] = list(
             itertools.chain(
@@ -280,15 +299,15 @@ class SummaryStatistics:
         ]
         solved_problems = set()
         active_users = set()
-        smallest_solution_by_problem = dict()
+        smallest_solution_by_problem = {}
 
         submissions_per_day = [0] * 7
         submissions_per_hour = [0] * 24
         submissions_per_day_hour = [[0] * 24 for _ in range(7)]
-        submissions_per_contest = defaultdict(lambda: 0)
-        submissions_by_problem = defaultdict(lambda: 0)
-        submissions_by_language = defaultdict(lambda: 0)
-        submissions_by_language_correct = defaultdict(lambda: 0)
+        submissions_per_contest = defaultdict(int)
+        submissions_by_problem = defaultdict(int)
+        submissions_by_language = defaultdict(int)
+        submissions_by_language_correct = defaultdict(int)
         submissions_by_time_remaining = [0] * 10
 
         for submission in all_submissions:
@@ -328,15 +347,12 @@ class SummaryStatistics:
             submissions_by_language[submission.language_key] += 1
             active_users.update(set(submission_team.member_login_names))
 
-            submissions_by_time_remaining[
-                int(
-                    (
-                        (contest_end - submission.submission_time)
-                        / (contest_end - contest_start)
-                    )
-                    * 10
-                )
-            ] += 1
+            remaining = (contest_end - submission.submission_time) / (
+                contest_end - contest_start
+            )
+            # 0 for the last tenth of the contest; a submission right at the
+            # start would otherwise land in a non-existent eleventh bucket
+            submissions_by_time_remaining[min(max(int(remaining * 10), 0), 9)] += 1
 
             if submission.verdict == Verdict.CORRECT:
                 submissions_by_language_correct[submission.language_key] += 1
@@ -348,13 +364,13 @@ class SummaryStatistics:
 
         clarifications_per_day = [0] * 7
         clarifications_per_hour = [0] * 24
-        clarifications_per_contest = defaultdict(lambda: 0)
+        clarifications_per_contest = defaultdict(int)
         clarification_response_times: list[float] = []
         clarifications_by_key = {
             clarification.identifier: clarification
             for clarification in all_clarifications
         }
-        clarifications_by_problem = defaultdict(lambda: 0)
+        clarifications_by_problem = defaultdict(int)
 
         clarification_responses = {
             clarifications_by_key[
@@ -392,20 +408,25 @@ class SummaryStatistics:
                         (clarification.contest_key, clarification.contest_problem_key)
                     ] += 1
 
-        average_clarification_time: float = (
+        average_clarification_time = (
             statistics.mean(clarification_response_times) / 60
+            if clarification_response_times
+            else None
         )
-        median_clarification_time: float = (
+        median_clarification_time = (
             statistics.median(clarification_response_times) / 60
+            if clarification_response_times
+            else None
         )
-        average_submissions_per_contest = statistics.mean(
-            submissions_per_contest.values()
+        # Over all contests, also those without submissions or clarifications
+        average_submissions_per_contest = sum(submissions_per_contest.values()) / len(
+            contests_data
         )
-        average_clarifications_per_contest = statistics.mean(
+        average_clarifications_per_contest = sum(
             clarifications_per_contest.values()
-        )
+        ) / len(contests_data)
 
-        return SummaryStatistics(
+        return cls(
             contest_keys=contest_keys,
             total_active_users=len(active_users),
             total_contest_count=len(contest_keys),

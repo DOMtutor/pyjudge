@@ -77,7 +77,7 @@ def _find_affiliation_ids(
     cursor: Cursor, affiliations: Collection[Affiliation]
 ) -> dict[Affiliation, int]:
     if not affiliations:
-        return dict()
+        return {}
     affiliations_by_key = {affiliation.key: affiliation for affiliation in affiliations}
     # noinspection SqlType
     cursor.execute(
@@ -90,7 +90,7 @@ def _find_affiliation_ids(
 
 def _find_user_ids(cursor: Cursor, users: Collection[User]) -> dict[User, int]:
     if not users:
-        return dict()
+        return {}
     users_by_key = {user.key: user for user in users}
     # noinspection SqlType
     cursor.execute(
@@ -102,7 +102,7 @@ def _find_user_ids(cursor: Cursor, users: Collection[User]) -> dict[User, int]:
 
 def _find_team_ids(cursor: Cursor, teams: Collection[Team]) -> dict[Team, int]:
     if not teams:
-        return dict()
+        return {}
     teams_by_key: dict[str, Team] = {team.key: team for team in teams}
     # noinspection SqlType
     cursor.execute(
@@ -499,7 +499,7 @@ def test_case_compare_key(case: DbTestCase):
         if case.name.startswith(prefix):
             return i, case.name[len(prefix) :]
     if case.description is None:
-        logging.debug("Case %s name does not start with regular key", case)
+        log.debug("Case %s name does not start with regular key", case)
     return len(order), case.name
 
 
@@ -868,7 +868,7 @@ def set_global_languages(
         )
 
 
-def clear_invalid_submissions(cursor):
+def clear_invalid_submissions(cursor: Cursor) -> None:
     cursor.execute(
         "DELETE FROM submission_file "
         "WHERE LENGTH(submission_file.sourcecode) = 0 OR LOCATE('\\0', submission_file.sourcecode) > 0"
@@ -940,8 +940,8 @@ def create_problem_submissions(
         "Updating for contests with ids %s", ",".join([str(i) for i in contest_ids])
     )
 
-    submissions_grouped: dict[tuple[int, tuple[str, ...]], ProblemSubmission] = dict()
-    used_team_ids = dict()
+    submissions_grouped: dict[tuple[int, tuple[str, ...]], ProblemSubmission] = {}
+    used_team_ids = {}
     for team, submission in submissions:
         team_id = team_ids[team]
         key = team_id, (submission.file_name,)
@@ -1060,7 +1060,7 @@ def create_problem_submissions(
         _language_id,
         _expected_results,
     ) in existing_submissions.items():
-        file_names = submission_file_names.get(submission_id, tuple())
+        file_names = submission_file_names.get(submission_id, ())
         if not file_names:
             log.warning("No files for submission %d", submission_id)
 
@@ -1090,7 +1090,7 @@ def create_problem_submissions(
 
     old_submission_ids: list[int] = []
     current_submissions: dict[int, dict[tuple[int, Collection[str]], int]] = {
-        contest_id: dict() for contest_id in contest_ids
+        contest_id: {} for contest_id in contest_ids
     }
 
     for contest_id, team_submissions in submissions_by_contest_and_team.items():

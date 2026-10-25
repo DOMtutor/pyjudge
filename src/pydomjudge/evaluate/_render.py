@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
+from matplotlib.figure import Figure
 
 from pydomjudge.evaluate._statistics import ProblemStatistics, SummaryStatistics
 from pydomjudge.model import Verdict
@@ -18,6 +19,16 @@ verdict_formats = [
     ({Verdict.TIME_LIMIT}, {"label": "TLE", "color": "purple"}),
 ]
 fallback_format = {"label": "Other", "color": "gray"}
+
+log = logging.getLogger(__name__)
+
+
+def _save(fig: Figure, path: pathlib.Path) -> None:
+    """Write the figure as PNG and release it; pyplot keeps open figures alive."""
+    try:
+        fig.savefig(path, format="png", transparent=True)
+    finally:
+        plt.close(fig)
 
 
 class ProblemRenderer:
@@ -68,7 +79,7 @@ class ProblemRenderer:
             for timestamp in timestamps:
                 x_pos = (int(timestamp) - self.start_second) // self.seconds_per_bucket
                 if not 0 <= x_pos < self.submission_buckets:
-                    logging.warning(
+                    log.warning(
                         "Invalid submission time %f (should be between %s and %s)",
                         timestamp,
                         self.start_time,
@@ -127,10 +138,9 @@ class ProblemRenderer:
             idx = np.round(np.linspace(0, len(self.day_names) - 1, 7)).astype(int)
             ticks = [self.day_beginning_seconds[i] for i in idx]
             labels = [self.day_names[i] for i in idx]
-        plt.xticks(ticks=ticks, labels=labels)
+        ax.set_xticks(ticks, labels=labels)
 
-        with file.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, file)
 
 
 class SummaryRenderer:
@@ -162,8 +172,7 @@ class SummaryRenderer:
         ax.set_xticks(per_day_x_axis + per_day_width / 2)
         ax.set_xticklabels(day_labels)
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)
 
     def render_per_hour(self, path: pathlib.Path):
         fig, ax = plt.subplots()
@@ -189,8 +198,7 @@ class SummaryRenderer:
         ax.set_xticks(per_hour_x_axis + per_hour_width / 2)
         ax.set_xticklabels(per_hour_x_axis)
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)
 
     def render_per_day_hour(self, path: pathlib.Path, day_labels: list[str]):
         fig, ax = plt.subplots(figsize=(9, 3))
@@ -217,8 +225,7 @@ class SummaryRenderer:
         cbar.ax.set_ylabel("Submissions", rotation=-90, va="bottom")
         fig.tight_layout()
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)
 
     def render_per_remaining_time(self, path: pathlib.Path):
         fig, ax = plt.subplots()
@@ -233,8 +240,7 @@ class SummaryRenderer:
         ax.set_xticks(np.arange(len(self.data.submissions_by_time_remaining)))
         ax.set_xticklabels([f"{i:d}%" for i in range(100, 0, -10)])
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)
 
     def render_per_contest(self, path: pathlib.Path):
         fig, ax = plt.subplots()
@@ -266,8 +272,7 @@ class SummaryRenderer:
         ax.set_xticks(per_contest_x_axis + per_contest_width / 2)
         ax.set_xticklabels(self.data.contest_keys, rotation=-30)
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)
 
     def render_per_language(self, path: pathlib.Path):
         fig, ax = plt.subplots()
@@ -308,5 +313,4 @@ class SummaryRenderer:
         ax.set_xticks(submissions_by_language_x_axis + per_contest_width / 2)
         ax.set_xticklabels(language_keys)
 
-        with path.open(mode="wb") as f:
-            plt.savefig(f, format="png", transparent=True)
+        _save(fig, path)

@@ -1070,7 +1070,7 @@ class Repository:
             languages.append(language)
 
         self.languages: Collection[Language] = tuple(languages)
-        self.languages_by_extension: dict[str, Language] = dict()
+        self.languages_by_extension: dict[str, Language] = {}
         for lang in self.languages:
             for extension in lang.extensions:
                 if extension in self.languages_by_extension:

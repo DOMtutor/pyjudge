@@ -1,3 +1,4 @@
+import argparse
 import logging
 import pathlib
 
@@ -94,11 +95,11 @@ def write_submission_files(
     )
 
 
-def command_contest(database: Database, args):
+def command_contest(database: Database, args: argparse.Namespace) -> None:
     write_contest(database, args.contest, args.destination)
 
 
-def command_submissions(database: Database, args):
+def command_submissions(database: Database, args: argparse.Namespace) -> None:
     write_submission_files(database, args.contest, args.destination)
 
 

@@ -121,13 +121,6 @@ class RunVerdict(enum.StrEnum):
     JUDGE_ERROR = "JE"
     FEEDBACK_INCONSISTENCY = "INC"
 
-    @staticmethod
-    def get(key):
-        for verdict in RunVerdict:
-            if verdict.value == key:
-                return verdict
-        raise KeyError(key)
-
 
 class RunResult:
     def __init__(
@@ -386,7 +379,7 @@ class FuzzingRun:
                     run_verdict = RunVerdict.FEEDBACK_INCONSISTENCY
             else:
                 run_feedback = FuzzingRun.parse_feedback(result)
-                run_verdict = RunVerdict.get(result.verdict)
+                run_verdict = RunVerdict(result.verdict)
 
         elif self.seed_type == SeedStructure.SINGLE_CASE:
             FuzzingRun.randomize_single(self.case_seed_file, self.seed_file, self.seed)
@@ -399,7 +392,7 @@ class FuzzingRun:
                 raise ValueError("No executions")
 
             run_feedback = FuzzingRun.parse_feedback(result)
-            run_verdict = RunVerdict.get(result.verdict)
+            run_verdict = RunVerdict(result.verdict)
         else:
             raise AssertionError
 

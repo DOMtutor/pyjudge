@@ -12,18 +12,20 @@ import apprise
 import yaml
 from dateutil import parser
 
+log = logging.getLogger(__name__)
+
 
 class EventType(enum.Enum):
     ServerStatus = 0
     JudgehostStatus = 1
     Clarification = 2
 
-    @staticmethod
-    def get_by_name(key: str) -> "EventType | None":
-        for ev in EventType:
-            if ev.name == key:
-                return ev
-        return None
+    @classmethod
+    def get_by_name(cls, key: str) -> "EventType | None":
+        try:
+            return cls[key]
+        except KeyError:
+            return None
 
 
 def truncate_text(string: str, total_length=200, line_count=5) -> str:
@@ -37,7 +39,7 @@ def truncate_text(string: str, total_length=200, line_count=5) -> str:
         lines = lines[:line_count]
         lines_truncated = True
 
-    string = "".join(lines)
+    string = "\n".join(lines)
     if len(string) >= total_length:
         return string[:total_length] + "..."
     if lines_truncated:
@@ -54,7 +56,7 @@ class StateManager:
                 with self.state_path.open("r") as f:
                     self.state = json.load(f)
             except Exception as e:
-                logging.error("Failed to load state file %s: %s", self.state_path, e)
+                log.error("Failed to load state file %s: %s", self.state_path, e)
 
     def get_last_clarification_update(self, judge_name: str) -> float:
         if (
@@ -74,7 +76,7 @@ class StateManager:
             with self.state_path.open("w") as f:
                 json.dump(self.state, f, indent=2)
         except Exception as e:
-            logging.error("Failed to save state file %s: %s", self.state_path, e)
+            log.error("Failed to save state file %s: %s", self.state_path, e)
 
 
 class Watcher:
@@ -127,7 +129,7 @@ class Watcher:
                     f"Failed to connect to judge {self.name}: {status_request.status}",
                 )
         except aiohttp.ClientError as e:
-            print(e)
+            log.debug("Status request to %s failed: %s", self.name, e)
             await self.update_judge_status(
                 False, f"Failed to connect to judge {self.name}: {e}"
             )
@@ -138,7 +140,7 @@ class Watcher:
             response = await self.judge_session.get(url, **kwargs)
 
             if not response.ok:
-                logging.debug("Error during request %s: %d", url, response.status)
+                log.debug("Error during request %s: %d", url, response.status)
                 await self.update_judge_status(
                     False,
                     f"Failed to query judge {self.name} on {url}: {response.status}",
@@ -146,7 +148,7 @@ class Watcher:
                 return None
             return await response.json()
         except aiohttp.ClientError as e:
-            logging.debug("Error during request %s: %s", url, e)
+            log.debug("Error during request %s: %s", url, e)
             await self.update_judge_status(
                 False, f"Failed to query judge {self.name}: {e}"
             )
@@ -178,7 +180,7 @@ class Watcher:
     async def query_clarifications(self):
         contests = await self.request_from_judge_api("/contests?enabled=true")
         if not contests:
-            logging.debug("No enabled contests for %s", self.name)
+            log.debug("No enabled contests for %s", self.name)
             return
         assert isinstance(contests, list)
 
@@ -230,10 +232,10 @@ class Watcher:
         for c in new_team_clarifications:
             try:
                 c_time = parser.parse(c["time"]).timestamp()
-                if c_time > max_processed_time:
-                    max_processed_time = c_time
-            except Exception:
-                pass
+            except (KeyError, TypeError, ValueError, OverflowError) as e:
+                log.warning("Clarification %s has no valid time: %s", c.get("id"), e)
+                continue
+            max_processed_time = max(max_processed_time, c_time)
 
         if max_processed_time > self.last_clarification_update:
             self.last_clarification_update = max_processed_time
@@ -242,7 +244,7 @@ class Watcher:
             )
 
     async def run(self):
-        logging.info("Watching judge %s", self.name)
+        log.info("Watching judge %s", self.name)
         while True:
             await asyncio.gather(
                 self.check_judge_api_status(),
@@ -257,7 +259,7 @@ async def main(config_path: pathlib.Path):
         with config_path.open("r") as f:
             config = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
-        logging.critical("Failed to load config file %s: %s", config_path, e)
+        log.critical("Failed to load config file %s: %s", config_path, e)
         return
 
     state_path = config_path.parent / ".watcher_state.json"
@@ -267,10 +269,10 @@ async def main(config_path: pathlib.Path):
     notification_channels = config.get("notifications", {})
     for name, url in notification_channels.items():
         if not ap.add(url, tag=name):
-            logging.warning("Could not add channel: %s", name)
+            log.warning("Could not add channel: %s", name)
 
     if not ap.servers:
-        logging.warning("No valid notification channels configured.")
+        log.warning("No valid notification channels configured.")
 
     watchers = []
     sessions = []
@@ -286,7 +288,7 @@ async def main(config_path: pathlib.Path):
                     password = os.environ.get(password_env_var)
 
             if not password:
-                logging.error("No password provided for judge '%s'. Skipping.", name)
+                log.error("No password provided for judge '%s'. Skipping.", name)
                 continue
 
             session = aiohttp.ClientSession(auth=aiohttp.BasicAuth(user, password))
@@ -305,15 +307,15 @@ async def main(config_path: pathlib.Path):
                         if et is not None:
                             event_config[et].append(channel_name)
                         else:
-                            logging.warning(
+                            log.warning(
                                 "Unknown event type '%s' for channel '%s' in judge '%s'",
                                 ev,
                                 channel_name,
                                 name,
                             )
                 else:
-                    logging.warning(
-                        "Invalid event configuration for channel '%s' in judge '%s",
+                    log.warning(
+                        "Invalid event configuration for channel '%s' in judge '%s'",
                         channel_name,
                         name,
                     )
@@ -336,7 +338,7 @@ async def main(config_path: pathlib.Path):
             )
             await asyncio.gather(*watchers)
         else:
-            logging.info("No judges to watch.")
+            log.info("No judges to watch.")
     finally:
         for session in sessions:
             if not session.closed:

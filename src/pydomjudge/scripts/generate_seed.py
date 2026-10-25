@@ -59,7 +59,7 @@ def main():
 
     template = env.from_string(template_content)
 
-    files = dict()
+    files = {}
     for i in range(args.count):
         filename, content = render_content(i + 1, filename_template, template)
         file = pathlib.Path(filename).resolve().absolute()
