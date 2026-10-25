@@ -28,6 +28,10 @@ class InvalidFileFormatError(PyJudgeError):
         self.source = source
 
 
+class ProblemVerificationError(PyJudgeError):
+    pass
+
+
 class ElementNotFoundError(PyJudgeError):
     pass
 

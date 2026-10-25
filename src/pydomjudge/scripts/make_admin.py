@@ -3,11 +3,14 @@ import sys
 
 from pydomjudge.exc import error_handler_wrapper
 from pydomjudge.model import User, UserRole
+from pydomjudge.scripts import _cli
 from pydomjudge.scripts.upload import UsersDescription
 
 
 @error_handler_wrapper
 def main():
+    parser = _cli.make_parser("Interactively create admin.json with one admin user")
+    _cli.configure_logging(parser.parse_args())
     salt = User.generate_salt()
     from getpass import getpass
 

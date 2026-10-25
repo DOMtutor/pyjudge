@@ -1,25 +1,23 @@
-import argparse
 import sys
 
-import pydomjudge.repository.kattis as kattis
-import pydomjudge.scripts.find_problem as find_problem
-import pydomjudge.scripts.util as script_util
 from pydomjudge.exc import error_handler_wrapper
+from pydomjudge.scripts import _cli
 
 
 @error_handler_wrapper
 def main():
-    parser = argparse.ArgumentParser()
-    script_util.add_logging(parser)
-    kattis.add_arguments(parser)
-    find_problem.add_arguments(parser)
-
-    parser.add_argument("--statement", type=str)
+    parser = _cli.make_parser(
+        "Verify problems with problemtools, or build their statement",
+        repository=True,
+        problem_filters=True,
+    )
+    parser.add_argument(
+        "--statement", metavar="LANG", help="Build the statement PDF instead"
+    )
     args = parser.parse_args()
-    script_util.apply_logging(args)
+    _cli.configure_logging(args)
 
-    repository = kattis.from_args(args)
-    problems = find_problem.find_problems(repository, args)
+    problems = _cli.find_problems(_cli.load_repository(args), args)
     if not problems:
         sys.exit("No problems found")
 

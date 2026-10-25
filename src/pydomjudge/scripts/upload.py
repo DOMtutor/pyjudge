@@ -1,6 +1,6 @@
-import argparse
 import dataclasses
 import datetime
+import getpass
 import itertools
 import logging
 import pathlib
@@ -13,12 +13,9 @@ from pydantic import BaseModel, field_serializer, field_validator
 from pydantic_core.core_schema import ValidationInfo
 
 import pydomjudge.database as update
-import pydomjudge.repository.kattis as kattis
-import pydomjudge.scripts.db as db
-import pydomjudge.scripts.util as script_util
 from pydomjudge.database import Database, DBCursor as Cursor
 from pydomjudge.exc import (
-    ConfigurationError,
+    ProblemVerificationError,
     UnlikelyInstructionError,
     error_handler_wrapper,
 )
@@ -34,6 +31,7 @@ from pydomjudge.model import (
     Verdict,
 )
 from pydomjudge.repository.kattis import JurySubmission, Repository, RepositoryProblem
+from pydomjudge.scripts import _cli
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +97,9 @@ def upload_contest(
     update_test_cases=True,
 ):
     if not force and contest.is_running(datetime.datetime.now().astimezone()):
-        raise ValueError("Contest %s is running")
+        raise UnlikelyInstructionError(
+            f"Contest {contest.key} is running; use --force to update it anyway"
+        )
     if contest.end_time < datetime.datetime.now(datetime.UTC):
         log.warning(
             "Contest is in the past (ends at %s), is this correct?", contest.end_time
@@ -114,13 +114,7 @@ def upload_contest(
 
     if update_problems:
         if verify_problems:
-            log.info("Checking problems")
-            try:
-                for problem in problems_by_key.values():
-                    problem.check()
-            except VerifyError as e:
-                log.error("Problem verification failed", exc_info=e)
-                return
+            verify(problems_by_key.values())
         else:
             log.info("Skipping problem verification")
 
@@ -160,30 +154,36 @@ def upload_contest(
     log.info("Updated contest %s", contest)
 
 
+def verify(problems: Collection[RepositoryProblem]):
+    log.info("Checking problems")
+    for problem in problems:
+        try:
+            problem.check()
+        except VerifyError as e:
+            raise ProblemVerificationError(
+                f"Verification of {problem.repository_key} failed: {e} "
+                f"(details with dt_kattis_check --name {problem.repository_key} --debug)"
+            ) from e
+
+
 def upload_problems(
     config: PyjudgeConfig,
     problems: list[RepositoryProblem],
     update_submissions: bool = True,
-    verify_problems: bool = False,
+    verify_problems: bool = True,
+    update_test_cases: bool = True,
 ):
-    if update_submissions:
-        if verify_problems:
-            log.info("Checking problems")
-            try:
-                for problem in problems:
-                    problem.check()
-            except VerifyError as e:
-                log.error("Problem verification failed", exc_info=e)
-                return
-            log.info("All ok, uploading")
-        else:
-            log.info("Skipping verification")
+    if verify_problems:
+        verify(problems)
+    else:
+        log.info("Skipping verification")
 
     with config.database as connection:
         for problem in problems:
             with connection.transaction_cursor() as cursor:
                 update.create_or_update_problem_data(cursor, config.judge, problem)
-                update.create_or_update_problem_testcases(cursor, problem)
+                if update_test_cases:
+                    update.create_or_update_problem_testcases(cursor, problem)
                 if update_submissions:
                     _update_problem_submissions(
                         cursor, problem, config.repository, None
@@ -330,6 +330,7 @@ def command_problem(config: PyjudgeConfig, args):
         problems,
         verify_problems=args.verify,
         update_submissions=args.update_submissions,
+        update_test_cases=args.update_testcases,
     )
 
 
@@ -376,23 +377,25 @@ def command_check(config: PyjudgeConfig, _):
     check_database(config)
 
 
-def command_reset_password(config: PyjudgeConfig, _):
-    raise NotImplementedError()
+def command_reset_password(config: PyjudgeConfig, args):
+    password = getpass.getpass(f"New password for {args.user}: ")
+    if not password:
+        sys.exit("Empty password")
+    if getpass.getpass("Repeat the password: ") != password:
+        sys.exit("Passwords do not match")
+    with config.database as connection:
+        with connection.transaction_cursor() as cursor:
+            update.update_user_password(cursor, args.user, User.hash_password(password))
+    log.info("Updated password of %s", args.user)
 
 
 @error_handler_wrapper
 def main():
-    logging.basicConfig(level=logging.INFO)
-
-    parser = argparse.ArgumentParser()
-    script_util.add_logging(parser)
-    db.make_argparse(parser)
-    kattis.add_arguments(parser)
-    parser.add_argument(
-        "--instance",
-        type=pathlib.Path,
-        default="instance.json",
-        help="Path to instance specification",
+    parser = _cli.make_parser(
+        "Synchronise settings, users, problems and contests into DOMjudge",
+        database=True,
+        repository=True,
+        instance=True,
     )
 
     subparsers = parser.add_subparsers(help="Help for commands", required=True)
@@ -485,6 +488,7 @@ def main():
     reset_password_parser = subparsers.add_parser(
         "password", help="Reset a user's password"
     )
+    reset_password_parser.add_argument("user", help="Key (externalid) of the user")
     reset_password_parser.set_defaults(func=command_reset_password)
 
     settings_parser = subparsers.add_parser("settings", help="Upload settings")
@@ -494,27 +498,11 @@ def main():
     check_parser.set_defaults(func=command_check)
 
     arguments = parser.parse_args()
-    script_util.apply_logging(arguments)
-
-    if not arguments.instance.is_file():
-        raise ConfigurationError(
-            f"No instance.json found (expected one at {arguments.instance}). Set correct path with --instance or generate one with dt_default_settings."
-        )
-    instance = JudgeInstance.model_validate_json(arguments.instance.read_text())
-    if not instance.team_categories:
-        raise UnlikelyInstructionError(
-            "Instance has no defined categories, this is very likely not what you want"
-        )
-    category_keys = set(category.key for category in instance.team_categories)
-    for system_category in SystemCategory.values():
-        if system_category.key in category_keys:
-            raise ConfigurationError(
-                f"Reserved system category {system_category.key} declared!"
-            )
+    _cli.configure_logging(arguments)
 
     config = PyjudgeConfig(
-        repository=kattis.from_args(arguments),
-        judge=instance,
-        database=db.from_args(arguments),
+        repository=_cli.load_repository(arguments),
+        judge=_cli.load_instance(arguments),
+        database=_cli.load_database(arguments),
     )
     arguments.func(config, arguments)

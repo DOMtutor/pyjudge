@@ -53,6 +53,7 @@ dt_kattis_get = "pydomjudge.scripts.get:main"
 dt_generate_seed = "pydomjudge.scripts.generate_seed:main"
 dt_make_admin_user = "pydomjudge.scripts.make_admin:main"
 dt_default_settings = "pydomjudge.scripts.default_instance:main"
+dt_anonymize = "pydomjudge.scripts.anonymize:main"
 dt_fuzzer = "pydomjudge.tools.fuzzer:run_app"
 dt_selfservice = "pydomjudge.tools.selfservice._selfservice:start"
 
