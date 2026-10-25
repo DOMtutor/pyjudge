@@ -1,0 +1,40 @@
+name: Integration
+
+# Uploads the examples into a real DOMjudge and checks its pages, see
+# tests/integration/run.sh. Manual, because it pulls about 1 GB of images and
+# installs LaTeX for the problem statements.
+on:
+  workflow_dispatch:
+    inputs:
+      judge:
+        description: Also start a judgehost and check the jury verdicts
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  domjudge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install problemtools dependencies, pypy3 and LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends automake g++ make libboost-dev libgmp-dev \
+            pypy3 ghostscript texlive-latex-extra texlive-luatex texlive-fonts-recommended texlive-plain-generic
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Build problemtools
+        run: make -C libs/problemtools
+      - name: Install
+        run: uv sync --locked --all-packages
+      - name: Integration tests
+        env:
+          JUDGE: ${{ inputs.judge && '1' || '0' }}
+        run: tests/integration/run.sh -v
