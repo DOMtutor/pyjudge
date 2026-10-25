@@ -110,9 +110,8 @@ def contest() -> Contest:
     )
 
 
-def upload_all(config: PyjudgeConfig, contest: Contest) -> None:
-    upload.update_settings(config)
-    description = UsersDescription.model_validate_json(
+def users_description(config: PyjudgeConfig) -> UsersDescription:
+    return UsersDescription.model_validate_json(
         (EXAMPLES / "users.json").read_text(),
         context={
             "category_by_key": {
@@ -121,7 +120,11 @@ def upload_all(config: PyjudgeConfig, contest: Contest) -> None:
             }
         },
     )
-    upload.upload_users(config, description, overwrite_passwords=True)
+
+
+def upload_all(config: PyjudgeConfig, contest: Contest) -> None:
+    upload.update_settings(config)
+    upload.upload_users(config, users_description(config), overwrite_passwords=True)
     # The contest is running, which the upload refuses without force
     upload.upload_contest(config, contest, force=True)
 
