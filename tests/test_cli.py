@@ -1,4 +1,4 @@
-"""The dt_* tools: shared options and the pure parts of the scripts."""
+"""The command-line helpers: shared options and the pure parts of the scripts."""
 
 import argparse
 import logging

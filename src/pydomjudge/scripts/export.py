@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 import pydomjudge.database as query
 from pydomjudge.database import ContestDataExport, Database, SubmissionDto, TeamDto
-from pydomjudge.exc import ElementNotFoundError, error_handler_wrapper
+from pydomjudge.exc import ElementNotFoundError
 from pydomjudge.model import SystemCategory
 from pydomjudge.scripts import _cli
 from pydomjudge.util import write_str_to
@@ -103,28 +103,9 @@ def command_submissions(database: Database, args: argparse.Namespace) -> None:
     write_submission_files(database, args.contest, args.destination)
 
 
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser("Export contest data", database=True)
-
-    subparsers = parser.add_subparsers(help="Help for commands", required=True)
-    contest_data_parser = subparsers.add_parser(
-        "contest", help="Relevant data of a contest"
-    )
-    contest_data_parser.add_argument("contest", help="The contest short name")
-    contest_data_parser.add_argument(
-        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
-    )
-    contest_data_parser.set_defaults(func=command_contest)
-    submissions_parser = subparsers.add_parser(
-        "submissions", help="Submissions of a contest"
-    )
-    submissions_parser.add_argument("contest", help="The contest short name")
-    submissions_parser.set_defaults(func=command_submissions)
-    submissions_parser.add_argument(
-        "-d", "--destination", help="Destination file", type=pathlib.Path, default=None
-    )
-
-    arguments = parser.parse_args()
-    _cli.configure_logging(arguments)
-    arguments.func(_cli.load_database(arguments), arguments)
+def run(args: argparse.Namespace) -> None:
+    database = _cli.load_database(args)
+    if args.export_command == "contest":
+        command_contest(database, args)
+    else:
+        command_submissions(database, args)

@@ -18,7 +18,7 @@ It uses the DOMtutor builds of the DOMjudge images (`incaseoftrouble/domtutor_do
 * `docker compose up -d`
 * `docker compose logs domserver` shows the initial admin password (unless you set one via `pydomjudge`)
 * Log in at <http://localhost:12345>
-* In the web interface, set the password of the `judgehost` user to `DOMJUDGE_JUDGE_PASSWORD` (or run `dt_judge_upload password judgehost` with pydomjudge)
+* In the web interface, set the password of the `judgehost` user to `DOMJUDGE_JUDGE_PASSWORD` (or run `pyjudge upload password judgehost`)
 * `docker compose logs judgehost` should show it connecting and idling
 * `docker compose down` stops everything, `docker compose down -v` also deletes the database
 

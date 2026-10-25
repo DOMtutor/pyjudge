@@ -25,7 +25,7 @@ cd pyjudge
 uv sync                  # library, CLI tools, web tools, statistics and the dev tools
 ```
 
-Run tools with `uv run dt_judge_upload ...` or activate the environment (`source .venv/bin/activate`).
+Run commands with `uv run pyjudge ...` or activate the environment (`source .venv/bin/activate`).
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
 

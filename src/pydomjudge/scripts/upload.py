@@ -18,7 +18,6 @@ from pydomjudge.database import Database, DBCursor as Cursor
 from pydomjudge.exc import (
     ProblemVerificationError,
     UnlikelyInstructionError,
-    error_handler_wrapper,
 )
 from pydomjudge.model import (
     Affiliation,
@@ -163,7 +162,7 @@ def verify(problems: Collection[RepositoryProblem]):
         except VerifyError as e:
             raise ProblemVerificationError(
                 f"Verification of {problem.repository_key} failed: {e} "
-                f"(details with dt_kattis_check --name {problem.repository_key} --debug)"
+                f"(details with pyjudge problem check --name {problem.repository_key} --debug)"
             ) from e
 
 
@@ -391,120 +390,18 @@ def command_reset_password(config: PyjudgeConfig, args: argparse.Namespace) -> N
     log.info("Updated password of %s", args.user)
 
 
-@error_handler_wrapper
-def main():
-    parser = _cli.make_parser(
-        "Synchronise settings, users, problems and contests into DOMjudge",
-        database=True,
-        repository=True,
-        instance=True,
-    )
-
-    subparsers = parser.add_subparsers(help="Help for commands", required=True)
-    problem_parser = subparsers.add_parser("problem", help="Upload problems")
-    problem_parser.add_argument(
-        "--regex", nargs="*", help="Regexes to match problem name", default=[]
-    )
-    problem_parser.add_argument("--name", nargs="*", help="Problem names", default=[])
-    problem_parser.add_argument(
-        "--contest",
-        nargs="*",
-        type=pathlib.Path,
-        help="Update problems of contest description",
-        default=[],
-    )
-    problem_parser.add_argument(
-        "--skip-verify",
-        action="store_false",
-        dest="verify",
-        help="Skip checking of problems",
-        default=True,
-    )
-    problem_parser.add_argument(
-        "--skip-submissions",
-        action="store_false",
-        dest="update_submissions",
-        default=True,
-        help="Skip uploading of sample submissions",
-    )
-    problem_parser.add_argument(
-        "--skip-testcases",
-        action="store_false",
-        dest="update_testcases",
-        default=True,
-        help="Skip updating of testcases",
-    )
-    problem_parser.set_defaults(func=command_problem)
-
-    contest_parser = subparsers.add_parser("contest", help="Upload a contest")
-    contest_parser.add_argument(
-        "contest", type=pathlib.Path, help="Path to contest specification"
-    )
-    contest_parser.add_argument(
-        "--force", action="store_true", help="Force update even if contest is running"
-    )
-    contest_parser.add_argument(
-        "--skip-verify",
-        action="store_false",
-        dest="verify",
-        default=True,
-        help="Skip checking of problems",
-    )
-    contest_parser.add_argument(
-        "--skip-submissions",
-        action="store_false",
-        dest="update_submissions",
-        default=True,
-        help="Skip uploading of sample submissions",
-    )
-    contest_parser.add_argument(
-        "--skip-problems",
-        action="store_false",
-        dest="update_problems",
-        default=True,
-        help="Skip updating the problems",
-    )
-    contest_parser.add_argument(
-        "--skip-testcases",
-        action="store_false",
-        dest="update_testcases",
-        default=True,
-        help="Skip updating of testcases",
-    )
-    contest_parser.set_defaults(func=command_contest)
-
-    users_parser = subparsers.add_parser("users", help="Upload user file")
-    users_parser.add_argument(
-        "users", type=pathlib.Path, help="Path to user specification"
-    )
-    users_parser.add_argument(
-        "--disable", action="store_true", help="Disable unknown users"
-    )
-    users_parser.add_argument(
-        "--overwrite-passwords",
-        action="store_true",
-        help="Overwrite given passwords of existing users",
-    )
-    users_parser.set_defaults(func=command_users)
-
-    reset_password_parser = subparsers.add_parser(
-        "password", help="Reset a user's password"
-    )
-    reset_password_parser.add_argument("user", help="Key (externalid) of the user")
-    reset_password_parser.set_defaults(func=command_reset_password)
-
-    settings_parser = subparsers.add_parser("settings", help="Upload settings")
-    settings_parser.set_defaults(func=command_settings)
-
-    check_parser = subparsers.add_parser("check", help="Check things")
-    check_parser.set_defaults(func=command_check)
-
-    arguments = parser.parse_args()
-    _cli.configure_logging(arguments)
-
+def run(args: argparse.Namespace) -> None:
     config = PyjudgeConfig(
-        repository=_cli.load_repository(arguments),
-        judge=_cli.load_instance(arguments),
-        database=_cli.load_database(arguments),
+        repository=_cli.load_repository(args),
+        judge=_cli.load_instance(args),
+        database=_cli.load_database(args),
     )
-    arguments.func(config, arguments)
+    commands = {
+        "settings": command_settings,
+        "users": command_users,
+        "problem": command_problem,
+        "contest": command_contest,
+        "password": command_reset_password,
+        "cleanup": command_check,
+    }
+    commands[args.upload_command](config, args)

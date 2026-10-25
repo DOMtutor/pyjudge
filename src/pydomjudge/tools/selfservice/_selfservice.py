@@ -31,6 +31,7 @@ from pydomjudge.database import (
     find_team_id,
     find_user_id,
 )
+from pydomjudge.exc import ConfigurationError
 from pydomjudge.model import DefaultCategory, Team, User, UserRole
 
 logger = logging.getLogger(__name__)
@@ -264,34 +265,11 @@ def create_app(
     return app
 
 
-def start() -> None:
-    parser = argparse.ArgumentParser(description="DOMjudge self-service")
-    parser.add_argument(
-        "-c",
-        "--config",
-        type=pathlib.Path,
-        default=pathlib.Path("config.yaml"),
-        help="Path to the configuration file (default: config.yaml).",
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose logging."
-    )
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
+def run(args: argparse.Namespace) -> None:
+    """pyjudge serve selfservice: the Flask development server."""
     try:
         config = AppConfig.load(args.config)
     except (OSError, yaml.YAMLError, ValueError) as exc:
-        logger.critical("Failed to load config file %s: %s", args.config, exc)
-        raise SystemExit(1) from exc
-
+        raise ConfigurationError(f"{args.config}: {exc}") from exc
     app = create_app(config)
     app.run(host=config.host, port=config.port, debug=config.debug)
-
-
-if __name__ == "__main__":
-    start()

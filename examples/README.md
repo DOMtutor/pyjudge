@@ -15,13 +15,13 @@ The [getting started guide](../docs/getting-started.md) walks through it step by
 With DOMjudge running and `db.yml` adjusted, from this folder:
 
 ```shell
-dt_judge_upload settings                             # instance.json
-dt_judge_upload users users.json
+pyjudge upload settings                              # instance.json
+pyjudge upload users users.json
 python script.py --pretty -O contest.json contest    # contest starting one hour from now
-dt_judge_upload contest contest.json
+pyjudge upload contest contest.json
 ```
 
 `python script.py --pretty -O <file> <settings|users|contest>` regenerates any of the JSON files; the committed `contest.json` has fixed times, so regenerate it before uploading.
-All three problems generate their larger test inputs from seed files; those of `dfamin` were created from the Jinja templates in its `data/secret/` with `dt_generate_seed`.
+All three problems generate their larger test inputs from seed files; those of `dfamin` were created from the Jinja templates in its `data/secret/` with `pyjudge problem seed`.
 `pastryperfection/attachments/` holds a solution skeleton for students.
 Generated files (`build/`, `.last_verified`, generated `.in` files) are ignored via `.gitignore`.

@@ -39,14 +39,14 @@ cd pyjudge
 uv sync
 ```
 
-`uv sync` creates `.venv/` with Python, all dependencies and the `dt_*` command-line tools.
+`uv sync` creates `.venv/` with Python, all dependencies and the `pyjudge` command.
 Either activate the environment once per shell with `source .venv/bin/activate`, or prefix every command with `uv run`.
 The rest of this guide assumes an activated environment.
 
 Check:
 
 ```shell
-dt_judge_upload --help
+pyjudge --help
 ```
 
 ## 3. Start DOMjudge locally
@@ -68,13 +68,13 @@ docker compose logs -f domserver     # wait until it reports the admin password,
 ```
 
 Open <http://localhost:12345> and log in as `admin` with the password from the log.
-Then, in the web interface, go to *Users*, edit `judgehost` and set its password to `DOMJUDGE_JUDGE_PASSWORD` from `.env` (after step 4, `dt_judge_upload password judgehost` does the same).
+Then, in the web interface, go to *Users*, edit `judgehost` and set its password to `DOMJUDGE_JUDGE_PASSWORD` from `.env` (after step 4, `pyjudge upload password judgehost` does the same).
 The judgehost container reconnects on its own.
 Check with `docker compose logs judgehost`; see [deployment.md](deployment.md) if it complains about cgroups.
 
 ## 4. Point pydomjudge at the database
 
-All `dt_judge_*` tools talk directly to the DOMjudge database.
+`pyjudge upload` and `pyjudge export` talk directly to the DOMjudge database.
 They look for a `db.yml` in the current directory (or take `--db <path>`):
 
 ```yaml
@@ -108,10 +108,10 @@ Upload in this order.
 Every command is idempotent; running it again updates what changed.
 
 ```shell
-dt_judge_upload settings                  # instance.json: settings, categories, languages
-dt_judge_upload users users.json          # users 'user' (password 'user') and 'admin'
+pyjudge upload settings                   # instance.json: settings, categories, languages
+pyjudge upload users users.json           # users 'user' (password 'user') and 'admin'
 python script.py --pretty -O contest.json contest   # regenerate so the contest starts in an hour from now
-dt_judge_upload contest contest.json      # verifies the problems, builds PDFs, uploads everything
+pyjudge upload contest contest.json       # verifies the problems, builds PDFs, uploads everything
 ```
 
 Passwords are only set when a user is created, so the existing `admin` keeps the password from the DOMjudge log; add `--overwrite-passwords` to the `users` upload to set it to `admin` as well.
@@ -119,7 +119,7 @@ Passwords are only set when a user is created, so the existing `admin` keeps the
 The first `contest` upload takes a while: the larger test inputs are generated from their seed files, `problemtools` validates the test data and runs the jury solutions, and `problem2pdf` compiles the statements.
 Problems that passed are marked with a `.last_verified` file and skipped next time unless something changed.
 
-`dt_judge_upload` finds `instance.json` and the `repository/` folder in the current directory.
+`pyjudge upload` finds `instance.json` and the `repository/` folder in the current directory.
 Use `--instance` and `--repository` to point elsewhere.
 
 ## 6. Submit something
@@ -138,11 +138,11 @@ These are judged too, so you can see immediately whether the expected verdicts (
 
 * **Problems**: copy `repository/problems/helloworld` to a new folder, adapt `problem.yaml`, statement, test data and solutions.
   The layout is the Kattis problem package format with a few additions, see [usage.md](usage.md#problem-repository).
-  Check a problem without uploading with `dt_kattis_check --name myproblem`.
+  Check a problem without uploading with `pyjudge problem check --name myproblem`.
 * **Contest**: add the problem to the contest's `problems` list in `script.py` (or `contest.json`) and upload again.
 * **Users**: generate `users.json` from your course roster.
   `script.py` shows how to build `User`, `Team` and `Affiliation` objects; passwords are stored as bcrypt hashes, see `User.hash_password`.
-* **Export results**: `dt_judge_export contest example -d example.json` dumps all submissions, verdicts and clarifications for grading or statistics.
+* **Export results**: `pyjudge export contest example -d example.json` dumps all submissions, verdicts and clarifications for grading or statistics.
   The argument is the contest's short name.
 
 From here on, [usage.md](usage.md) is the reference.
@@ -151,7 +151,7 @@ From here on, [usage.md](usage.md) is the reference.
 
 * `No instance.json found`: run from the folder containing it, or pass `--instance`.
 * `Access denied for user 'domjudge'`: `db.yml` password does not match `DOMJUDGE_DB_DOMJUDGE_PASSWORD`.
-* Problem verification fails: run `dt_kattis_check --name <problem> --debug` for the full `problemtools` output.
+* Problem verification fails: run `pyjudge problem check --name <problem> --debug` for the full `problemtools` output.
   Missing `pypy3` or `checktestdata` are the usual suspects.
 * Statement does not build: `lualatex` or a LaTeX package is missing; the build log is printed with `--debug`.
 * Submissions stay pending: `docker compose logs judgehost`; see [deployment.md](deployment.md).

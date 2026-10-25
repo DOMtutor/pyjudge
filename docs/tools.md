@@ -6,7 +6,7 @@ Finds failing inputs for a submission on problems with seeded test data.
 It repeatedly generates fresh inputs from a chosen seed file, runs the submission and the reference solution, and reports the smallest failing case (for multi-case inputs, it narrows down to the failing case).
 
 ```shell
-dt_fuzzer --repository path/to/repository [--base-time 1.5 | --instance instance.json] [--host H --port P]
+pyjudge serve fuzzer --repository path/to/repository [--base-time 1.5 | --instance instance.json] [--host H --port P]
 ```
 
 Opens a small web UI at <http://127.0.0.1:5000>: choose problem, seed file, language, paste the source, and start.
@@ -27,7 +27,7 @@ The database password and the secret key can come from environment variables (`p
 
 ```shell
 cp src/pydomjudge/tools/selfservice/example_config.yaml config.yaml   # edit database and secret_key
-dt_selfservice --config config.yaml
+pyjudge serve selfservice --config config.yaml
 ```
 
 Run it behind a reverse proxy with TLS for anything but local tests, and set `server.trust_proxy` so Flask sees the correct scheme and host.
