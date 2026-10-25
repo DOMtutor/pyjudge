@@ -171,3 +171,15 @@ def test_verification_marker_ignores_build_output(
 def test_languages_in_stable_order(repository: Repository):
     keys = [language.key for language in repository.languages]
     assert keys == sorted(keys)
+
+
+def test_problem_can_be_entered_again(repository: Repository):
+    # problemtools copies the submissions into the temporary directory of the
+    # "with" block; a second block must not use the removed copies
+    problem = repository.problems["pastryperfection"]
+    for _ in range(2):
+        with problem as kattis_problem:
+            reference = problem._reference_submission
+            assert reference is not None
+            assert reference.path.startswith(kattis_problem.tmpdir)
+            assert pathlib.Path(reference.path).exists()

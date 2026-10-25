@@ -363,6 +363,13 @@ class RepositoryProblem(Problem):
         return self._limits
 
     def __enter__(self) -> problemtools.verifyproblem.Problem:
+        if self._problemtools.loaded:
+            # problemtools copies submissions and validators into the temporary
+            # directory of the "with" block, removed on exit, and loads only
+            # once: a later block needs a fresh problem
+            self._problemtools = problemtools.verifyproblem.Problem(
+                str(self.directory.absolute()), args=self._args
+            )
         p = self._problemtools.__enter__()
 
         # Call load() for submissions to access submission data
