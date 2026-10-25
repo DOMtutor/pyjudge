@@ -9,6 +9,7 @@ uploaded data.
 import hashlib
 import html
 import json
+import pathlib
 import re
 import time
 from collections import Counter, defaultdict
@@ -23,10 +24,30 @@ from pydomjudge.model import Contest, SystemCategory, User
 from pydomjudge.scripts.export import fetch_contest
 from pydomjudge.scripts.upload import PyjudgeConfig
 
-from .conftest import ADMIN, DRY_RUN_REPORT, JUDGE, client, upload_all
+from .conftest import ADMIN, DRY_RUN_REPORT, JUDGE, TEAM, client, upload_all
 
-# Tables that change by using DOMjudge, not by uploading
-VOLATILE_TABLES = {"auditlog", "sessions", "judgehost", "doctrine_migration_versions"}
+# Tables and columns that change by using DOMjudge (logins, a running
+# judgehost), not by uploading
+VOLATILE_TABLES = {
+    "auditlog",
+    "sessions",
+    "doctrine_migration_versions",
+    # judging
+    "judgehost",
+    "judging",
+    "judging_run",
+    "judging_run_output",
+    "judgetask",
+    "queuetask",
+    "version",
+    "debug_package",
+    # derived from judgings
+    "scorecache",
+    "rankcache",
+    "balloon",
+    "event",
+}
+VOLATILE_COLUMNS = {"user": {"first_login", "last_login", "last_ip_address"}}
 
 
 def _ids(database: Database, query: str) -> list:
@@ -214,12 +235,18 @@ def _dump(database: Database) -> dict[str, list[tuple]]:
         dump = {}
         for table in tables:
             cursor.execute(f"SELECT * FROM `{table}` ORDER BY 1")
+            names = [column[0] for column in cursor.description]
+            keep = [
+                index
+                for index, name in enumerate(names)
+                if name not in VOLATILE_COLUMNS.get(table, set())
+            ]
             dump[table] = [
                 tuple(
-                    hashlib.md5(value).hexdigest()
-                    if isinstance(value, bytes)
-                    else value
-                    for value in row
+                    hashlib.md5(row[index]).hexdigest()
+                    if isinstance(row[index], bytes)
+                    else row[index]
+                    for index in keep
                 )
                 for row in cursor.fetchall()
             ]
@@ -382,6 +409,53 @@ def test_jury_solutions_judged_as_expected(
         ],
     )
     assert not failures, "\n".join(failures)
+
+
+HELLO = pathlib.Path(__file__).parent / "hello"
+
+
+@pytest.mark.skipif(not JUDGE, reason="needs the judgehost (run.sh with judge)")
+def test_hello_world_in_every_language(base_url: str, uploaded: Contest):
+    """A team submission per uploaded language runs through its compile script."""
+    sources = {"c": "hello.c", "java": "Hello.java", "python": "hello.py"}
+    with client(base_url, auth=TEAM) as team_api, client(base_url, auth=ADMIN) as api:
+        contest_id = api.get("/api/v4/contests").json()[0]["id"]
+        languages = {
+            language["id"]
+            for language in api.get(f"/api/v4/contests/{contest_id}/languages").json()
+        }
+        assert languages == set(sources), "test sources do not match the languages"
+
+        submissions = {}
+        for language, name in sources.items():
+            response = team_api.post(
+                f"/api/v4/contests/{contest_id}/submissions",
+                data={"problem": "helloworld", "language": language},
+                files={"code[]": (name, (HELLO / name).read_bytes())},
+            )
+            assert response.status_code == 200, response.text
+            submissions[language] = response.json()["id"]
+
+        verdicts: dict[str, str | None] = {}
+        deadline = time.monotonic() + 300
+        while time.monotonic() < deadline:
+            for language, submission_id in submissions.items():
+                judgements = api.get(
+                    f"/api/v4/contests/{contest_id}/judgements",
+                    params={"submission_id": submission_id},
+                ).json()
+                verdicts[language] = next(
+                    (
+                        j["judgement_type_id"]
+                        for j in judgements
+                        if j.get("valid", True)
+                    ),
+                    None,
+                )
+            if all(verdicts.values()):
+                break
+            time.sleep(3)
+    assert verdicts == dict.fromkeys(sources, "AC")
 
 
 def test_consistency_report_of_the_example(database: Database, uploaded: Contest):
