@@ -19,6 +19,7 @@ pydomjudge-course = { path = "../../DOMtutor/pyjudge/course", editable = true }
 ## Checking the format of real exports
 
 `python -m pydomjudge_course.tables FILE...` prints each file's format, encoding, delimiter, column names and number of rows, and never a cell value.
+For JSON files (Moodle's participants download) it prints the shape: list lengths, and the keys and value types of the records.
 
 ## Student data
 
