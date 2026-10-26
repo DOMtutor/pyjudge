@@ -9,6 +9,7 @@ import openpyxl
 import pytest
 
 from pydomjudge_course.moodle import (
+    Gradebook,
     MoodleFormatError,
     Worksheet,
     identities,
@@ -142,7 +143,7 @@ def test_duplicate_identity(tmp_path: pathlib.Path):
 
 def test_fill_by_student_id(worksheet_path: pathlib.Path):
     worksheet = Worksheet.read(worksheet_path)
-    report = worksheet.fill(
+    report = worksheet.target.fill(
         {
             "9000001": ("80.00", "<p>A</p>"),
             "9000012": ("70.00", "<p>B</p>"),
@@ -157,9 +158,9 @@ def test_fill_by_student_id(worksheet_path: pathlib.Path):
     assert worksheet.rows[1]["Feedback comments"] == "<p>B</p>"
     assert worksheet.rows[2]["Feedback comments"] == ""
     with pytest.raises(MoodleFormatError, match="no value for data rows 2, 3"):
-        worksheet.fill({"9000001": ("1", "x")}, by="student_id", missing="error")
+        worksheet.target.fill({"9000001": ("1", "x")}, by="student_id", missing="error")
     with pytest.raises(MoodleFormatError, match="no student_id column"):
-        Worksheet.read(_csv_without_ids(worksheet_path.parent)).fill(
+        Worksheet.read(_csv_without_ids(worksheet_path.parent)).target.fill(
             {}, by="student_id"
         )
 
@@ -173,14 +174,16 @@ def _csv_without_ids(directory: pathlib.Path) -> pathlib.Path:
 def test_fill_error_changes_nothing(worksheet_path: pathlib.Path):
     worksheet = Worksheet.read(worksheet_path)
     with pytest.raises(MoodleFormatError, match="no value for data rows 2, 3"):
-        worksheet.fill({"alice@example.org": ("1", "x")}, by="email", missing="error")
+        worksheet.target.fill(
+            {"alice@example.org": ("1", "x")}, by="email", missing="error"
+        )
     assert worksheet.rows[0]["Feedback comments"] == ""
 
 
 def test_write_keeps_header_and_identifiers(worksheet_path: pathlib.Path, tmp_path):
     worksheet = Worksheet.read(worksheet_path)
     send_login_data(
-        worksheet, {"alice1": ("alice1", "AppleBananaCherry")}, by="username"
+        worksheet.target, {"alice1": ("alice1", "AppleBananaCherry")}, by="username"
     )
     target = tmp_path / "upload.csv"
     worksheet.write(target)
@@ -207,8 +210,8 @@ def test_send_feedback(worksheet_path: pathlib.Path):
         "bob@example.org": ("n/a", "<p>b</p>"),
     }
     with pytest.raises(MoodleFormatError, match="no value for data rows 3"):
-        send_feedback(worksheet, results, by="email")
-    report = send_feedback(worksheet, results, by="email", missing="keep")
+        send_feedback(worksheet.target, results, by="email")
+    report = send_feedback(worksheet.target, results, by="email", missing="keep")
     assert report.unfilled_rows == [3]
     assert worksheet.rows[0]["Grade (Coursework Feedback)"] == "87.50"
     assert worksheet.rows[1]["Grade (Coursework Feedback)"] == "n/a"
@@ -217,7 +220,7 @@ def test_send_feedback(worksheet_path: pathlib.Path):
 def test_send_login_data_keeps_rows_without_credentials(worksheet_path: pathlib.Path):
     worksheet = Worksheet.read(worksheet_path)
     report = send_login_data(
-        worksheet,
+        worksheet.target,
         {"9000003": ("carol3", "pw"), "9000099": ("late", "pw")},
         by="student_id",
     )
@@ -291,3 +294,103 @@ def test_choice_without_choice_column(tmp_path: pathlib.Path):
     path.write_text("Email address\tGroup\na@example.org\t\n")
     with pytest.raises(MoodleFormatError, match="no 'Choice' column"):
         read_choice_responses(path)
+
+
+# The gradebook header observed in a "Grades.xlsx" export
+GRADEBOOK_HEADER = [
+    "First name",
+    "Last name",
+    "Student ID",
+    "Institution",
+    "Department",
+    "Email address",
+    "Assignment: Judge Password (Real)",
+    "Assignment: Judge Password (Feedback)",
+    "Last downloaded from this course",
+]
+# Made up, not observed: a course total, and an export without feedback
+GRADEBOOK_WITH_TOTAL = [
+    *GRADEBOOK_HEADER[:8],
+    "Course total (Real)",
+    GRADEBOOK_HEADER[8],
+]
+GRADEBOOK_WITHOUT_FEEDBACK = [
+    name for name in GRADEBOOK_HEADER if not name.endswith("(Feedback)")
+]
+
+
+def _gradebook(tmp_path: pathlib.Path, header: list[str]) -> Gradebook:
+    rows = []
+    for number, (first, mail) in enumerate(
+        [("Alice", "alice@example.org"), ("Bob", "bob@example.org")], start=1
+    ):
+        values = {
+            "First name": first,
+            "Last name": "Example",
+            "Student ID": f"900000{number}",
+            "Email address": mail,
+            "Last downloaded from this course": "1 January 2030",
+            "Course total (Real)": "12.00",
+        }
+        rows.append([values.get(name, "") for name in header])
+    return Gradebook.read(_xlsx(tmp_path / "grades.xlsx", header, rows))
+
+
+def test_gradebook_items_and_target(tmp_path: pathlib.Path):
+    gradebook = _gradebook(tmp_path, GRADEBOOK_HEADER)
+    assert gradebook.identity == {"email": "Email address", "student_id": "Student ID"}
+    (item,) = gradebook.items()
+    assert (item.type, item.name) == ("Assignment", "Judge Password")
+    target = gradebook.target("Judge Password")
+    assert gradebook.target("Assignment: Judge Password") == target
+    assert (target.grade, target.feedback) == (
+        "Assignment: Judge Password (Real)",
+        "Assignment: Judge Password (Feedback)",
+    )
+    with pytest.raises(MoodleFormatError, match="no grade item 'Quiz'.*Judge Password"):
+        gradebook.target("Quiz")
+
+
+def test_gradebook_login_data_keeps_other_columns(tmp_path: pathlib.Path):
+    gradebook = _gradebook(tmp_path, GRADEBOOK_WITH_TOTAL)
+    assert [item.name for item in gradebook.items()] == ["Judge Password"]
+    report = send_login_data(
+        gradebook.target("Judge Password"),
+        {"9000001": ("alice1", "pw")},
+        by="student_id",
+    )
+    assert report.filled == 1 and report.unfilled_rows == [2]
+    target = tmp_path / "upload.csv"
+    gradebook.write(target)
+    again = read_table(target)
+    assert again.header == tuple(GRADEBOOK_WITH_TOTAL)
+    assert again.rows[0]["Assignment: Judge Password (Real)"] == "1"
+    assert again.rows[0]["Assignment: Judge Password (Feedback)"].startswith(
+        "Your login name: alice1"
+    )
+    assert again.rows[0]["Course total (Real)"] == "12.00"
+    assert again.rows[1]["Last downloaded from this course"] == "1 January 2030"
+
+
+def test_gradebook_without_feedback_column(tmp_path: pathlib.Path):
+    gradebook = _gradebook(tmp_path, GRADEBOOK_WITHOUT_FEEDBACK)
+    target = gradebook.target("Judge Password")
+    assert target.feedback is None
+    with pytest.raises(MoodleFormatError, match="no feedback column"):
+        send_login_data(target, {"9000001": ("a", "pw")}, by="student_id")
+    send_feedback(target, {"9000001": (5, None), "9000002": (6, None)}, by="student_id")
+    assert [row["Assignment: Judge Password (Real)"] for row in gradebook.rows] == [
+        "5.00",
+        "6.00",
+    ]
+
+
+def test_gradebook_item_without_real_column(tmp_path: pathlib.Path):
+    header = ["Email address", "Quiz: Week 1 (Percentage)", "Quiz: Week 1 (Feedback)"]
+    gradebook = Gradebook.read(
+        _xlsx(tmp_path / "pct.xlsx", header, [["a@example.org", "", ""]])
+    )
+    with pytest.raises(MoodleFormatError, match=r"no \(Real\) column, only Quiz"):
+        gradebook.target("Week 1")
+    with pytest.raises(MoodleFormatError, match="no identity column"):
+        Gradebook.read(_xlsx(tmp_path / "none.xlsx", ["Quiz: A (Real)"], [["1"]]))
