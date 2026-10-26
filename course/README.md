@@ -26,3 +26,7 @@ For JSON files (Moodle's participants download) it prints the shape: list length
 The functions read and write files with student data (Moodle exports, rosters, submissions).
 They never write inside this package and do not log cell values or names above DEBUG.
 Keep these files out of version control in the course repositories, and use synthetic data in tests.
+
+## Known limitations
+
+- A worksheet downloaded as xlsx whose "Last modified (grade)" cells are real dates (not text) is written back with those dates in ISO 8601. Whether Moodle's upload reads them as the same time (it uses them to skip grades changed after the download) is not verified; downloading the worksheet as CSV avoids the question.
