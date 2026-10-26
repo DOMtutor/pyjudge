@@ -3,6 +3,7 @@ of an English Moodle site (2026-10)."""
 
 import json
 import pathlib
+import re
 from collections.abc import Sequence
 
 import openpyxl
@@ -10,6 +11,7 @@ import pytest
 
 from pydomjudge_course.moodle import (
     Gradebook,
+    MoodleColumns,
     MoodleFormatError,
     Worksheet,
     identities,
@@ -394,3 +396,103 @@ def test_gradebook_item_without_real_column(tmp_path: pathlib.Path):
         gradebook.target("Week 1")
     with pytest.raises(MoodleFormatError, match="no identity column"):
         Gradebook.read(_xlsx(tmp_path / "none.xlsx", ["Quiz: A (Real)"], [["1"]]))
+
+
+# Made up, not observed: a German Moodle site, read through custom columns
+GERMAN = MoodleColumns(
+    identifier="Bezeichner",
+    identifier_pattern=re.compile(r"Teilnehmer/in (\d+)"),
+    grade_prefix="Bewertung",
+    grade_excluded=("Bewertung kann geändert werden",),
+    feedback="Feedback als Kommentar",
+    feedback_prefix="Feedback",
+    first_name="Vorname",
+    last_name="Nachname",
+    full_name="Vollständiger Name",
+    identity={
+        "email": ("E-Mail-Adresse",),
+        "student_id": ("Matrikelnummer",),
+        "username": ("Anmeldename",),
+    },
+    gradebook_grade_display="Wert",
+    choice="Auswahl",
+    login_text="Anmeldename: {login}\nPasswort: {password}",
+)
+GERMAN_WORKSHEET_HEADER = [
+    "Bezeichner",
+    "Vorname",
+    "Nachname",
+    "Anmeldename",
+    "Matrikelnummer",
+    "E-Mail-Adresse",
+    "Status",
+    "Bewertung (Programmierprojekt)",
+    "Höchstbewertung",
+    "Bewertung kann geändert werden",
+    "Feedback als Kommentar",
+]
+
+
+def test_german_worksheet(tmp_path: pathlib.Path):
+    path = _xlsx(
+        tmp_path / "bewertungen.xlsx",
+        GERMAN_WORKSHEET_HEADER,
+        [["Teilnehmer/in 5", "Jürgen", "Beispiel", "jb", "1234567", "jb@example.org",
+          "", "", 100, "Ja", ""]],
+    )  # fmt: skip
+    with pytest.raises(MoodleFormatError, match="no 'Identifier' column"):
+        Worksheet.read(path)
+    worksheet = Worksheet.read(path, columns=GERMAN)
+    assert worksheet.columns is GERMAN
+    assert (worksheet.grade, worksheet.feedback) == (
+        "Bewertung (Programmierprojekt)",
+        "Feedback als Kommentar",
+    )
+    assert worksheet.identity == {
+        "email": "E-Mail-Adresse",
+        "student_id": "Matrikelnummer",
+        "username": "Anmeldename",
+    }
+    assert worksheet.participant_id(worksheet.rows[0]) == "5"
+    assert worksheet.full_name(worksheet.rows[0]) == "Jürgen Beispiel"
+    send_login_data(worksheet.target, {"1234567": ("jb", "pw")}, by="student_id")
+    assert (
+        worksheet.rows[0]["Feedback als Kommentar"] == "Anmeldename: jb\nPasswort: pw"
+    )
+    assert worksheet.rows[0]["Bewertung (Programmierprojekt)"] == "1"
+
+
+def test_german_gradebook_and_choice(tmp_path: pathlib.Path):
+    header = ["Vorname", "Nachname", "E-Mail-Adresse", "Aufgabe: Passwort (Wert)",
+              "Aufgabe: Passwort (Feedback)"]  # fmt: skip
+    gradebook = Gradebook.read(
+        _xlsx(tmp_path / "noten.xlsx", header, [["A", "B", "a@example.org", "", ""]]),
+        columns=GERMAN,
+    )
+    target = gradebook.target("Passwort")
+    assert (target.grade, target.feedback) == (
+        "Aufgabe: Passwort (Wert)",
+        "Aufgabe: Passwort (Feedback)",
+    )
+    path = tmp_path / "auswahl.txt"
+    path.write_text(
+        "Nachname\tVorname\tE-Mail-Adresse\tAuswahl\nB\tA\ta@example.org\tVersteckt\n"
+    )
+    (response,) = read_choice_responses(path, columns=GERMAN)
+    assert (response.identity, response.choice, response.name) == (
+        {"email": "a@example.org"},
+        "Versteckt",
+        "A B",
+    )
+
+
+def test_participants_with_custom_keys(tmp_path: pathlib.Path):
+    columns = MoodleColumns(
+        participant_keys={"email": ("mail",)}, participant_first_name="vorname"
+    )
+    path = tmp_path / "teilnehmer.json"
+    path.write_text(json.dumps([{"mail": "a@example.org", "vorname": "A"}]))
+    (participant,) = read_participants(path, columns=columns)
+    assert participant.identity == {"email": "a@example.org"}
+    assert participant.first_name == "A"
+    assert identities("a;b", MoodleColumns(identity_separator=";")) == ("a", "b")

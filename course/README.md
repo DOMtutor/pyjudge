@@ -21,6 +21,20 @@ pydomjudge-course = { path = "../../DOMtutor/pyjudge/course", editable = true }
 `python -m pydomjudge_course.tables FILE...` prints each file's format, encoding, delimiter, column names and number of rows, and never a cell value.
 For JSON files (Moodle's participants download) it prints the shape: list lengths, and the keys and value types of the records.
 
+## Column names
+
+The Moodle views find columns by the names in a `MoodleColumns` instance, whose defaults are the English names observed in a Moodle site's exports.
+A site with other names, for example in another language, passes its own instance:
+
+```python
+columns = MoodleColumns(
+    identifier="Bezeichner",
+    feedback="Feedback als Kommentar",
+    identity={"email": ("E-Mail-Adresse",)},
+)
+worksheet = Worksheet.read(path, columns=columns)
+```
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).
@@ -29,4 +43,5 @@ Keep these files out of version control in the course repositories, and use synt
 
 ## Known limitations
 
-- A worksheet downloaded as xlsx whose "Last modified (grade)" cells are real dates (not text) is written back with those dates in ISO 8601. Whether Moodle's upload reads them as the same time (it uses them to skip grades changed after the download) is not verified; downloading the worksheet as CSV avoids the question.
+- A worksheet downloaded as xlsx whose "Last modified (grade)" cells are real dates (not text) is written back with those dates in ISO 8601.
+  Whether Moodle's upload reads them as the same time (it uses them to skip grades changed after the download) is not verified; downloading the worksheet as CSV avoids the question.

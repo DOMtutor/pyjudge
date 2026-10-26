@@ -23,64 +23,93 @@ from typing import Literal
 
 from .tables import Table, TableError, _decode as _decode_text, read_table
 
-# Format assumptions, in one place. Observed in the exports of an English
-# Moodle site (2026-10).
-#
-# Grading worksheet (xlsx), in this order: Identifier, First name, Last name,
-# Username, Student ID, Email address, Status, Grade (<assignment name>),
-# Maximum grade, Grade can be changed, Last modified (grade), Feedback comments
-IDENTIFIER_COLUMN = "Identifier"
-IDENTIFIER_PATTERN = re.compile(r"Participant (\d+)")
-# The grade column is "Grade (<assignment name>)" or "Grade": the only column
-# starting with this, apart from GRADE_EXCLUDED ("Maximum grade" does not)
-GRADE_PREFIX = "Grade"
-GRADE_EXCLUDED = ("Grade can be changed",)
-FEEDBACK_COLUMN = "Feedback comments"
-FEEDBACK_PREFIX = "Feedback"
-# This site shows first and last name; "Full name" is Moodle's default
-FIRST_NAME_COLUMN = "First name"
-LAST_NAME_COLUMN = "Last name"
-FULL_NAME_COLUMN = "Full name"
-# Identity kind -> accepted column names. "ID number" is Moodle's default name
-# of the student ID field, "Student ID" the observed one
-IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
-    "email": ("Email address",),
-    "student_id": ("Student ID", "ID number"),
-    "username": ("Username",),
-}
-# Several identities in one value (a student enrolled twice)
-IDENTITY_SEPARATOR = "|"
-#
-# Gradebook export ("Grades" > Export, xlsx): First name, Last name, Student
-# ID, Institution, Department, Email address, "Assignment: <name> (Real)",
-# "Assignment: <name> (Feedback)", Last downloaded from this course. Grade
-# items are "<type>: <name> (<display>)"; the import takes the Real display,
-# feedback only exists when exported with "include feedback"
-GRADEBOOK_ITEM_PATTERN = re.compile(
-    r"(?P<type>[^:()]+): (?P<name>.+) \((?P<display>[^()]+)\)"
-)
-GRADEBOOK_GRADE_DISPLAY = "Real"
-GRADEBOOK_FEEDBACK_DISPLAY = "Feedback"
-#
-# Choice responses ("Download in text format": tab-separated .txt, utf-8
-# without BOM; or xlsx with the same header): Last name, First name, Username,
-# Student ID, Email address, Group, Choice. They also list staff.
-CHOICE_COLUMN = "Choice"
-#
-# Participants ("Download table data as JSON" of the participants page), as
-# course code reads it, not probed: a list whose first element is the
-# list of records, with these keys
-PARTICIPANT_KEYS: dict[str, tuple[str, ...]] = {
-    "email": ("email", "emailaddress"),
-    "student_id": ("studentid",),
-    "username": ("username",),
-}
-PARTICIPANT_FIRST_NAME_KEY = "firstname"
-PARTICIPANT_LAST_NAME_KEY = "lastname"
-#
-# What goes into the grade and feedback cells with the login data
-LOGIN_TEXT = "Your login name: {login}\nYour password: {password}"
-LOGIN_GRADE = "1"
+# The format assumptions, in one place: MoodleColumns, whose defaults were
+# observed in the exports of an English Moodle site (2026-10). Sites with
+# other names (another language, renamed profile fields) pass their own
+# MoodleColumns to the readers.
+
+
+def _identity_defaults() -> dict[str, tuple[str, ...]]:
+    # Identity kind -> accepted column names. "ID number" is Moodle's default
+    # name of the student ID field, "Student ID" the observed one
+    return {
+        "email": ("Email address",),
+        "student_id": ("Student ID", "ID number"),
+        "username": ("Username",),
+    }
+
+
+def _participant_key_defaults() -> dict[str, tuple[str, ...]]:
+    return {
+        "email": ("email", "emailaddress"),
+        "student_id": ("studentid",),
+        "username": ("username",),
+    }
+
+
+@dataclasses.dataclass(frozen=True)
+class MoodleColumns:
+    # Grading worksheet (xlsx), in this order: Identifier, First name, Last
+    # name, Username, Student ID, Email address, Status, Grade (<assignment
+    # name>), Maximum grade, Grade can be changed, Last modified (grade),
+    # Feedback comments
+    identifier: str = "Identifier"
+    identifier_pattern: re.Pattern[str] = re.compile(r"Participant (\d+)")
+    # The grade column is "Grade (<assignment name>)" or "Grade": the only
+    # column starting with grade_prefix apart from grade_excluded ("Maximum
+    # grade" does not start with it)
+    grade_prefix: str = "Grade"
+    grade_excluded: tuple[str, ...] = ("Grade can be changed",)
+    feedback: str = "Feedback comments"
+    feedback_prefix: str = "Feedback"
+    # This site shows first and last name; "Full name" is Moodle's default
+    first_name: str = "First name"
+    last_name: str = "Last name"
+    full_name: str = "Full name"
+    identity: Mapping[str, tuple[str, ...]] = dataclasses.field(
+        default_factory=_identity_defaults
+    )
+    # Several identities in one value (a student enrolled twice)
+    identity_separator: str = "|"
+    # Gradebook export ("Grades" > Export, xlsx): First name, Last name,
+    # Student ID, Institution, Department, Email address, "Assignment: <name>
+    # (Real)", "Assignment: <name> (Feedback)", Last downloaded from this
+    # course. Grade items are "<type>: <name> (<display>)"; the import takes
+    # the Real display, feedback only exists when exported with "include
+    # feedback"
+    gradebook_item_pattern: re.Pattern[str] = re.compile(
+        r"(?P<type>[^:()]+): (?P<name>.+) \((?P<display>[^()]+)\)"
+    )
+    gradebook_grade_display: str = "Real"
+    gradebook_feedback_display: str = "Feedback"
+    # Choice responses ("Download in text format": tab-separated .txt, utf-8
+    # without BOM; or xlsx with the same header): Last name, First name,
+    # Username, Student ID, Email address, Group, Choice. They also list staff.
+    choice: str = "Choice"
+    # Participants ("Download table data as JSON" of the participants page),
+    # as course code reads it, not probed: a list whose first element is
+    # the list of records, with these keys
+    participant_keys: Mapping[str, tuple[str, ...]] = dataclasses.field(
+        default_factory=_participant_key_defaults
+    )
+    participant_first_name: str = "firstname"
+    participant_last_name: str = "lastname"
+    # What goes into the grade and feedback cells with the login data
+    login_text: str = "Your login name: {login}\nYour password: {password}"
+    login_grade: str = "1"
+
+    def identities(self, value: str | None) -> tuple[str, ...]:
+        """The identities in a value: split at the separator, stripped,
+        case-folded."""
+        if not value:
+            return ()
+        parts = (
+            part.strip().casefold() for part in value.split(self.identity_separator)
+        )
+        return tuple(part for part in parts if part)
+
+
+DEFAULT_COLUMNS = MoodleColumns()
 
 IdentityKind = Literal["email", "student_id", "username"]
 Missing = Literal["keep", "error"]
@@ -91,18 +120,17 @@ class MoodleFormatError(TableError):
     row numbers, never values."""
 
 
-def identities(value: str | None) -> tuple[str, ...]:
+def identities(
+    value: str | None, columns: MoodleColumns = DEFAULT_COLUMNS
+) -> tuple[str, ...]:
     """The identities in a value: split at "|", stripped, case-folded."""
-    if not value:
-        return ()
-    parts = (part.strip().casefold() for part in value.split(IDENTITY_SEPARATOR))
-    return tuple(part for part in parts if part)
+    return columns.identities(value)
 
 
-def _identity_columns(table: Table) -> dict[str, str]:
+def _identity_columns(table: Table, columns: MoodleColumns) -> dict[str, str]:
     return {
         kind: column
-        for kind, names in IDENTITY_COLUMNS.items()
+        for kind, names in columns.identity.items()
         if (column := table.column(*names, required=False)) is not None
     }
 
@@ -121,11 +149,11 @@ def _single(table: Table, exact: str, prefix: str, excluded=()) -> str:
     return candidates[0]
 
 
-def _full_name(table: Table, row: dict[str, str]) -> str:
-    if FULL_NAME_COLUMN in table.header:
-        return row[FULL_NAME_COLUMN]
-    first = row.get(FIRST_NAME_COLUMN, "")
-    last = row.get(LAST_NAME_COLUMN, "")
+def _full_name(table: Table, row: dict[str, str], columns: MoodleColumns) -> str:
+    if columns.full_name in table.header:
+        return row[columns.full_name]
+    first = row.get(columns.first_name, "")
+    last = row.get(columns.last_name, "")
     return f"{first} {last}".strip()
 
 
@@ -146,13 +174,15 @@ class MoodleSheet:
     table: Table
     # Identity kind -> column, for the kinds the export has
     identity: dict[str, str]
+    # The names it was read with
+    columns: MoodleColumns = DEFAULT_COLUMNS
 
     @property
     def rows(self) -> list[dict[str, str]]:
         return self.table.rows
 
     def full_name(self, row: dict[str, str]) -> str:
-        return _full_name(self.table, row)
+        return _full_name(self.table, row, self.columns)
 
     def column_of(self, kind: str) -> str:
         if kind not in self.identity:
@@ -169,7 +199,7 @@ class MoodleSheet:
         result: dict[str, dict[str, str]] = {}
         numbers: dict[str, int] = {}
         for number, row in enumerate(self.rows, start=1):
-            for identity in identities(row[column]):
+            for identity in self.columns.identities(row[column]):
                 if identity in result:
                     raise MoodleFormatError(
                         f"{self.table.source}: data rows {numbers[identity]} and "
@@ -220,7 +250,7 @@ class FillTarget:
             )
         keys = {}
         for key in values:
-            normalised = identities(key)
+            normalised = sheet.columns.identities(key)
             if len(normalised) != 1:
                 raise ValueError(f"{key!r} is not one identity")
             keys[normalised[0]] = key
@@ -229,7 +259,9 @@ class FillTarget:
         used = set()
         for number, row in enumerate(sheet.rows, start=1):
             matching = [
-                identity for identity in identities(row[column]) if identity in keys
+                identity
+                for identity in sheet.columns.identities(row[column])
+                if identity in keys
             ]
             if len(matching) > 1:
                 raise MoodleFormatError(
@@ -264,28 +296,41 @@ class Worksheet(MoodleSheet):
     """An assignment's grading worksheet ("Download grading worksheet"), which
     Moodle matches by Identifier on upload."""
 
-    identifier: str = IDENTIFIER_COLUMN
+    identifier: str = DEFAULT_COLUMNS.identifier
     grade: str = ""
     feedback: str = ""
 
     @classmethod
-    def read(cls, path: pathlib.Path, *, sheet: str | None = None) -> "Worksheet":
+    def read(
+        cls,
+        path: pathlib.Path,
+        *,
+        sheet: str | None = None,
+        columns: MoodleColumns = DEFAULT_COLUMNS,
+    ) -> "Worksheet":
         table = read_table(path, sheet=sheet)
-        if IDENTIFIER_COLUMN not in table.header:
+        if columns.identifier not in table.header:
             raise MoodleFormatError(
-                f"{path}: no {IDENTIFIER_COLUMN!r} column, not a grading worksheet"
+                f"{path}: no {columns.identifier!r} column, not a grading worksheet"
             )
         for number, row in enumerate(table.rows, start=1):
-            if not IDENTIFIER_PATTERN.fullmatch(row[IDENTIFIER_COLUMN]):
+            if not columns.identifier_pattern.fullmatch(row[columns.identifier]):
                 raise MoodleFormatError(
-                    f"{path}: data row {number} has no 'Participant <number>' "
-                    "identifier"
+                    f"{path}: data row {number}: {columns.identifier} does not "
+                    f"match {columns.identifier_pattern.pattern!r}"
                 )
         return cls(
             table=table,
-            identity=_identity_columns(table),
-            grade=_single(table, GRADE_PREFIX, GRADE_PREFIX, GRADE_EXCLUDED),
-            feedback=_single(table, FEEDBACK_COLUMN, FEEDBACK_PREFIX),
+            identity=_identity_columns(table, columns),
+            columns=columns,
+            identifier=columns.identifier,
+            grade=_single(
+                table,
+                columns.grade_prefix,
+                columns.grade_prefix,
+                columns.grade_excluded,
+            ),
+            feedback=_single(table, columns.feedback, columns.feedback_prefix),
         )
 
     @property
@@ -295,7 +340,7 @@ class Worksheet(MoodleSheet):
     def participant_id(self, row: dict[str, str]) -> str:
         """The assignment's participant number of a row (not an identity: it
         differs between assignments)."""
-        match = IDENTIFIER_PATTERN.fullmatch(row[self.identifier])
+        match = self.columns.identifier_pattern.fullmatch(row[self.identifier])
         assert match is not None  # checked when reading
         return match[1]
 
@@ -317,9 +362,17 @@ class Gradebook(MoodleSheet):
     there is no Identifier; other columns are written back unchanged."""
 
     @classmethod
-    def read(cls, path: pathlib.Path, *, sheet: str | None = None) -> "Gradebook":
+    def read(
+        cls,
+        path: pathlib.Path,
+        *,
+        sheet: str | None = None,
+        columns: MoodleColumns = DEFAULT_COLUMNS,
+    ) -> "Gradebook":
         table = read_table(path, sheet=sheet)
-        sheet_ = cls(table=table, identity=_identity_columns(table))
+        sheet_ = cls(
+            table=table, identity=_identity_columns(table, columns), columns=columns
+        )
         if not sheet_.identity:
             raise MoodleFormatError(f"{path}: no identity column")
         return sheet_
@@ -328,7 +381,7 @@ class Gradebook(MoodleSheet):
         """The grade items, in column order."""
         columns: dict[tuple[str, str], dict[str, str]] = {}
         for column in self.table.header:
-            if match := GRADEBOOK_ITEM_PATTERN.fullmatch(column):
+            if match := self.columns.gradebook_item_pattern.fullmatch(column):
                 key = (match["type"], match["name"])
                 columns.setdefault(key, {})[match["display"]] = column
         return [
@@ -351,17 +404,16 @@ class Gradebook(MoodleSheet):
                 f"{self.table.source}: {found} grade item {name!r} (items: {known})"
             )
         (item,) = items
-        if GRADEBOOK_GRADE_DISPLAY not in item.columns:
-            raise MoodleFormatError(
-                f"{self.table.source}: grade item {name!r} has no "
-                f"({GRADEBOOK_GRADE_DISPLAY}) column, only "
-                f"{', '.join(item.columns.values())}"
-            )
-        return FillTarget(
-            self,
-            item.columns[GRADEBOOK_GRADE_DISPLAY],
-            item.columns.get(GRADEBOOK_FEEDBACK_DISPLAY),
+        grade, feedback = (
+            self.columns.gradebook_grade_display,
+            self.columns.gradebook_feedback_display,
         )
+        if grade not in item.columns:
+            raise MoodleFormatError(
+                f"{self.table.source}: grade item {name!r} has no ({grade}) "
+                f"column, only {', '.join(item.columns.values())}"
+            )
+        return FillTarget(self, item.columns[grade], item.columns.get(feedback))
 
 
 # Participants
@@ -375,7 +427,9 @@ class Participant:
     last_name: str
 
 
-def read_participants(path: pathlib.Path) -> list[Participant]:
+def read_participants(
+    path: pathlib.Path, *, columns: MoodleColumns = DEFAULT_COLUMNS
+) -> list[Participant]:
     """The participants of Moodle's JSON download (participants page)."""
     try:
         data = path.read_bytes()
@@ -396,7 +450,7 @@ def read_participants(path: pathlib.Path) -> list[Participant]:
     participants = []
     for record in value:
         identity = {}
-        for kind, keys in PARTICIPANT_KEYS.items():
+        for kind, keys in columns.participant_keys.items():
             for key in keys:
                 if record.get(key) not in (None, ""):
                     identity[kind] = str(record[key])
@@ -404,8 +458,8 @@ def read_participants(path: pathlib.Path) -> list[Participant]:
         participants.append(
             Participant(
                 identity=identity,
-                first_name=str(record.get(PARTICIPANT_FIRST_NAME_KEY) or ""),
-                last_name=str(record.get(PARTICIPANT_LAST_NAME_KEY) or ""),
+                first_name=str(record.get(columns.participant_first_name) or ""),
+                last_name=str(record.get(columns.participant_last_name) or ""),
             )
         )
     return participants
@@ -423,22 +477,24 @@ class ChoiceResponse:
 
 
 def read_choice_responses(
-    path: pathlib.Path, *, choice_column: str = CHOICE_COLUMN
+    path: pathlib.Path, *, columns: MoodleColumns = DEFAULT_COLUMNS
 ) -> list[ChoiceResponse]:
     """The responses of a choice download (tab-separated text or xlsx)."""
     table = read_table(path)
-    if choice_column not in table.header:
-        raise MoodleFormatError(f"{path}: no {choice_column!r} column")
-    columns = _identity_columns(table)
-    if not columns:
+    if columns.choice not in table.header:
+        raise MoodleFormatError(f"{path}: no {columns.choice!r} column")
+    identity_columns = _identity_columns(table, columns)
+    if not identity_columns:
         raise MoodleFormatError(f"{path}: no identity column")
     return [
         ChoiceResponse(
             identity={
-                kind: row[column] for kind, column in columns.items() if row[column]
+                kind: row[column]
+                for kind, column in identity_columns.items()
+                if row[column]
             },
-            choice=row[choice_column],
-            name=_full_name(table, row),
+            choice=row[columns.choice],
+            name=_full_name(table, row, columns),
         )
         for row in table.rows
     ]
@@ -447,8 +503,10 @@ def read_choice_responses(
 # The two uses
 
 
-def login_text(login: str, password: str) -> str:
-    return LOGIN_TEXT.format(login=login, password=password)
+def login_text(
+    login: str, password: str, columns: MoodleColumns = DEFAULT_COLUMNS
+) -> str:
+    return columns.login_text.format(login=login, password=password)
 
 
 def send_login_data(
@@ -456,14 +514,23 @@ def send_login_data(
     credentials: Mapping[str, tuple[str, str]],
     *,
     by: str,
-    grade: str = LOGIN_GRADE,
-    text: Callable[[str, str], str] = login_text,
+    grade: str | None = None,
+    text: Callable[[str, str], str] | None = None,
     missing: Missing = "keep",
 ) -> FillReport:
     """Put login name and password into the feedback of each matched row, with
     grade 1 (a worksheet's target, or a gradebook item's). credentials:
     identity of the kind `by` -> (login, password). Rows without credentials
-    (staff, late enrolments) stay as they are by default."""
+    (staff, late enrolments) stay as they are by default. Grade and text
+    default to those of the sheet's MoodleColumns."""
+    columns = target.sheet.columns
+    if grade is None:
+        grade = columns.login_grade
+    if text is None:
+
+        def text(login: str, password: str) -> str:
+            return login_text(login, password, columns)
+
     return target.fill(
         {
             key: (grade, text(login, password))
