@@ -11,6 +11,8 @@ license = "GPL-3.0-or-later"
 authors = [{ name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" }]
 requires-python = ">=3.12"
 dependencies = [
+  "charset-normalizer>=3.4",
+  "openpyxl>=3.1",
   "pydomjudge",
 ]
 

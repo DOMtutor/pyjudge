@@ -16,6 +16,10 @@ pydomjudge = { path = "../../DOMtutor/pyjudge", editable = true }
 pydomjudge-course = { path = "../../DOMtutor/pyjudge/course", editable = true }
 ```
 
+## Checking the format of real exports
+
+`python -m pydomjudge_course.tables FILE...` prints each file's format, encoding, delimiter, column names and number of rows, and never a cell value.
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).
