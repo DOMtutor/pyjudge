@@ -48,6 +48,9 @@ A matched row's new values are added to its entry.
 A first value of a kind (a first username) or another `|` part of a field that matched is an expected alias.
 A different value of a kind the entry already has is reported and logged as a warning naming the entry's roster rows: a changed email, a student ID the university reassigned (the entry keeps its login and password), or a student ID reused for a different person, whose wrong merge has to be split by hand.
 
+`password_for` makes deterministic initial passwords: `pyjudge upload users` sets a password only when it creates a user (unless `--overwrite-passwords`), and students change theirs in the self-service.
+`Roster.credentials(..., ids=report.new_ids)` sends login data to the people added in a run only, so a re-run for late enrolments leaves everyone else alone.
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).

@@ -428,3 +428,14 @@ def test_expected_new_aliases(path: pathlib.Path, caplog):
     ]
     assert report.changed_identities == []
     assert caplog.text == ""
+
+
+def test_credentials_for_new_entries_only(path: pathlib.Path):
+    roster = _roster(path)
+    roster.add([_person(1, "9000001", "alice@example.org")], display_name=_name)
+    report = roster.add([_person(2, "9000002", "bob@example.org")], display_name=_name)
+    passwords = {entry.id: password_for(entry.id, WORDS) for entry in roster.entries}
+    assert roster.credentials(passwords, kind="email", ids=report.new_ids) == {
+        "bob@example.org": ("9000002", passwords["9000002"])
+    }
+    assert len(roster.credentials(passwords, kind="email")) == 2

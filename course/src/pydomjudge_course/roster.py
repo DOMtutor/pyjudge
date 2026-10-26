@@ -440,14 +440,21 @@ class Roster:
     # DOMjudge
 
     def credentials(
-        self, passwords: Mapping[str, str], *, kind: str
+        self,
+        passwords: Mapping[str, str],
+        *,
+        kind: str,
+        ids: Iterable[str] | None = None,
     ) -> dict[str, tuple[str, str]]:
         """Every value of `kind` -> (login, password), for the entries with a
-        password; for send_login_data(..., by=kind)."""
+        password (all, or those in ids, e.g. AddReport.new_ids so that a re-run
+        for late enrolments sends login data to the new people only); for
+        send_login_data(..., by=kind)."""
+        selected = set(ids) if ids is not None else None
         return {
             value: (entry.login, passwords[entry.id])
             for entry in self.entries
-            if entry.id in passwords
+            if entry.id in passwords and (selected is None or entry.id in selected)
             for value in entry.values.get(kind, [])
         }
 
