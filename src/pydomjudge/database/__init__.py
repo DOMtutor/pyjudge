@@ -48,6 +48,7 @@ from ._db import (
 from ._executables import (
     create_or_update_executable as create_or_update_executable,
     create_or_update_language as create_or_update_language,
+    set_default_run as set_default_run,
     set_global_languages as set_global_languages,
 )
 from ._problems import (

@@ -45,6 +45,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `DOMJUDGE=1` was never set at run time: the run script that sets it was never uploaded, and it would not have reached the submission, since runguard clears the environment.
+  `pyjudge upload settings` now uploads it as DOMjudge's `default_run`, and it passes the variable to runguard.
 - Database writer and reader bugs, export round trips, and repository loading (compiler overrides, generators, verification marker); see the git history of this version for the details.
 - A second `with` block on the same problem used removed copies of its submissions (every fuzzer job after the first failed).
 - The judgehost in `docs/docker-compose.yml` got the wrong password, and DOMjudge's redirects lost the published port.

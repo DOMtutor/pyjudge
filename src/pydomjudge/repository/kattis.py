@@ -1169,6 +1169,29 @@ class Repository:
             contents=tuple(checker_files),
         )
 
+    # Execid of the run script; DOMjudge's own one is "run"
+    RUN_SCRIPT_KEY = "pyjudge_run"
+
+    @property
+    def run_script(self) -> Executable:
+        """The run script of all problems without their own (DOMjudge's
+        default_run): the repository's runscript/ folder, else pydomjudge's,
+        which sets DOMJUDGE=1 (runguard clears the environment)."""
+        if self.repository_runscript_directory.is_dir():
+            contents = Executable.get_directory_contents(
+                self.repository_runscript_directory
+            )
+        else:
+            contents = get_components_of_traversable(
+                res.files("pydomjudge.repository.runscript")
+            )
+        return Executable(
+            key=Repository.RUN_SCRIPT_KEY,
+            description="run script of pydomjudge",
+            executable_type=ExecutableType.Runscript,
+            contents=tuple(contents),
+        )
+
     # noinspection PyMethodMayBeStatic
     def get_solution_team_of_language(self, language: Language):
         return Team(

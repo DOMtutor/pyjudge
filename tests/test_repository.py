@@ -203,3 +203,50 @@ def test_repository_config_errors(repository_copy: pathlib.Path, config, message
     with pytest.raises(InvalidFileFormatError, match=message) as error:
         Repository(repository_copy)
     assert error.value.source == repository_copy / "config.yaml"
+
+
+def test_run_script_sets_domjudge(repository: Repository):
+    script = repository.run_script
+    assert (script.key, script.executable_type.value) == ("pyjudge_run", "run")
+    files = {file.relative_path[-1]: file for file in script.contents}
+    assert set(files) == {"build", "run"}
+    with files["run"].open() as f:
+        assert b"export DOMJUDGE=1" in f.read()
+
+
+def test_repository_run_script_replaces_the_default(repository_copy: pathlib.Path):
+    runscript = repository_copy / "runscript"
+    runscript.mkdir()
+    (runscript / "run").write_text('#!/bin/sh\nexec "$@"\n')
+    script = Repository(repository_copy).run_script
+    assert [file.relative_path[-1] for file in script.contents] == ["run"]
+
+
+def test_run_script_passes_domjudge_to_runguard(repository: Repository, tmp_path):
+    import subprocess
+
+    (run,) = [f for f in repository.run_script.contents if f.relative_path[-1] == "run"]
+    script = tmp_path / "run"
+    with run.open() as f:
+        script.write_bytes(f.read())
+    runguard = tmp_path / "bin" / "runguard"
+    runguard.parent.mkdir()
+    runguard.write_text('#!/bin/sh\nfor a; do printf "[%s]\\n" "$a"; done\n')
+    runguard.chmod(0o755)
+    (tmp_path / "in").write_text("")
+    # As testcase_run.sh calls it, with env standing in for "sudo -n"
+    subprocess.run(
+        ["sh", str(script), str(tmp_path / "in"), str(tmp_path / "out"), "env",
+         str(runguard), "--user=a b", "--", "/x/runguard", "x y"],
+        check=True,
+    )  # fmt: skip
+    assert (tmp_path / "out").read_text().splitlines() == [
+        "[-V]", "[DOMJUDGE=1]", "[--user=a b]", "[--]", "[/x/runguard]", "[x y]",
+    ]  # fmt: skip
+    # Without runguard, the program gets it from the environment
+    subprocess.run(
+        ["sh", str(script), str(tmp_path / "in"), str(tmp_path / "out"), "sh", "-c",
+         'echo "$DOMJUDGE"'],
+        check=True,
+    )  # fmt: skip
+    assert (tmp_path / "out").read_text() == "1\n"

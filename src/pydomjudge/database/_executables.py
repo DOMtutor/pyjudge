@@ -88,6 +88,18 @@ def create_or_update_executable(cursor: Cursor, executable: Executable):
     )
 
 
+def set_default_run(cursor: Cursor, run_script: Executable) -> None:
+    """Upload run_script and make it DOMjudge's default_run, the run script of
+    every problem without its own (special_run, as interactive problems have,
+    takes precedence; DOMjudge's own "run" stays as it is)."""
+    create_or_update_executable(cursor, run_script)
+    cursor.execute(
+        "INSERT INTO configuration (name, value) VALUES (%s, %s) "
+        "ON DUPLICATE KEY UPDATE value = VALUES(value)",
+        ("default_run", json.dumps(run_script.key)),
+    )
+
+
 def delete_unused_immutable_executables(cursor: Cursor) -> None:
     """Delete file sets no executable refers to any more, after replacing or
     deleting executables (their files go with them, ON DELETE CASCADE)."""
