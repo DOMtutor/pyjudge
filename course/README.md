@@ -48,7 +48,10 @@ A matched row's new values are added to its entry.
 A first value of a kind (a first username) or another `|` part of a field that matched is an expected alias.
 A different value of a kind the entry already has is reported and logged as a warning naming the entry's roster rows: a changed email, a student ID the university reassigned (the entry keeps its login and password), or a student ID reused for a different person, whose wrong merge has to be split by hand.
 
-`password_for` makes deterministic initial passwords: `pyjudge upload users` sets a password only when it creates a user (unless `--overwrite-passwords`), and students change theirs in the self-service.
+`password_for` makes deterministic initial passwords from a course secret: three words of the word list chosen by HMAC-SHA256(secret, id), so nobody can compute them from a student ID without the secret.
+`load_secret(path)` reads the secret from `PYJUDGE_PASSWORD_SECRET` or from the file; create one with `python -c "import secrets; print(secrets.token_hex(32))" > path`.
+The secret must not be tracked in version control.
+Losing it only means other initial passwords for people not created yet: `pyjudge upload users` sets a password only when it creates a user (unless `--overwrite-passwords`), so existing users keep theirs, and students change theirs in the self-service.
 `Roster.credentials(..., ids=report.new_ids)` sends login data to the people added in a run only, so a re-run for late enrolments leaves everyone else alone.
 
 ## Student data
