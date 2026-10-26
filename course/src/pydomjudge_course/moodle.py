@@ -263,13 +263,15 @@ class FillTarget:
                 for identity in sheet.columns.identities(row[column])
                 if identity in keys
             ]
-            if len(matching) > 1:
+            # Several identities of a row (e.g. "a|b") may be given, if with
+            # the same value (the aliases of one person)
+            if len({values[keys[identity]] for identity in matching}) > 1:
                 raise MoodleFormatError(
                     f"{sheet.table.source}: data row {number} matches several "
-                    f"given identities in {column}"
+                    f"given identities in {column} with different values"
                 )
             if matching:
-                used.add(matching[0])
+                used.update(matching)
                 assignments.append((row, values[keys[matching[0]]]))
             else:
                 unfilled.append(number)

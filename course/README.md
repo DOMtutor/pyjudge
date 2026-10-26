@@ -35,11 +35,24 @@ columns = MoodleColumns(
 worksheet = Worksheet.read(path, columns=columns)
 ```
 
+## Roster
+
+`pydomjudge_course.roster` keeps who is who between Moodle and DOMjudge in a CSV file at a path the course chooses, with one row per identity value (student ID, email, username).
+An entry's id, DOMjudge keys, login and display name are fixed when the person is first added, and identities only accumulate, so logins and passwords stay valid.
+New rows are appended; whether the file is tracked in git is up to the course.
+
+The file may be edited by hand, for example after an error about identities of two different entries, which names the roster rows to look at.
+All rows of an id must have the same keys and display name, and an identity value may belong to one id only.
+
+A matched row's new values are added to its entry.
+A first value of a kind (a first username) or another `|` part of a field that matched is an expected alias.
+A different value of a kind the entry already has is reported and logged as a warning naming the entry's roster rows: a changed email, a student ID the university reassigned (the entry keeps its login and password), or a student ID reused for a different person, whose wrong merge has to be split by hand.
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).
 They never write inside this package and do not log cell values or names above DEBUG.
-Keep these files out of version control in the course repositories, and use synthetic data in tests.
+Whether such files are tracked in a course repository is the course's decision; tests use synthetic data only.
 
 ## Known limitations
 
