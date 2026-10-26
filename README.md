@@ -65,7 +65,7 @@ Open points are in [TODO.md](TODO.md), changes in [CHANGELOG.md](CHANGELOG.md).
   The reader (exports, lookups) works by names (contest short name, team name, login), so it also works on databases not created by pydomjudge.
 * **problemtools behind one module.**
   Verification, statement PDFs and the fuzzer's runs go through `pydomjudge.repository._problemtools`, the only module that touches problemtools (including some of its internals); its tests fail when a problemtools update changes them.
-* **Compile scripts** in `repository/compiler/` are DOMjudge 9.0.1's with documented deviations; local verification compiles with problemtools' own settings instead, and that folder's README lists how the two differ.
+* **Compile scripts** in `repository/compiler/` derive from DOMjudge 9.0.1's; that folder's README says what they do for problem authors, and that local verification compiles with problemtools' own settings instead.
 
 ## License
 
