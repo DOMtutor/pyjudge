@@ -125,6 +125,43 @@ def test_jury_submission_external_id_fits_domjudge():
     assert all(len(external_id) <= 64 for external_id in ids)
 
 
+class _RecordingCursor:
+    """Records statements with their parameters; no row exists yet."""
+
+    def __init__(self):
+        self.statements: list[tuple[str, tuple]] = []
+        self.lastrowid = 7
+
+    def execute(self, query, params=None):
+        self.statements.append((" ".join(query.split()), tuple(params or ())))
+
+    def fetchone(self):
+        return None
+
+
+def test_set_default_run_uploads_the_run_script(examples_dir):
+    from typing import cast
+
+    from pydomjudge.database import DBCursor, set_default_run
+    from pydomjudge.repository.kattis import Repository
+
+    cursor = _RecordingCursor()
+    run_script = Repository(examples_dir / "repository").run_script
+    set_default_run(cast(DBCursor, cursor), run_script)
+    executables = [
+        p for q, p in cursor.statements if q.startswith("INSERT INTO executable (")
+    ]
+    assert [p[:2] for p in executables] == [("pyjudge_run", "run")]
+    files = [
+        p for q, p in cursor.statements if q.startswith("INSERT INTO executable_file")
+    ]
+    assert sorted((p[1], p[5]) for p in files) == [("build", True), ("run", True)]
+    configuration = [
+        p for q, p in cursor.statements if q.startswith("INSERT INTO configuration")
+    ]
+    assert configuration == [("default_run", '"pyjudge_run"')]
+
+
 class _RowsCursor:
     """Records statements and answers each with the next canned rows."""
 

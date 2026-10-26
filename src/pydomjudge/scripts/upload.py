@@ -295,6 +295,7 @@ def update_settings(config: PyjudgeConfig):
             update.set_global_languages(
                 cursor, config.repository.languages, config.judge.allowed_language_keys
             )
+            update.set_default_run(cursor, config.repository.run_script)
 
 
 def check_database(config: PyjudgeConfig):

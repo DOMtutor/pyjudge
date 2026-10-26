@@ -195,6 +195,7 @@ repository/
   config.yaml
   compiler/<language>/{build,run}     optional: override the compile scripts shipped with pydomjudge
   checker/<language>/...              optional: override the checker support files (e.g. Java checker framework)
+  runscript/{build,run}               optional: override the run script shipped with pydomjudge
   problems/
     helloworld/
       problem.yaml
@@ -253,6 +254,14 @@ Each file gets its own seed, derived from its name, so running it again gives th
 The generator must be deterministic.
 
 Each test case may have a `<name>.desc` description and a `<name>.<png|jpg>` image shown in DOMjudge.
+
+### Run script
+
+`pyjudge upload settings` uploads a run script (executable `pyjudge_run`) and makes it DOMjudge's `default_run`, the run script of every problem without its own; DOMjudge's own `run` stays as it is.
+It sets `DOMJUDGE=1` in the environment of every submission, in every language, so that programs can detect the judge at run time.
+Since DOMjudge's runguard clears the environment, the script passes the variable to runguard (`-V DOMJUDGE=1`).
+Problems with their own run script, such as interactive ones, are not affected.
+A repository can replace it with its own `runscript/` folder (`build` and `run`, as any DOMjudge run executable).
 
 ## Using the library
 

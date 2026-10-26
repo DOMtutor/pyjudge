@@ -460,6 +460,44 @@ def test_hello_world_in_every_language(base_url: str, uploaded: Contest):
     assert verdicts == dict.fromkeys(sources, "AC")
 
 
+def test_default_run_script(database: Database, uploaded: Contest):
+    assert _ids(
+        database, "SELECT value FROM configuration WHERE name = 'default_run'"
+    ) == ['"pyjudge_run"']
+    assert _ids(
+        database, "SELECT type FROM executable WHERE execid = 'pyjudge_run'"
+    ) == ["run"]
+
+
+@pytest.mark.skipif(not JUDGE, reason="needs the judgehost (run.sh with judge)")
+def test_run_script_sets_domjudge(base_url: str, uploaded: Contest):
+    """pydomjudge's run script exports DOMJUDGE=1 (runguard clears the
+    environment), so this submission is only correct with it."""
+    with client(base_url, auth=TEAM) as team_api, client(base_url, auth=ADMIN) as api:
+        contest_id = api.get("/api/v4/contests").json()[0]["id"]
+        name = "check_domjudge_env.py"
+        response = team_api.post(
+            f"/api/v4/contests/{contest_id}/submissions",
+            data={"problem": "helloworld", "language": "python"},
+            files={"code[]": (name, (HELLO / name).read_bytes())},
+        )
+        assert response.status_code == 200, response.text
+        submission_id = response.json()["id"]
+        verdict = None
+        deadline = time.monotonic() + 300
+        while verdict is None and time.monotonic() < deadline:
+            time.sleep(3)
+            judgements = api.get(
+                f"/api/v4/contests/{contest_id}/judgements",
+                params={"submission_id": submission_id},
+            ).json()
+            verdict = next(
+                (j["judgement_type_id"] for j in judgements if j.get("valid", True)),
+                None,
+            )
+    assert verdict == "AC"
+
+
 def test_consistency_report_of_the_example(database: Database, uploaded: Contest):
     from pydomjudge.database import check_consistency
 

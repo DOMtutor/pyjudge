@@ -1,10 +1,40 @@
 #!/bin/sh
+# Run script of pydomjudge: DOMjudge's default_run, for problems without their
+# own run script. It sets DOMJUDGE=1 for the submission.
+#
+# testcase_run.sh calls it as
+#   run <testin> <progout> [sudo -n] <runguard> <options> -- <program>...
+# and runguard clears the environment of the program, so the variable is
+# passed to runguard with -V. For a direct call (no runguard) it is exported.
 
 test_input="$1"
 program_output="$2"
 shift 2
 
-export HOME=/
 export DOMJUDGE=1
-exec "$@" < "$test_input" > "$program_output"
 
+added=0
+options=1
+first=1
+# The list of the loop is expanded once, so "set --" below rebuilds the
+# arguments without changing what the loop iterates over
+for argument; do
+	if [ "$first" = 1 ]; then
+		set --
+		first=0
+	fi
+	set -- "$@" "$argument"
+	if [ "$argument" = "--" ]; then
+		options=0
+	fi
+	if [ "$added" = 0 ] && [ "$options" = 1 ]; then
+		case "$argument" in
+			*/runguard)
+				set -- "$@" -V DOMJUDGE=1
+				added=1
+				;;
+		esac
+	fi
+done
+
+exec "$@" < "$test_input" > "$program_output"
