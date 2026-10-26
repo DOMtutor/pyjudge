@@ -32,9 +32,11 @@ roster rows to look at.
 import csv
 import dataclasses
 import datetime
+import hashlib
+import hmac
 import logging
+import os
 import pathlib
-import random
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Literal, TypeVar
 
@@ -460,14 +462,45 @@ class Roster:
 
 
 def read_wordlist(path: pathlib.Path) -> list[str]:
-    """The words for passwords, one per line, capitalized."""
+    """The words for passwords: one per line, capitalised, blank lines skipped."""
     with path.open(mode="rt", encoding="utf-8") as f:
-        return [line.strip().capitalize() for line in f.readlines()]
+        return [word.capitalize() for line in f if (word := line.strip())]
 
 
-def password_for(canonical_id: str, wordlist: Sequence[str]) -> str:
-    """Three words, determined by the id: the same password on every run."""
-    return "".join(random.Random(x=bytes(canonical_id, "utf-8")).choices(wordlist, k=3))
+SECRET_ENV = "PYJUDGE_PASSWORD_SECRET"
+
+
+def load_secret(path: pathlib.Path | None = None, *, env: str = SECRET_ENV) -> bytes:
+    """The course secret for initial passwords: the environment variable env,
+    else the file at path. Keep it out of version control; losing it only
+    means other initial passwords for people not created yet."""
+    if value := os.environ.get(env, "").strip():
+        return value.encode()
+    if path is not None and path.is_file():
+        if data := path.read_bytes().strip():
+            return data
+        raise ValueError(f"{path}: the password secret is empty")
+    where = f"create {path} with" if path is not None else "set it from"
+    target = f" > {path}" if path is not None else ""
+    raise ValueError(
+        f"No password secret: set {env}, or {where} "
+        f'python -c "import secrets; print(secrets.token_hex(32))"{target}'
+    )
+
+
+def password_for(canonical_id: str, wordlist: Sequence[str], *, secret: bytes) -> str:
+    """Three words from HMAC-SHA256(secret, id): the same password on every
+    run, but not computable without the course secret."""
+    if not secret:
+        raise ValueError("the password secret is empty")
+    if not wordlist:
+        raise ValueError("the word list is empty")
+    digest = hmac.new(secret, canonical_id.encode("utf-8"), hashlib.sha256).digest()
+    # Three 8-byte chunks of the 32-byte digest; the modulo bias is negligible
+    return "".join(
+        wordlist[int.from_bytes(digest[8 * i : 8 * (i + 1)], "big") % len(wordlist)]
+        for i in range(3)
+    )
 
 
 def users_and_teams(

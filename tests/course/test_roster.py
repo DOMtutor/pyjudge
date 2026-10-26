@@ -2,7 +2,6 @@
 
 import logging
 import pathlib
-import random
 
 import bcrypt
 import pytest
@@ -15,6 +14,7 @@ from pydomjudge_course.roster import (
     Person,
     Roster,
     RosterError,
+    load_secret,
     password_for,
     people_from_participants,
     people_from_sheet,
@@ -24,6 +24,7 @@ from pydomjudge_course.roster import (
 from pydomjudge_course.tables import read_table
 
 WORDS = ["Apple", "Banana", "Cherry", "Damson", "Elder", "Fig", "Grape"]
+SECRET = b"test secret"
 
 
 def _person(
@@ -125,7 +126,7 @@ def test_reassigned_student_id_keeps_login_and_password(path: pathlib.Path, capl
     roster.save()
     first = roster.find({"student_id": "9000001"})
     assert first is not None
-    password = password_for(first.id, WORDS)
+    password = password_for(first.id, WORDS, secret=SECRET)
 
     roster = _roster(path)
     with caplog.at_level(logging.WARNING, logger="pydomjudge_course.roster"):
@@ -144,7 +145,7 @@ def test_reassigned_student_id_keeps_login_and_password(path: pathlib.Path, capl
     entry = _roster(path).find({"student_id": "9100001"})
     assert entry is not None
     assert (entry.id, entry.login) == ("9000001", "9000001")
-    assert password_for(entry.id, WORDS) == password
+    assert password_for(entry.id, WORDS, secret=SECRET) == password
 
 
 def test_identities_of_two_entries_are_an_error(path: pathlib.Path):
@@ -220,14 +221,42 @@ def test_hand_edited_roster(path: pathlib.Path):
         _roster(path)
 
 
-def test_password_compatible_with_the_courses(tmp_path: pathlib.Path):
+def test_passwords_from_the_course_secret(tmp_path: pathlib.Path):
     wordlist = tmp_path / "wordlist.txt"
-    wordlist.write_text("apple\nbanana\ncherry\n")
+    wordlist.write_text("apple\n\nbanana\ncherry\n")
     words = read_wordlist(wordlist)
     assert words == ["Apple", "Banana", "Cherry"]
-    # random.choices seeded with the id
-    expected = "".join(random.Random(x=bytes("9000001", "utf-8")).choices(words, k=3))
-    assert password_for("9000001", words) == expected
+    password = password_for("9000001", WORDS, secret=SECRET)
+    assert password == password_for("9000001", WORDS, secret=SECRET)
+    assert len([c for c in password if c.isupper()]) == 3
+    others = {password_for("9000001", WORDS, secret=bytes([n])) for n in range(20)}
+    assert len(others) > 1  # the secret matters
+    with pytest.raises(ValueError, match="secret is empty"):
+        password_for("9000001", WORDS, secret=b"")
+    with pytest.raises(ValueError, match="word list is empty"):
+        password_for("9000001", [], secret=SECRET)
+
+
+def test_load_secret(tmp_path: pathlib.Path, monkeypatch):
+    monkeypatch.delenv("PYJUDGE_PASSWORD_SECRET", raising=False)
+    path = tmp_path / "password_secret"
+    with pytest.raises(
+        ValueError,
+        match=r"set PYJUDGE_PASSWORD_SECRET, or create .*password_secret with python -c",
+    ):
+        load_secret(path)
+    with pytest.raises(ValueError, match="No password secret"):
+        load_secret()
+    path.write_text("from-file\n")
+    assert load_secret(path) == b"from-file"
+    monkeypatch.setenv("PYJUDGE_PASSWORD_SECRET", "from-env")
+    assert load_secret(path) == b"from-env"
+    monkeypatch.setenv("COURSE_SECRET", "other")
+    assert load_secret(env="COURSE_SECRET") == b"other"
+    monkeypatch.delenv("PYJUDGE_PASSWORD_SECRET")
+    path.write_text("  \n")
+    with pytest.raises(ValueError, match="secret is empty"):
+        load_secret(path)
 
 
 def test_users_and_teams(path: pathlib.Path):
@@ -239,7 +268,10 @@ def test_users_and_teams(path: pathlib.Path):
         ],
         display_name=_name,
     )
-    passwords = {entry.id: password_for(entry.id, WORDS) for entry in roster.entries}
+    passwords = {
+        entry.id: password_for(entry.id, WORDS, secret=SECRET)
+        for entry in roster.entries
+    }
     users, teams = users_and_teams(
         roster,
         category=lambda e: (
@@ -317,7 +349,10 @@ def test_credentials_and_send_login_data(path: pathlib.Path, tmp_path: pathlib.P
     roster = _roster(path)
     report = roster.add(people_from_sheet(worksheet), display_name=lambda p, id: id)
     assert report.new_ids == ["9000001", "9000002"]
-    passwords = {entry.id: password_for(entry.id, WORDS) for entry in roster.entries}
+    passwords = {
+        entry.id: password_for(entry.id, WORDS, secret=SECRET)
+        for entry in roster.entries
+    }
     credentials = roster.credentials(passwords, kind="student_id")
     assert credentials["9000012"] == ("9000002", passwords["9000002"])
     fill = send_login_data(worksheet.target, credentials, by="student_id")
@@ -434,7 +469,10 @@ def test_credentials_for_new_entries_only(path: pathlib.Path):
     roster = _roster(path)
     roster.add([_person(1, "9000001", "alice@example.org")], display_name=_name)
     report = roster.add([_person(2, "9000002", "bob@example.org")], display_name=_name)
-    passwords = {entry.id: password_for(entry.id, WORDS) for entry in roster.entries}
+    passwords = {
+        entry.id: password_for(entry.id, WORDS, secret=SECRET)
+        for entry in roster.entries
+    }
     assert roster.credentials(passwords, kind="email", ids=report.new_ids) == {
         "bob@example.org": ("9000002", passwords["9000002"])
     }
