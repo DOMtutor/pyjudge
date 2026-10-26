@@ -182,6 +182,12 @@ class MoodleSheet:
     def write(self, path: pathlib.Path) -> None:
         """Write the export for Moodle's upload (CSV), with all columns and the
         header order as read."""
+        # TODO: unverified for xlsx worksheets whose "Last modified (grade)"
+        # cells are real dates: they are written as ISO 8601 (tables.py), not
+        # in Moodle's display format. Moodle's upload compares this column
+        # with the grade's modification time to skip rows changed after the
+        # download; whether it parses the ISO form to the same time is not
+        # checked against Moodle's source. Text cells are written unchanged.
         from .tables import write_table
 
         write_table(self.table, path)
