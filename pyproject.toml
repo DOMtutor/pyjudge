@@ -46,11 +46,13 @@ Issues = "https://github.com/DOMtutor/pyjudge/issues"
 pyjudge = "pydomjudge.scripts.commands:main"
 
 [dependency-groups]
+# Only ruff, for the CI lint job (dev builds the whole project)
+lint = ["ruff>=0.17"]
 dev = [
+  { include-group = "lint" },
   "httpx>=0.27",
   "pydomjudge-course[plagiarism]",
   "pytest>=8",
-  "ruff>=0.17",
   "ty>=0.0.90",
 ]
 
