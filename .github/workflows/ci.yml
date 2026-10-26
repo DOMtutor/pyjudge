@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # uv reads the metadata of problemtools (a path dependency) even
+          # when it installs only the dev group
+          submodules: recursive
           persist-credentials: false
       - uses: astral-sh/setup-uv@v10.3.2
       # Only the dev group: ruff comes from uv.lock, the project itself is not needed
@@ -41,6 +44,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends automake g++ make libboost-regex-dev libgmp-dev pypy3
+      # problemtools compiles Java with -source 21; the runner's default is older
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true

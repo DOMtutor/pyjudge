@@ -3,6 +3,7 @@
 import importlib.resources
 import pathlib
 import shutil
+import subprocess
 
 import pytest
 
@@ -15,6 +16,17 @@ def _can_verify(*tools: str) -> bool:
         importlib.resources.files("problemtools") / "support" / "checktestdata"
     )
     return checktestdata.is_file() and all(shutil.which(tool) for tool in tools)
+
+
+def _javac_21() -> bool:
+    # problemtools compiles with -source 21
+    return (
+        shutil.which("javac") is not None
+        and subprocess.run(
+            ["javac", "-source", "21", "-version"], capture_output=True
+        ).returncode
+        == 0
+    )
 
 
 @pytest.fixture
@@ -60,7 +72,8 @@ def test_scaffold_verifies(repository: pathlib.Path):
 
 
 @pytest.mark.skipif(
-    not _can_verify("javac", "java"), reason="needs checktestdata, Java"
+    not (_can_verify("javac", "java") and _javac_21()),
+    reason="needs checktestdata, Java 21",
 )
 def test_java_scaffold_verifies(repository: pathlib.Path):
     _new("addj", "--language", "java")
