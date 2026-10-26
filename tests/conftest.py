@@ -1,3 +1,4 @@
+import os
 import pathlib
 
 import pytest
@@ -15,6 +16,16 @@ from pydomjudge.database import (
 from pydomjudge.model import Verdict
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def pytest_configure(config):
+    # problemtools forks: keep numpy (imported through copydetect) from starting
+    # a BLAS thread pool and tqdm from starting its monitor thread before
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    import tqdm
+
+    tqdm.tqdm.monitor_interval = 0
 
 
 @pytest.fixture(autouse=True)

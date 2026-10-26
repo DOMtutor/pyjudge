@@ -74,6 +74,34 @@ A submission is on time until end + grace, late (it counts; the penalty is the c
 The counting submission of a team and problem is the last one that is not too late, or what a `select` function returns; give such a function a name, as the cache knows it by name.
 `Evaluation.graded()` lists the counting submissions that solve the samples, and every record has its verdict, timing, folder and whether all its files are text (`source`).
 
+## Plagiarism
+
+`pydomjudge_course.plagiarism` needs the extra `pydomjudge-course[plagiarism]` (copydetect, rapidfuzz, pygments).
+
+```python
+pairs = find_plagiarism(
+    evaluation,
+    Path("grading/data"),
+    report_directory=Path("grading/data/plagiarism"),
+    review_directory=Path("grading/plagiarism"),
+)
+```
+
+Every source submission of the layout takes part (also those too late; pass `include=` to filter), with a team's near-identical submissions collapsed into one unit.
+Per problem, copydetect compares the units of different teams, and a second detector compares their comments, skipping team pairs that are already flagged.
+The report directory, rebuilt on every run, holds copydetect's report per problem and an `index.html` with the cases (teams connected by flagged pairs) and the team pairs flagged on several problems.
+
+The review file `<problem>.csv` has a row per flagged team pair with a verdict for each side (`verdict_a`, `verdict_b`), since a team may have copied in one pair and been copied from in another.
+Rows keep their verdicts and notes across runs; `review` says what to look at: `new`, `re-review` (other submissions or a different score), or `dropped` (no longer flagged, also when the problem has no submissions any more; delete the row or clear the marker to keep its verdicts).
+The reviewer fills in the verdicts and clears `review`.
+
+Verdict kinds map a name to a severity: 0 is not reported, and among a team's reported sides the most severe wins.
+The default kinds are `none`, `cited` (the similarity is acknowledged) and `source` (others copied from this side) with 0, `uncited` (a missing citation) with 1 and `copied` with 2.
+A course passes its own mapping, for example `{"none": 0, "minor": 1, "major": 2}`, to `read_reviews`, `hearings` and `findings`.
+`read_reviews` refuses empty verdicts and open `review` markers.
+`findings` gives the most severe reported kind per team and problem with the partners (`write_findings` writes `plagiarism.csv`), and `hearings` gives per team only the pairs where its own side is reported; `write_evidence` links the submissions of those pairs into a folder per team.
+A pair whose row was kept although this run did not flag it gets all submissions of both teams to the problem, with a warning.
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).

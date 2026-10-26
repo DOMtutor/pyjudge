@@ -48,6 +48,7 @@ pyjudge = "pydomjudge.scripts.commands:main"
 [dependency-groups]
 dev = [
   "httpx>=0.27",
+  "pydomjudge-course[plagiarism]",
   "pytest>=8",
   "ruff>=0.17",
   "ty>=0.0.90",
@@ -55,6 +56,7 @@ dev = [
 
 [tool.uv.sources]
 problemtools = { path = "./libs/problemtools" }
+pydomjudge-course = { workspace = true }
 
 [tool.uv.workspace]
 # The watcher is an independent project (no dependency on pydomjudge) and

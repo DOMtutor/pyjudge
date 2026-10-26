@@ -16,6 +16,9 @@ dependencies = [
   "pydomjudge",
 ]
 
+[project.optional-dependencies]
+plagiarism = ["copydetect>=0.5", "pygments>=2.19", "rapidfuzz>=3.14"]
+
 [tool.uv.sources]
 pydomjudge = { workspace = true }
 
