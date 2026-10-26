@@ -4,22 +4,15 @@ One folder per language key of `../languages.yml`.
 Each folder is a DOMjudge compile executable: `pyjudge upload settings` uploads its files, DOMjudge runs `build` once to prepare the executable and then, for every submission, `run program <memory limit KiB> <sources...>` in the directory with the sources (see `judge/compile.sh` of DOMjudge).
 A repository can replace a folder with its own `compiler/<language>/`.
 
-## Origin
+## What problem authors should know
 
-All scripts are DOMjudge 9.0.1's `sql/files/defaultdata` (`c`, `cpp`, `java` = `java_javac_detect` with `DetectMain.java`, `python` = `py3`, `haskell` = `hs`, `javascript` = `js`, `rust` = `rs`, `pascal` = `pas`), with the deviations below, each marked with a `# pydomjudge:` comment.
-To update them, copy the new upstream files over these, then re-apply the deviations (`git log -p` of this folder shows them as a diff against upstream).
+- `DOMJUDGE` is defined at compile time: `-DDOMJUDGE` for C, C++ and Haskell (with the CPP extension), `-dDOMJUDGE` for Pascal, `--cfg DOMJUDGE` for Rust; Java programs run with the system property `DOMJUDGE` set.
+  At run time, every submission sees `DOMJUDGE=1` in its environment through pydomjudge's run script (see [docs/usage.md](../../../../docs/usage.md#run-script)).
+- Assertions are off: `-DNDEBUG` for C and C++, `pypy3 -O` for Python.
+- The language standards are fixed: C17 (`-std=c17`), C++17 (`-std=gnu++17`) and Rust edition 2024 (needs rustc 1.85).
+- A Rust compile error is a compile error (the script exits with rustc's exit code).
 
-| Language | Deviation from DOMjudge | Why |
-|----------|------------------------|-----|
-| c, cpp | `-DDOMJUDGE -DNDEBUG`, `-std=c17` / `-std=gnu++17` | programs can detect the judge; `assert` is off; fixed language standard |
-| java | `-DDOMJUDGE` system property | programs can detect the judge |
-| python | `pypy3 -O` | `assert` statements are not executed (intended, like `-DNDEBUG` for C/C++) |
-| haskell | `-DDOMJUDGE` (with the CPP extension), `-ferror-spans` | programs can detect the judge; clearer errors |
-| pascal | `-dDOMJUDGE` | programs can detect the judge |
-| rust | `--cfg DOMJUDGE`, `--crate-type bin`, `--edition=2024` (needs rustc 1.85), absolute `TMPDIR`, exit code of `rustc` | upstream always exits 0, so compile errors became run errors |
-
-`tests/test_compile_scripts.py` runs every script like `compile.sh` does, for each compiler installed on the machine.
-All scripts were also checked in the chroot of the DOMtutor judgehost image.
+`tests/test_compile_scripts.py` runs every script like DOMjudge's `compile.sh` does, for each compiler installed on the machine.
 
 ## Local verification differs
 

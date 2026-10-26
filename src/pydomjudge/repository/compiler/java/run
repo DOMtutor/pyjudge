@@ -91,7 +91,7 @@ fi
 # Add -DONLINE_JUDGE or -DDOMJUDGE below if you want it make easier for teams
 # to do local debugging.
 
-# pydomjudge: -DDOMJUDGE (System.getProperty("DOMJUDGE") != null)
+# -DDOMJUDGE (System.getProperty("DOMJUDGE") != null)
 exec java -DDOMJUDGE -Dfile.encoding=UTF-8 -XX:+UseSerialGC -Xss${MEMSTACK}k -Xms${MEMLIMITJAVA}k -Xmx${MEMLIMITJAVA}k '$MAINCLASS' "\$@"
 EOF
 

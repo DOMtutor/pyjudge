@@ -16,6 +16,6 @@ MEMLIMIT="$1" ; shift
 # -static:  Static link with all libraries
 # -pipe:    Use pipes for communication between stages of compilation
 # -lm:      Link with math-library (has to be last argument!)
-# pydomjudge: -DDOMJUDGE (for "#ifdef DOMJUDGE"), -DNDEBUG (no assert) and C17
+# -DDOMJUDGE (for "#ifdef DOMJUDGE"), -DNDEBUG (no assert) and C17
 gcc -x c -DDOMJUDGE -DNDEBUG -std=c17 -Wall -O2 -static -pipe -o "$DEST" "$@" -lm
 exit $?

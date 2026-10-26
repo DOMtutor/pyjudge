@@ -26,7 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Breaking:** `pyjudge export contest|submissions` takes the contest's short name (the contest update used to write the key into the short name).
 - **Breaking:** `pydomjudge.scripts.db`, `pydomjudge.scripts.util` and `kattis.add_arguments`/`from_args` are replaced by `pydomjudge.scripts._cli`; `update_user_password(cursor, user_key, password_hash)` takes a key and a hash instead of a `User`.
 - **Breaking:** `--debug` adds the traceback to errors (they were always printed with one); the fuzzer has no Flask `--debug` switch any more, and the self-service no `-v`.
-- **Breaking:** the compile scripts are DOMjudge 9.0.1's with the deviations listed in `repository/compiler/README.md`; flags and behaviour of the earlier scripts differ (for example, Rust compile errors are compile errors now).
+- **Breaking:** the compile scripts derive from DOMjudge 9.0.1's (`repository/compiler/README.md` lists what matters to problem authors); flags and behaviour of the earlier scripts differ (for example, Rust compile errors are compile errors now).
 - **Breaking:** when a jury solution changes, its earlier versions in DOMjudge are marked invalid instead of being judged alongside the new one.
 - **Breaking:** self-service registration is at `/register` (`/` redirects to it when it is the only service), its configuration is checked strictly (unknown keys are errors), and it does not start without its team category.
 - **Breaking:** `docs/docker-compose.yml` uses the images `incaseoftrouble/domtutor_domserver` and `domtutor_judgehost`, the web port `DOMJUDGE_PORT` (default 12345), and passes `DOMJUDGE_JUDGE_PASSWORD` to the judgehost (it fell back to the image default before).
