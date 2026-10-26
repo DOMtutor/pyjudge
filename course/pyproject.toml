@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydomjudge-course"
+version = "0.1.0"
+description = "Moodle and grading plumbing for courses that use pydomjudge"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Tobias Meggendorfer", email = "tobias@meggendorfer.de" }]
+requires-python = ">=3.12"
+dependencies = [
+  "pydomjudge",
+]
+
+[tool.uv.sources]
+pydomjudge = { workspace = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]

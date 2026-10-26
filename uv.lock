@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 members = [
     "domjudge-watcher",
     "pydomjudge",
+    "pydomjudge-course",
 ]
 
 [[package]]
@@ -1666,6 +1667,17 @@ dev = [
     { name = "ruff", specifier = ">=0.17" },
     { name = "ty", specifier = ">=0.0.90" },
 ]
+
+[[package]]
+name = "pydomjudge-course"
+version = "0.1.0"
+source = { editable = "course" }
+dependencies = [
+    { name = "pydomjudge" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydomjudge", editable = "." }]
 
 [[package]]
 name = "pygments"
