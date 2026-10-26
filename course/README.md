@@ -54,6 +54,26 @@ The secret must not be tracked in version control.
 Losing it only means other initial passwords for people not created yet: `pyjudge upload users` sets a password only when it creates a user (unless `--overwrite-passwords`), so existing users keep theirs, and students change theirs in the self-service.
 `Roster.credentials(..., ids=report.new_ids)` sends login data to the people added in a run only, so a re-run for late enrolments leaves everyone else alone.
 
+## Grading layout
+
+`pydomjudge_course.layout` turns a contest export into files and an evaluation for grading:
+
+```python
+deadlines = Deadlines(end, grace=timedelta(minutes=10), late=timedelta(days=1))
+# keyed by student ID, email, ...
+extensions = roster.resolve_teams({"9000001": timedelta(days=2)})
+evaluation = layout_export(
+    export_path, Path("grading/data"), deadlines=deadlines, extensions=extensions
+)
+```
+
+Below the directory it writes `submissions/<problem>/<team>/<time>_<id>/` with every submission under its original file names (also those too late, for plagiarism checks), `final/<team>/<problem>/` with the counting submission (`flatten_single_file=True`: `final/<team>/<problem><suffix>`), and `evaluation.json`.
+It owns these three: `submissions/` and `final/` are deleted and rebuilt when the export or the configuration changes, so course outputs belong elsewhere.
+
+A submission is on time until end + grace, late (it counts; the penalty is the course's) until end + late, and too late after that; an extension moves the end.
+The counting submission of a team and problem is the last one that is not too late, or what a `select` function returns; give such a function a name, as the cache knows it by name.
+`Evaluation.graded()` lists the counting submissions that solve the samples, and every record has its verdict, timing, folder and whether all its files are text (`source`).
+
 ## Student data
 
 The functions read and write files with student data (Moodle exports, rosters, submissions).
