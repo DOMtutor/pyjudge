@@ -496,3 +496,16 @@ def test_participants_with_custom_keys(tmp_path: pathlib.Path):
     assert participant.identity == {"email": "a@example.org"}
     assert participant.first_name == "A"
     assert identities("a;b", MoodleColumns(identity_separator=";")) == ("a", "b")
+
+
+def test_fill_with_several_aliases_of_a_row(worksheet_path: pathlib.Path):
+    worksheet = Worksheet.read(worksheet_path)
+    # Bob's row holds "9000002|9000012": both given with one value is fine
+    report = worksheet.target.fill(
+        {"9000002": ("1", "same"), "9000012": ("1", "same")}, by="student_id"
+    )
+    assert report.filled == 1 and report.unmatched_keys == []
+    with pytest.raises(MoodleFormatError, match="several given identities .*different"):
+        worksheet.target.fill(
+            {"9000002": ("1", "one"), "9000012": ("2", "other")}, by="student_id"
+        )
