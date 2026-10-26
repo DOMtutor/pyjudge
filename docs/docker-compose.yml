@@ -23,6 +23,21 @@ configs:
       sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
       echo "[ok] DOMjudge passes HTTP_HOST $$host"
 
+  # Initial passwords of the admin and judgehost users. DOMjudge reads these
+  # files when it creates the database, so later changes in .env have no
+  # effect (change the passwords in DOMjudge or with "pyjudge upload
+  # password"). Passwords must not contain whitespace.
+  domserver-passwords:
+    content: |
+      #!/bin/sh -e
+      cd /opt/domjudge/domserver/etc
+      umask 077
+      if [ -n "$${DOMJUDGE_ADMIN_PASSWORD:-}" ]; then
+        echo "$${DOMJUDGE_ADMIN_PASSWORD}" > initial_admin_password.secret
+      fi
+      printf 'default\thttp://localhost/domjudge/api\tjudgehost\t%s\n' "$${DOMJUDGE_JUDGE_PASSWORD:?}" > restapi.secret
+      echo "[ok] Initial passwords from the environment"
+
   # Configuration of the self-service (profile "selfservice"), see docs/tools.md
   selfservice-config:
     content: |
@@ -48,7 +63,8 @@ x-judgehost-config: &judgehost-config
   networks:
     - domjudge
   depends_on:
-    - domserver
+    domserver:
+      condition: service_healthy
   volumes:
     - /sys/fs/cgroup:/sys/fs/cgroup
   privileged: true
@@ -113,10 +129,17 @@ services:
       MYSQL_DATABASE: domjudge
       CONTAINER_TIMEZONE: ${TZ}
       DJ_DB_INSTALL_BARE: 1
+      # Used by the domserver-passwords script; without an admin password,
+      # DOMjudge generates one and prints it to the log
+      DOMJUDGE_ADMIN_PASSWORD: ${DOMJUDGE_ADMIN_PASSWORD:-}
+      DOMJUDGE_JUDGE_PASSWORD: ${DOMJUDGE_JUDGE_PASSWORD:?}
       # The port in the browser, used by the domserver-public-port script; set
       # DOMJUDGE_PUBLIC_PORT= (empty) behind a reverse proxy on port 80/443
       DOMJUDGE_PUBLIC_PORT: ${DOMJUDGE_PUBLIC_PORT-${DOMJUDGE_PORT:-12345}}
     configs:
+      - source: domserver-passwords
+        target: /scripts/start.ro/20-passwords.sh
+        mode: 0555
       - source: domserver-public-port
         target: /scripts/start.ro/40-public-port.sh
         mode: 0555

@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Self-service: configurable services, registration (`/register`, with team category and optional username pattern) and password change (`/password`) with a limit of failed attempts.
 - Fuzzer: the language list comes from the repository (`GET /languages`), runs report progress, and a cancelled run stops.
 - Compose profile `selfservice` in `docs/docker-compose.yml` for the self-service.
+- `docs/docker-compose.yml` sets the initial admin password (`DOMJUDGE_ADMIN_PASSWORD`, optional) and the judgehost password (`DOMJUDGE_JUDGE_PASSWORD`) when DOMjudge creates its database, and starts the judgehost once the domserver is healthy, so no password has to be read from the log or set by hand.
 - Integration tests against a real DOMjudge (`tests/integration/run.sh`, with `JUDGE=1` also through a judgehost), a pytest suite, CI with ruff and ty.
 - Error messages name the file and the location of the problem (`--debug` adds the traceback).
 - `pydomjudge.database.category_exists`, `find_user_id`, `find_team_id` and `find_login` (returning a `UserLogin`), which the self-service uses instead of its own SQL.

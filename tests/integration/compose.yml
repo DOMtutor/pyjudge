@@ -16,6 +16,18 @@ configs:
       sed -i "s|^fastcgi_param  HTTP_HOST .*|fastcgi_param  HTTP_HOST        $$host;|" /etc/nginx/fastcgi_params
       echo "[ok] DOMjudge passes HTTP_HOST $$host"
 
+  # Same as in docs/docker-compose.yml: initial admin and judgehost passwords
+  domserver-passwords:
+    content: |
+      #!/bin/sh -e
+      cd /opt/domjudge/domserver/etc
+      umask 077
+      if [ -n "$${DOMJUDGE_ADMIN_PASSWORD:-}" ]; then
+        echo "$${DOMJUDGE_ADMIN_PASSWORD}" > initial_admin_password.secret
+      fi
+      printf 'default\thttp://localhost/domjudge/api\tjudgehost\t%s\n' "$${DOMJUDGE_JUDGE_PASSWORD:?}" > restapi.secret
+      echo "[ok] Initial passwords from the environment"
+
 services:
   mariadb:
     image: mariadb:12
@@ -52,8 +64,13 @@ services:
       MYSQL_DATABASE: domjudge
       CONTAINER_TIMEZONE: Europe/Berlin
       DJ_DB_INSTALL_BARE: 1
+      DOMJUDGE_ADMIN_PASSWORD: admin-it
+      DOMJUDGE_JUDGE_PASSWORD: judgehost-it
       DOMJUDGE_PUBLIC_PORT: ${PYJUDGE_IT_WEB_PORT:-18080}
     configs:
+      - source: domserver-passwords
+        target: /scripts/start.ro/20-passwords.sh
+        mode: 0555
       - source: domserver-public-port
         target: /scripts/start.ro/40-public-port.sh
         mode: 0555
@@ -78,6 +95,6 @@ services:
       CONTAINER_TIMEZONE: Europe/Berlin
       DOMSERVER_BASEURL: http://domserver/
       JUDGEDAEMON_USERNAME: judgehost
-      # Set by run.sh through pyjudge before the judgehost starts
+      # The domserver's DOMJUDGE_JUDGE_PASSWORD
       JUDGEDAEMON_PASSWORD: judgehost-it
       DAEMON_ID: 0

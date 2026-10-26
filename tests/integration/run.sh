@@ -40,17 +40,6 @@ export PYJUDGE_IT_DB="127.0.0.1:${db_port}"
 export PYJUDGE_IT_JUDGE=${JUDGE:-0}
 
 if [ "${JUDGE:-0}" = "1" ]; then
-    # The judgehost logs in with this password, so set it before it starts
-    (cd "$root" && uv run python - <<'PY'
-from pydomjudge.database import Database, update_user_password
-from pydomjudge.model import User
-import os
-host, port = os.environ["PYJUDGE_IT_DB"].split(":")
-database = Database(host=host, port=int(port), user="domjudge", password="domjudge-it", database="domjudge")
-with database as db, db.transaction_cursor() as cursor:
-    update_user_password(cursor, "judgehost", User.hash_password("judgehost-it"))
-PY
-    )
     "${compose[@]}" --profile judge up -d judgehost
 fi
 

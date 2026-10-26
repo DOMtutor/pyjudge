@@ -63,16 +63,15 @@ cat > .env <<'ENV'
 TZ=Europe/Berlin
 DOMJUDGE_DB_ROOT_PASSWORD=change-me-root
 DOMJUDGE_DB_DOMJUDGE_PASSWORD=change-me-db
+DOMJUDGE_ADMIN_PASSWORD=change-me-admin
 DOMJUDGE_JUDGE_PASSWORD=change-me-judge
 ENV
-docker compose up -d
-docker compose logs -f domserver     # wait until it reports the admin password, then Ctrl-C
+docker compose up -d --wait     # the first start sets up the database, about a minute
 ```
 
-Open <http://localhost:12345> and log in as `admin` with the password from the log.
-Then, in the web interface, go to *Users*, edit `judgehost` and set its password to `DOMJUDGE_JUDGE_PASSWORD` from `.env` (after step 4, `pyjudge upload password judgehost` does the same).
-The judgehost container reconnects on its own.
-Check with `docker compose logs judgehost`; see [deployment.md](deployment.md) if it complains about cgroups.
+Open <http://localhost:12345> and log in as `admin` with `DOMJUDGE_ADMIN_PASSWORD`.
+The judgehost logs in with `DOMJUDGE_JUDGE_PASSWORD`; check with `docker compose logs judgehost`, and see [deployment.md](deployment.md) if it complains about cgroups.
+DOMjudge takes both passwords only when it creates the database, so changing them in `.env` later has no effect; change them in the web interface or with `pyjudge upload password` (after step 4).
 
 ## 4. Point pydomjudge at the database
 

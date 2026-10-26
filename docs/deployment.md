@@ -12,13 +12,12 @@ It uses the DOMtutor builds of the DOMjudge images (`incaseoftrouble/domtutor_do
   TZ=Europe/Berlin
   DOMJUDGE_DB_ROOT_PASSWORD=<random>      # database root password
   DOMJUDGE_DB_DOMJUDGE_PASSWORD=<random>  # database user password, goes into pydomjudge's db.yml
-  DOMJUDGE_JUDGE_PASSWORD=<random>        # API password of the judgehost user
+  DOMJUDGE_ADMIN_PASSWORD=<random>        # initial password of the admin user
+  DOMJUDGE_JUDGE_PASSWORD=<random>        # initial API password of the judgehost user
   DOMJUDGE_PORT=12345                     # optional, port of the web interface
   ```
-* `docker compose up -d`
-* `docker compose logs domserver` shows the initial admin password (unless you set one via `pydomjudge`)
-* Log in at <http://localhost:12345>
-* In the web interface, set the password of the `judgehost` user to `DOMJUDGE_JUDGE_PASSWORD` (or run `pyjudge upload password judgehost`)
+* `docker compose up -d --wait`
+* Log in at <http://localhost:12345> as `admin` with `DOMJUDGE_ADMIN_PASSWORD`
 * `docker compose logs judgehost` should show it connecting and idling
 * `docker compose down` stops everything, `docker compose down -v` also deletes the database
 
@@ -29,6 +28,11 @@ More judgehosts: duplicate the `judgehost` service with a different `container_n
 
 The domserver image's nginx passes the host name without port to DOMjudge, so with a direct port mapping its redirects (for example to the login page) lose a port like 12345. The small start script in the compose file (`domserver-public-port`) adds `DOMJUDGE_PUBLIC_PORT`, which defaults to `DOMJUDGE_PORT`.
 Behind a reverse proxy on the standard ports, the host name is right without it: set `DOMJUDGE_PUBLIC_PORT=` (empty) in `.env`, and the script changes nothing.
+
+Another start script (`domserver-passwords`) writes `DOMJUDGE_ADMIN_PASSWORD` and `DOMJUDGE_JUDGE_PASSWORD` into the files DOMjudge reads when it creates the database (`initial_admin_password.secret` and `restapi.secret`).
+Later changes in `.env` therefore have no effect on an existing database: change the passwords in the web interface or with `pyjudge upload password admin|judgehost`, and keep `DOMJUDGE_JUDGE_PASSWORD` in sync, since the judgehost logs in with it.
+Without `DOMJUDGE_ADMIN_PASSWORD`, DOMjudge generates an admin password and `docker compose logs domserver` shows it.
+Neither password may contain whitespace.
 
 ## Self-service
 
