@@ -16,5 +16,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 - `pydomjudge_course.roster`: an append-only roster CSV of identities with a declared match priority, canonical id (the first `|` part, or an override) and key templates.
   It finds entries for Moodle rows, logins, team keys and identity-keyed values such as extensions.
   New values of a matched entry are expected aliases if they are its first of their kind (or another `|` part of a field that matched), and otherwise changed identities (changed email, reassigned or reused student ID), reported with a warning naming the roster rows; identities of two entries are an error naming the roster rows.
-  `password_for` and `read_wordlist` reproduce the courses' deterministic passwords, `credentials` feeds `send_login_data`, and `users_and_teams` makes pydomjudge users and one-person teams with bcrypt cost 7.
+  `password_for` and `read_wordlist` make deterministic initial passwords, `credentials` feeds `send_login_data` (for all entries, or only those in `ids=`, e.g. the new ones of a run), and `users_and_teams` makes pydomjudge users and one-person teams with bcrypt cost 7.
 - Filling a sheet accepts several identities of one row (`a|b`) when they carry the same value.
