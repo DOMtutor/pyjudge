@@ -47,7 +47,9 @@ VOLATILE_TABLES = {
     "balloon",
     "event",
 }
-VOLATILE_COLUMNS = {"user": {"first_login", "last_login", "last_ip_address"}}
+VOLATILE_COLUMNS = {
+    "user": {"first_login", "last_login", "last_api_login", "last_ip_address"}
+}
 
 
 def _ids(database: Database, query: str) -> list:
