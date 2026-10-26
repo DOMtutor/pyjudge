@@ -100,21 +100,45 @@ def find_contest_description(
 
 
 def find_submissions(
-    database: Database, contest_key: str, only_valid=True, include_files=True
+    database: Database,
+    contest_key: str,
+    only_valid=True,
+    include_files=True,
+    *,
+    teams: Collection[str] | None = None,
+    users: Collection[str] | None = None,
+    problems: Collection[str] | None = None,
 ) -> list[SubmissionDto]:
+    """The submissions of a contest. The filters are all by default: teams by
+    name, users by login name (the user who submitted), problems by their short
+    name in the contest."""
+    conditions = ["s.cid = %s"]
+    params: list = []
+    for field, values in (
+        ("t.name", teams),
+        ("u.username", users),
+        ("cp.shortname", problems),
+    ):
+        if values is not None:
+            if isinstance(values, str):
+                raise TypeError(f"{field}: a collection of names, not a string")
+            values = tuple(values)
+            conditions.append(field_in_list(field, values))
+            params.extend(values)
     with database.transaction_cursor(readonly=True) as cursor:
         contest_id, contest_end = _find_contest_end(cursor, contest_key)
 
         cursor.execute(
-            "SELECT "
-            "  s.submitid, cp.shortname, p.name, s.submittime, s.langid, s.externalid, t.name "
-            "FROM submission s "
-            "  JOIN team t ON s.teamid = t.teamid "
-            "  JOIN problem p ON s.probid = p.probid "
-            "  JOIN contestproblem cp ON (s.probid = cp.probid AND s.cid = cp.cid) "
-            "WHERE "
-            "  s.cid = %s",
-            (contest_id,),
+            f"SELECT "
+            f"  s.submitid, cp.shortname, p.name, s.submittime, s.langid, s.externalid, t.name "
+            f"FROM submission s "
+            f"  JOIN team t ON s.teamid = t.teamid "
+            f"  JOIN problem p ON s.probid = p.probid "
+            f"  JOIN contestproblem cp ON (s.probid = cp.probid AND s.cid = cp.cid) "
+            f"  LEFT JOIN `user` u ON s.userid = u.userid "
+            f"WHERE "
+            f"  {' AND '.join(conditions)}",
+            (contest_id, *params),
         )
         submission_data = {}
         for (

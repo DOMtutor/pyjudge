@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `docs/docker-compose.yml` sets the initial admin password (`DOMJUDGE_ADMIN_PASSWORD`, optional) and the judgehost password (`DOMJUDGE_JUDGE_PASSWORD`) when DOMjudge creates its database, and starts the judgehost once the domserver is healthy, so no password has to be read from the log or set by hand.
 - Integration tests against a real DOMjudge (`tests/integration/run.sh`, with `JUDGE=1` also through a judgehost), a pytest suite, CI with ruff and ty.
 - Error messages name the file and the location of the problem (`--debug` adds the traceback).
+- `pydomjudge.database.find_submissions` filters by `teams` (names), `users` (login of the submitting user) and `problems` (short names in the contest), all by default; `pyjudge export` reads only the submissions of the teams it exports.
 - `pydomjudge.database.category_exists`, `find_user_id`, `find_team_id` and `find_login` (returning a `UserLogin`), which the self-service uses instead of its own SQL.
 
 ### Changed

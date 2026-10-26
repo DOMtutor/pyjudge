@@ -42,11 +42,9 @@ def fetch_contest(database: Database, contest_key: str):
         language_name_by_key = query.find_languages(connection)
 
         log.info("Fetching submissions")
-        submissions = [
-            submission
-            for submission in query.find_submissions(connection, contest_key)
-            if submission.team_name in teams_by_name
-        ]
+        submissions = query.find_submissions(
+            connection, contest_key, teams=teams_by_name
+        )
         log.info("Fetching clarifications")
         clarifications = [
             clarification
@@ -84,11 +82,7 @@ def write_submission_files(
             connection, except_categories=list(SystemCategory.values())
         )
         team_keys = {team.name for team in teams}
-        submissions = [
-            submission
-            for submission in query.find_submissions(connection, contest_key)
-            if submission.team_name in team_keys
-        ]
+        submissions = query.find_submissions(connection, contest_key, teams=team_keys)
 
     write_str_to(
         SubmissionsExport(submissions=submissions).model_dump_json(), destination

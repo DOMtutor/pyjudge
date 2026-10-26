@@ -1,9 +1,12 @@
-"""Removing things on upload: team members, contest problems; and multi-file
-submissions in exports. Each test restores the example setup at its end."""
+"""Removing things on upload: team members, contest problems; multi-file
+submissions in exports and the submission filters. Each test restores the
+example setup at its end."""
+
+import uuid
 
 import pytest
 
-from pydomjudge.database import Database
+from pydomjudge.database import Database, find_contest_problems, find_submissions
 from pydomjudge.model import Contest
 from pydomjudge.scripts import upload
 from pydomjudge.scripts.export import fetch_contest
@@ -150,5 +153,40 @@ def test_multi_file_submission_in_export(
         ]
         assert len(exported) == 1, export.submissions
         assert {file.filename: file.content for file in exported[0].files} == files
+    finally:
+        _delete_submission(database, submission_id)
+
+
+def test_submission_filters(database: Database, base_url: str, uploaded: Contest):
+    marker = uuid.uuid4().hex.encode()
+    submission_id = _submit(
+        base_url, "helloworld", {"hello.py": b"print('Hello World!')  # " + marker}
+    )
+    try:
+        with database as connection:
+
+            def ours(**filters) -> list:
+                return [
+                    submission
+                    for submission in find_submissions(
+                        connection, uploaded.short_name, **filters
+                    )
+                    if any(marker in file.content for file in submission.files)
+                ]
+
+            (submission,) = ours()
+            team, problem = submission.team_name, submission.contest_problem_key
+            others = {
+                p.short_name
+                for p in find_contest_problems(connection, uploaded.short_name)
+            } - {problem}
+            assert others
+            assert ours(teams=[team], users=["user"], problems=[problem]) == [
+                submission
+            ]
+            assert ours(teams=[]) == ours(users=["admin"]) == []
+            assert ours(problems=others) == []
+            with pytest.raises(TypeError, match="not a string"):
+                find_submissions(connection, uploaded.short_name, teams=team)
     finally:
         _delete_submission(database, submission_id)
