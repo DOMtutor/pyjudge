@@ -57,9 +57,10 @@ dev = [
 problemtools = { path = "./libs/problemtools" }
 
 [tool.uv.workspace]
-# The watcher is an independent project (no dependency on pydomjudge) that
-# shares the lock file and the development environment
-members = ["tools/watcher"]
+# The watcher is an independent project (no dependency on pydomjudge) and
+# course/ (pydomjudge-course) a separately versioned package on top of it;
+# both share the lock file and the development environment
+members = ["tools/watcher", "course"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -83,11 +84,11 @@ extend-exclude = ["libs", "examples/repository", "build"]
 select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["pydomjudge"]
+known-first-party = ["pydomjudge", "pydomjudge_course"]
 combine-as-imports = true
 
 [tool.ty.src]
-include = ["src", "tests", "tools/watcher"]
+include = ["src", "tests", "tools/watcher", "course/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
