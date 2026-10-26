@@ -12,6 +12,9 @@ identifiers can have leading zeros, the roster has to declare their padding.
 ``python -m pydomjudge_course.tables FILE...`` prints what ``probe`` finds
 (format, encoding, delimiter, BOM, column names, row count) and never a cell
 value, to check the format of real exports without showing their contents.
+For JSON files it prints the shape: lists and their lengths, and for records
+(objects in a list) the union of their keys with the types of the values.
+Keys of other objects are not shown, as they may be data (logins, names).
 """
 
 import argparse
@@ -20,6 +23,7 @@ import csv
 import dataclasses
 import datetime
 import io
+import json
 import pathlib
 import re
 import sys
@@ -317,7 +321,86 @@ class Probe:
         )
 
 
-def probe(path: pathlib.Path) -> Probe:
+@dataclasses.dataclass(frozen=True)
+class JsonProbe:
+    """The shape of a JSON file, without its values."""
+
+    path: pathlib.Path
+    encoding: str
+    bom: bool
+    shape: str
+
+    def describe(self) -> str:
+        return (
+            f"{self.path}: JSON, {self.encoding}{' with BOM' if self.bom else ''}\n"
+            f"  {self.shape}"
+        )
+
+
+def _json_type(value: object) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int | float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "list"
+    return "object"
+
+
+def _json_shape(value: object) -> str:
+    if isinstance(value, list):
+        return f"list of {len(value)}" + (f": {_json_items(value)}" if value else "")
+    if isinstance(value, dict):
+        # Not records, so the keys may be data: only their number
+        return f"object with {len(value)} keys"
+    return _json_type(value)
+
+
+def _json_items(items: list) -> str:
+    """The merged shape of the elements of a list."""
+    if all(isinstance(item, dict) for item in items):
+        types: dict[str, set[str]] = {}
+        for item in items:
+            for key, value in item.items():
+                types.setdefault(key, set()).add(_json_type(value))
+        keys = ", ".join(
+            f"{key} ({'|'.join(sorted(types[key]))})" for key in sorted(types)
+        )
+        return f"objects with keys {keys}"
+    if all(isinstance(item, list) for item in items):
+        lengths = sorted({len(item) for item in items})
+        length = (
+            str(lengths[0]) if len(lengths) == 1 else f"{lengths[0]} to {lengths[-1]}"
+        )
+        inner = [element for item in items for element in item]
+        return f"lists of {length}" + (f": {_json_items(inner)}" if inner else "")
+    return "values of type " + "|".join(sorted({_json_type(item) for item in items}))
+
+
+def probe_json(path: pathlib.Path) -> JsonProbe:
+    try:
+        data = path.read_bytes()
+    except OSError as e:
+        raise TableError(f"{path}: {e.strerror}") from e
+    text, encoding, bom = _decode(path, data, None)
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as e:
+        # The message names the position only
+        raise TableError(
+            f"{path}: invalid JSON at line {e.lineno} column {e.colno}"
+        ) from None
+    return JsonProbe(path=path, encoding=encoding, bom=bom, shape=_json_shape(value))
+
+
+def probe(path: pathlib.Path) -> Probe | JsonProbe:
+    """What a file looks like (a table, or the shape of a JSON file)."""
+    if path.suffix.lower() == ".json":
+        return probe_json(path)
     table = read_table(path)
     return Probe(
         path=path,
@@ -333,7 +416,8 @@ def probe(path: pathlib.Path) -> Probe:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m pydomjudge_course.tables",
-        description="Show format and column names of tables, never their cells",
+        description="Show format and column names of tables (or the shape of "
+        "JSON files), never their values",
     )
     parser.add_argument("files", nargs="+", type=pathlib.Path)
     args = parser.parse_args(list(argv) if argv is not None else None)

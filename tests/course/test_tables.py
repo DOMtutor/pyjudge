@@ -236,3 +236,49 @@ def test_explicit_utf8_strips_bom(tmp_path: pathlib.Path, encoding):
     assert table.bom
     with pytest.raises(TableError, match="unknown encoding"):
         read_table(path, encoding="no-such-encoding")
+
+
+def test_probe_json_shape_without_values(tmp_path: pathlib.Path, capsys):
+    import json
+
+    secret = "SECRET-VALUE-4711"
+    participants = tmp_path / "participants.json"
+    participants.write_text(
+        json.dumps(
+            [
+                [
+                    {"firstname": secret, "email": f"{secret}@example.org"},
+                    {"firstname": "x", "studentid": 4711, "email": None},
+                ]
+            ]
+        )
+    )
+    keyed = tmp_path / "keyed.json"
+    keyed.write_text(json.dumps({secret: {"name": secret}, "other": []}))
+    broken = tmp_path / "broken.json"
+    broken.write_text('[{"a": "' + secret + '", }]')
+
+    status = tables.main([str(participants), str(keyed), str(broken)])
+    output = capsys.readouterr()
+    text = output.out + output.err
+    assert status == 1
+    assert secret not in text and "4711" not in text
+    assert (
+        "list of 1: lists of 2: objects with keys email (null|string), "
+        "firstname (string), studentid (number)" in output.out
+    )
+    assert "keyed.json: JSON, utf-8\n  object with 2 keys" in output.out
+    assert "invalid JSON at line 1 column" in output.err
+
+
+def test_probe_json_nested_lists(tmp_path: pathlib.Path):
+    import json
+
+    path = tmp_path / "nested.json"
+    path.write_text(json.dumps([[1, 2], [], [3]]))
+    assert (
+        tables.probe_json(path).shape
+        == "list of 3: lists of 0 to 2: values of type number"
+    )
+    path.write_text(json.dumps([]))
+    assert tables.probe_json(path).shape == "list of 0"
