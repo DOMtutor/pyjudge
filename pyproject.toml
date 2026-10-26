@@ -25,7 +25,7 @@ dependencies = [
   "PyYAML>=6.0",
   "Pillow>=9.0",
   "python-dateutil>=2.9",
-  "tzlocal>=5",
+  "tzlocal>=5.4.5",
   "problemtools",
   "bcrypt>=4",
   "chardet>=5",
