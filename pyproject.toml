@@ -52,7 +52,7 @@ dev = [
   { include-group = "lint" },
   "httpx>=0.27",
   "pydomjudge-course[plagiarism]",
-  "pytest>=8",
+  "pytest>=9.2.0",
   "ty>=0.0.90",
 ]
 
