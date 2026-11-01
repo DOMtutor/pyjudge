@@ -47,7 +47,7 @@ pyjudge = "pydomjudge.scripts.commands:main"
 
 [dependency-groups]
 # Only ruff, for the CI lint job (dev builds the whole project)
-lint = ["ruff>=0.17"]
+lint = ["ruff>=0.17.3"]
 dev = [
   { include-group = "lint" },
   "httpx>=0.27",
