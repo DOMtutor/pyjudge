@@ -45,7 +45,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends automake g++ make libboost-regex-dev libgmp-dev pypy3
       # problemtools compiles Java with -source 21; the runner's default is older
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
